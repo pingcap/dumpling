@@ -14,9 +14,22 @@
 package main
 
 import (
+	"fmt"
+	"net/http"
+	_ "net/http/pprof"
+	"os"
+
+	"github.com/pingcap/dumpling"
 	"github.com/pingcap/dumpling/v4/cli"
 )
 
 func main() {
 	println(cli.LongVersion())
+	go http.ListenAndServe(":8088", nil)
+	err := dumpling.Dump()
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(-1)
+	}
+	return
 }
