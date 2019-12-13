@@ -14,6 +14,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	_ "net/http/pprof"
 	"os"
@@ -22,9 +23,48 @@ import (
 	"github.com/pingcap/dumpling/v4/cli"
 )
 
+var (
+	database string
+	host     string
+	user     string
+	port     int
+	password string
+	threads  int
+)
+
+func init() {
+	flag.StringVar(&database, "database", "", "Database to dump")
+	flag.StringVar(&database, "B", "", "Database to dump")
+
+	flag.StringVar(&host, "h", "127.0.0.1", "The host to connect to")
+	flag.StringVar(&host, "host", "127.0.0.1", "The host to connect to")
+
+	flag.StringVar(&user, "user", "root", "Username with privileges to run the dump")
+	flag.StringVar(&user, "u", "root", "Username with privileges to run the dump")
+
+	flag.IntVar(&port, "port", 4000, "TCP/IP port to connect to")
+	flag.IntVar(&port, "P", 4000, "TCP/IP port to connect to")
+
+	flag.StringVar(&password, "password", "", "User password")
+	flag.StringVar(&password, "p", "", "User password")
+
+	flag.IntVar(&threads, "threads", 4, "Number of goroutines to use, default 4")
+	flag.IntVar(&threads, "t", 4, "Number of goroutines to use, default 4")
+}
+
 func main() {
+	flag.Parse()
 	println(cli.LongVersion())
-	err := dumpling.Dump("mysql")
+
+	var conf dumpling.Config
+	conf.Database = database
+	conf.Host = host
+	conf.User = user
+	conf.Port = port
+	conf.Password = password
+	conf.Threads = threads
+
+	err := dumpling.Dump(&conf)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(-1)

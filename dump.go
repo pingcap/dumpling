@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"sync"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -14,9 +15,29 @@ type dumper struct {
 	writer Writer
 }
 
-func Dump(dbName string) error {
-	if err := dumpDatabase(context.Background(), dbName, &dummyWriter{}); err != nil {
-		return err
+func Dump(conf *Config) error {
+	pool, err := sql.Open("mysql", conf.getDSN(""))
+	if err != nil {
+		return withStack(err)
+	}
+
+	var databases []string
+	if conf.Database == "" {
+		var err error
+		databases, err = showDatabases(pool)
+		if err != nil {
+			pool.Close()
+			return err
+		}
+	} else {
+		databases = strings.Split(conf.Database, ",")
+	}
+	pool.Close()
+
+	for _, database := range databases {
+		if err := dumpDatabase(context.Background(), conf.getDSN(database), database, &dummyWriter{}); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -79,8 +100,8 @@ func showCreateTable(db *sql.DB, database, table string) (string, error) {
 	return oneRow[1], nil
 }
 
-func dumpDatabase(ctx context.Context, dbName string, writer Writer) error {
-	db, err := sql.Open("mysql", "root:@tcp(127.0.0.1:4000)/"+dbName)
+func dumpDatabase(ctx context.Context, dsn, dbName string, writer Writer) error {
+	db, err := sql.Open("mysql", dsn)
 	if err != nil {
 		return withStack(err)
 	}
