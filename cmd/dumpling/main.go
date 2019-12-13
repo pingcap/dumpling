@@ -15,7 +15,6 @@ package main
 
 import (
 	"fmt"
-	"net/http"
 	_ "net/http/pprof"
 	"os"
 
@@ -25,8 +24,7 @@ import (
 
 func main() {
 	println(cli.LongVersion())
-	go http.ListenAndServe(":8088", nil)
-	err := dumpling.Dump()
+	err := dumpling.Dump("mysql")
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(-1)

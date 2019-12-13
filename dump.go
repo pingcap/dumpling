@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"sync"
 
 	_ "github.com/go-sql-driver/mysql"
 )
@@ -13,8 +14,8 @@ type dumper struct {
 	writer Writer
 }
 
-func Dump() error {
-	if err := dumpDatabase(context.Background(), "mysql", &dummyWriter{}); err != nil {
+func Dump(dbName string) error {
+	if err := dumpDatabase(context.Background(), dbName, &dummyWriter{}); err != nil {
 		return err
 	}
 	return nil
@@ -92,16 +93,36 @@ func dumpDatabase(ctx context.Context, dbName string, writer Writer) error {
 		return err
 	}
 
-	for _, table := range tables {
-		createTableSQL, err := showCreateTable(db, dbName, table)
+	var wg sync.WaitGroup
+	wg.Add(len(tables))
+	res := make([]error, len(tables))
+	for i, table := range tables {
+		go func(ith int, table string, wg *sync.WaitGroup, res []error) {
+			defer wg.Done()
+			createTableSQL, err := showCreateTable(db, dbName, table)
+			if err != nil {
+				res[i] = err
+				return
+			}
+			writer.WriteTableMeta(ctx, dbName, table, createTableSQL)
+
+			gRL.getToken()
+			tableIR, err := dumpTable(ctx, db, dbName, table)
+			defer gRL.putToken()
+			if err != nil {
+				res[i] = err
+				return
+			}
+
+			if err := writer.WriteTableData(ctx, tableIR); err != nil {
+				res[i] = err
+				return
+			}
+		}(i, table, &wg, res)
+	}
+	wg.Wait()
+	for _, err := range res {
 		if err != nil {
-			return err
-		}
-
-		writer.WriteTableMeta(ctx, dbName, table, createTableSQL)
-
-		dumper := writer.NewTableDumper(ctx, dbName, table)
-		if err := dumpTable(ctx, db, table, dumper); err != nil {
 			return err
 		}
 	}
@@ -123,33 +144,21 @@ type tableDumper interface {
 	finishTable(ctx context.Context)
 }
 
-func dumpTable(ctx context.Context, db *sql.DB, table string, dumper tableDumper) error {
-	fmt.Println("dumpling table:", table)
+func dumpTable(ctx context.Context, db *sql.DB, database, table string) (TableDataIR, error) {
 	colTypes, err := getColumnTypes(db, table)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	dumper.prepareColumns(ctx, colTypes)
 
 	rows, err := db.Query(fmt.Sprintf("SELECT * from %s", table))
-	for rows.Next() {
-		if err := dumper.handleOneRow(ctx, rows); err != nil {
-			rows.Close()
-			return err
-		}
+	if err != nil {
+		return nil, withStack(err)
 	}
-	dumper.finishTable(ctx)
-	return nil
-}
 
-type scanProvider interface {
-	prepareScanArgs([]interface{})
-}
-
-func decodeFromRows(rows *sql.Rows, args []interface{}, row scanProvider) error {
-	row.prepareScanArgs(args)
-	if err := rows.Scan(args...); err != nil {
-		return withStack(err)
-	}
-	return nil
+	return &tableData{
+		database: database,
+		table:    table,
+		rows:     rows,
+		colTypes: colTypes,
+	}, nil
 }

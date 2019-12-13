@@ -9,7 +9,7 @@ import (
 type Writer interface {
 	WriteDatabaseMeta(ctx context.Context, dbName string) error
 	WriteTableMeta(ctx context.Context, db, table, createSQL string) error
-	NewTableDumper(ctx context.Context, db, table string) tableDumper
+	WriteTableData(ctx context.Context, ir TableDataIR) error
 }
 
 type dummyWriter struct{}
@@ -24,61 +24,39 @@ func (dummyWriter) WriteTableMeta(ctx context.Context, db, table, createSQL stri
 	return nil
 }
 
-func (dummyWriter) NewTableDumper(ctx context.Context, db, table string) tableDumper {
-	return &dummyTableDumper{
-		database: db,
-		table:    table,
+func (dummyWriter) WriteTableData(ctx context.Context, ir TableDataIR) error {
+	rowIter := ir.Rows()
+	for rowIter.HasNext() {
+		row := make(dummyRow, ir.ColumnNumber())
+		err := rowIter.Next(row)
+		if err != nil {
+			return err
+		}
+
+		row.Print(ir.TableName())
 	}
+	return nil
 }
 
-type dummyTableDumper struct {
-	database string
-	table    string
+type dummyRow []sql.NullString
 
-	args []interface{}
-	rows []stringSlice
-}
-
-type stringSlice []string
-
-func (s stringSlice) prepareScanArgs(dst []interface{}) {
+func (s dummyRow) BindAddress(dst []interface{}) {
 	for i := 0; i < len(s); i++ {
 		dst[i] = &s[i]
 	}
 }
 
-func (s *dummyTableDumper) prepareColumns(ctx context.Context, colTypes []*sql.ColumnType) {
-	s.args = make([]interface{}, len(colTypes))
-}
-
-func (s *dummyTableDumper) handleOneRow(ctx context.Context, rows *sql.Rows) error {
-	row := make(stringSlice, len(s.args))
-	if err := decodeFromRows(rows, s.args, row); err != nil {
-		rows.Close()
-		return err
-	}
-	s.rows = append(s.rows, row)
-
-	if len(s.rows) > 20 {
-		s.flush()
-	}
-	return nil
-}
-
-func (s *dummyTableDumper) finishTable(ctx context.Context) {
-	s.flush()
-}
-
-func (s *dummyTableDumper) flush() {
-	for _, row := range s.rows {
-		fmt.Printf("INSERT INTO %s.%s VALUES (", s.database, s.table)
-		for i, col := range row {
-			if i != 0 {
-				fmt.Printf(", ")
-			}
-			fmt.Printf(col)
+func (s dummyRow) Print(table string) {
+	fmt.Printf("INSERT INTO %s VALUES (", table)
+	for i, col := range s {
+		if i != 0 {
+			fmt.Printf(", ")
 		}
-		fmt.Println(")")
+		if col.Valid {
+			fmt.Printf(col.String)
+		} else {
+			fmt.Printf("NULL")
+		}
 	}
-	s.rows = s.rows[:0]
+	fmt.Println(")")
 }
