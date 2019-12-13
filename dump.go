@@ -1,6 +1,7 @@
 package dumpling
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 
@@ -13,7 +14,7 @@ type dumper struct {
 }
 
 func Dump() error {
-	if err := dumpDatabase("mysql", &dummyWriter{}); err != nil {
+	if err := dumpDatabase(context.Background(), "mysql", &dummyWriter{}); err != nil {
 		return err
 	}
 	return nil
@@ -77,14 +78,14 @@ func showCreateTable(db *sql.DB, database, table string) (string, error) {
 	return oneRow[1], nil
 }
 
-func dumpDatabase(dbName string, writer Writer) error {
+func dumpDatabase(ctx context.Context, dbName string, writer Writer) error {
 	db, err := sql.Open("mysql", "root:@tcp(127.0.0.1:4000)/"+dbName)
 	if err != nil {
 		return withStack(err)
 	}
 	defer db.Close()
 
-	writer.WriteDatabaseMeta(dbName)
+	writer.WriteDatabaseMeta(ctx, dbName)
 
 	tables, err := showTables(db)
 	if err != nil {
@@ -97,10 +98,10 @@ func dumpDatabase(dbName string, writer Writer) error {
 			return err
 		}
 
-		writer.WriteTableMeta(dbName, table, createTableSQL)
+		writer.WriteTableMeta(ctx, dbName, table, createTableSQL)
 
-		dumper := writer.NewTableDumper(dbName, table)
-		if err := dumpTable(db, table, dumper); err != nil {
+		dumper := writer.NewTableDumper(ctx, dbName, table)
+		if err := dumpTable(ctx, db, table, dumper); err != nil {
 			return err
 		}
 	}
@@ -117,27 +118,27 @@ func getColumnTypes(db *sql.DB, table string) ([]*sql.ColumnType, error) {
 }
 
 type tableDumper interface {
-	handleOneRow(rows *sql.Rows) error
-	prepareColumns(colTypes []*sql.ColumnType)
-	finishTable()
+	handleOneRow(ctx context.Context, rows *sql.Rows) error
+	prepareColumns(ctx context.Context, colTypes []*sql.ColumnType)
+	finishTable(ctx context.Context)
 }
 
-func dumpTable(db *sql.DB, table string, dumper tableDumper) error {
+func dumpTable(ctx context.Context, db *sql.DB, table string, dumper tableDumper) error {
 	fmt.Println("dumpling table:", table)
 	colTypes, err := getColumnTypes(db, table)
 	if err != nil {
 		return err
 	}
-	dumper.prepareColumns(colTypes)
+	dumper.prepareColumns(ctx, colTypes)
 
 	rows, err := db.Query(fmt.Sprintf("SELECT * from %s", table))
 	for rows.Next() {
-		if err := dumper.handleOneRow(rows); err != nil {
+		if err := dumper.handleOneRow(ctx, rows); err != nil {
 			rows.Close()
 			return err
 		}
 	}
-	dumper.finishTable()
+	dumper.finishTable(ctx)
 	return nil
 }
 
