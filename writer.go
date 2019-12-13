@@ -5,23 +5,26 @@ import (
 )
 
 type Writer interface {
-	WriteDatabases([]string) error
-	WriteTable(string) error
-	WriteData()
+	WriteDatabaseMeta(dbName string) error
+	WriteTableMeta(db, table, createSQL string) error
+	NewTableDumper(db, table string) tableDumper
 }
 
 type dummyWriter struct{}
 
-func (dummyWriter) WriteDatabases(dbs []string) error {
+func (dummyWriter) WriteDatabaseMeta(dbs string) error {
 	fmt.Println("write databases", dbs)
 	return nil
 }
 
-func (dummyWriter) WriteTable(table string) error {
-	fmt.Println("write table", table)
+func (dummyWriter) WriteTableMeta(db, table, createSQL string) error {
+	fmt.Println("write table meta", table, createSQL)
 	return nil
 }
 
-func (dummyWriter) WriteData() {
-	fmt.Println("write data")
+func (dummyWriter) NewTableDumper(db, table string) tableDumper {
+	return &dummyTableDumper{
+		database: db,
+		table:    table,
+	}
 }

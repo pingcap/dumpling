@@ -1,7 +1,6 @@
 package dumpling
 
 import (
-	"context"
 	"database/sql"
 	"fmt"
 
@@ -14,158 +13,142 @@ type dumper struct {
 }
 
 func Dump() error {
-	d, err := prepareDump()
-	if err != nil {
+	if err := dumpDatabase("mysql", &dummyWriter{}); err != nil {
 		return err
 	}
-
-	err = d.dumpMeta()
-	if err != nil {
-		return err
-	}
-
-	err = d.dumpData()
-	if err != nil {
-		return err
-	}
-
 	return nil
 }
 
-func prepareDump() (*dumper, error) {
-	db, err := sql.Open("mysql", "root:@tcp(127.0.0.1:4000)/")
+func simpleQuery(db *sql.DB, sql string, handleOneRow func(*sql.Rows) error) error {
+	rows, err := db.Query(sql)
 	if err != nil {
+		return withStack(err)
+	}
+
+	for rows.Next() {
+		if err := handleOneRow(rows); err != nil {
+			rows.Close()
+			return withStack(err)
+		}
+	}
+	return nil
+}
+
+type oneStrColumnTable struct {
+	data []string
+}
+
+func (o *oneStrColumnTable) handleOneRow(rows *sql.Rows) error {
+	var str string
+	if err := rows.Scan(&str); err != nil {
+		return withStack(err)
+	}
+	o.data = append(o.data, str)
+	return nil
+}
+
+func showDatabases(db *sql.DB) ([]string, error) {
+	var res oneStrColumnTable
+	if err := simpleQuery(db, "SHOW DATABASES", res.handleOneRow); err != nil {
 		return nil, err
 	}
-	// TODO: Set timezone, snapshot etc.
-	return &dumper{
-		conn:   db,
-		writer: &dummyWriter{},
-	}, nil
+	return res.data, nil
 }
 
-func (d *dumper) dumpMeta() error {
-	rows, err := d.conn.Query("SHOW DATABASES")
+// showTables shows the tables of a database, the caller should use the correct database.
+func showTables(db *sql.DB) ([]string, error) {
+	var res oneStrColumnTable
+	if err := simpleQuery(db, "SHOW TABLES", res.handleOneRow); err != nil {
+		return nil, err
+	}
+	return res.data, nil
+}
+
+func showCreateTable(db *sql.DB, database, table string) (string, error) {
+	var oneRow [2]string
+	handleOneRow := func(rows *sql.Rows) error {
+		return rows.Scan(&oneRow[0], &oneRow[1])
+	}
+	sql := fmt.Sprintf("SHOW CREATE TABLE %s.%s", database, table)
+	err := simpleQuery(db, sql, handleOneRow)
+	if err != nil {
+		return "", err
+	}
+	return oneRow[1], nil
+}
+
+func dumpDatabase(dbName string, writer Writer) error {
+	db, err := sql.Open("mysql", "root:@tcp(127.0.0.1:4000)/"+dbName)
 	if err != nil {
 		return withStack(err)
 	}
+	defer db.Close()
 
-	var databases []string
-	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
-			rows.Close()
-			return withStack(err)
-		}
-		databases = append(databases, name)
-	}
+	writer.WriteDatabaseMeta(dbName)
 
-	return d.dumpDatabase(databases)
-}
-
-func (d *dumper) dumpDatabase(databases []string) error {
-	err := d.writer.WriteDatabases(databases)
+	tables, err := showTables(db)
 	if err != nil {
 		return err
 	}
 
-	for _, database := range databases {
-		if err := d.dumpTablesMeta(database); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (d *dumper) dumpTablesMeta(database string) error {
-	conn, err := d.conn.Conn(context.Background())
-	if err != nil {
-		return withStack(err)
-	}
-	defer conn.Close()
-
-	_, err = conn.ExecContext(context.Background(), fmt.Sprintf("USE %s", database))
-	if err != nil {
-		return withStack(err)
-	}
-
-	rows, err := conn.QueryContext(context.Background(), "SHOW TABLES")
-	if err != nil {
-		return withStack(err)
-	}
-	for rows.Next() {
-		var table string
-		if rows.Scan(&table) != nil {
-			rows.Close()
-			return withStack(err)
-		}
-
-		if err := d.dumpTableMeta(database, table); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (d *dumper) dumpTableMeta(db, table string) error {
-	rows := d.conn.QueryRow(fmt.Sprintf("SHOW CREATE TABLE %s.%s", db, table))
-	var str string
-	if err := rows.Scan(&table, &str); err != nil {
-		return withStack(err)
-	}
-
-	if err := d.writer.WriteTable(str); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (d *dumper) dumpData() error {
-	return nil
-}
-
-func (d *dumper) dumpTable(table string) error {
-	rows, err := d.conn.Query(fmt.Sprintf("SELECT * FROM %s LIMIT 1", table))
-	if err != nil {
-		return withStack(err)
-	}
-	colTypes, err := rows.ColumnTypes()
-	if err != nil {
-		return withStack(err)
-	}
-	rows.Close()
-
-	var dst tableData
-	// TODO: Implement Scanner for []types.Datum to avoid convertion cost.
-	res := make([]interface{}, len(colTypes))
-	rows, err = d.conn.Query(fmt.Sprintf("SELECT * from %s", table))
-	for rows.Next() {
-		row := make([]string, len(colTypes))
-		for i := 0; i < len(colTypes); i++ {
-			res[i] = &row[i]
-		}
-
-		err = rows.Scan(res...)
+	for _, table := range tables {
+		createTableSQL, err := showCreateTable(db, dbName, table)
 		if err != nil {
-			rows.Close()
-			return withStack(err)
+			return err
 		}
 
-		for _, s := range row {
-			dst.size += len(s)
-		}
-		dst.rows = append(dst.rows, row)
-		const chunkSize = 4 << 20
-		if dst.size > chunkSize {
-			dst.size = 0
-			fmt.Println("split chunk")
-			d.writer.WriteData()
+		writer.WriteTableMeta(dbName, table, createTableSQL)
+
+		dumper := writer.NewTableDumper(dbName, table)
+		if err := dumpTable(db, table, dumper); err != nil {
+			return err
 		}
 	}
 	return nil
 }
 
-type tableData struct {
-	size int
-	rows [][]string
+func getColumnTypes(db *sql.DB, table string) ([]*sql.ColumnType, error) {
+	rows, err := db.Query(fmt.Sprintf("SELECT * FROM %s LIMIT 1", table))
+	if err != nil {
+		return nil, withStack(err)
+	}
+	defer rows.Close()
+	return rows.ColumnTypes()
+}
+
+type tableDumper interface {
+	handleOneRow(rows *sql.Rows) error
+	prepareColumns(colTypes []*sql.ColumnType)
+	finishTable()
+}
+
+func dumpTable(db *sql.DB, table string, dumper tableDumper) error {
+	fmt.Println("dumpling table:", table)
+	colTypes, err := getColumnTypes(db, table)
+	if err != nil {
+		return err
+	}
+	dumper.prepareColumns(colTypes)
+
+	rows, err := db.Query(fmt.Sprintf("SELECT * from %s", table))
+	for rows.Next() {
+		if err := dumper.handleOneRow(rows); err != nil {
+			rows.Close()
+			return err
+		}
+	}
+	dumper.finishTable()
+	return nil
+}
+
+type scanProvider interface {
+	prepareScanArgs([]interface{})
+}
+
+func decodeFromRows(rows *sql.Rows, args []interface{}, row scanProvider) error {
+	row.prepareScanArgs(args)
+	if err := rows.Scan(args...); err != nil {
+		return withStack(err)
+	}
+	return nil
 }
