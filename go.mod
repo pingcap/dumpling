@@ -1,5 +1,8 @@
 module github.com/pingcap/dumpling
 
-go 1.13
+require (
+	github.com/go-sql-driver/mysql v1.4.1
+	github.com/pingcap/check v0.0.0-20191107115940-caf2b9e6ccf4
+)
 
-require github.com/go-sql-driver/mysql v1.4.1
+go 1.13

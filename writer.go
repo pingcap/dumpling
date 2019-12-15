@@ -2,61 +2,61 @@ package dumpling
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
+	"path"
+
+	"github.com/pingcap/dumpling/v4/export"
 )
 
 type Writer interface {
-	WriteDatabaseMeta(ctx context.Context, dbName string) error
+	WriteDatabaseMeta(ctx context.Context, db, createSQL string) error
 	WriteTableMeta(ctx context.Context, db, table, createSQL string) error
-	WriteTableData(ctx context.Context, ir TableDataIR) error
+	WriteTableData(ctx context.Context, ir export.TableDataIR) error
 }
 
-type dummyWriter struct{}
-
-func (dummyWriter) WriteDatabaseMeta(ctx context.Context, dbs string) error {
-	fmt.Println("write databases", dbs)
-	return nil
+type FileSystemWriter struct {
+	cfg *export.Config
 }
 
-func (dummyWriter) WriteTableMeta(ctx context.Context, db, table, createSQL string) error {
-	fmt.Println("write table meta", table, createSQL)
-	return nil
+func NewFileSystemWriter(config *export.Config) Writer {
+	return &FileSystemWriter{cfg: config}
 }
 
-func (dummyWriter) WriteTableData(ctx context.Context, ir TableDataIR) error {
-	rowIter := ir.Rows()
-	for rowIter.HasNext() {
-		row := make(dummyRow, ir.ColumnNumber())
-		err := rowIter.Next(row)
-		if err != nil {
-			return err
-		}
-
-		row.Print(ir.TableName())
+func (f *FileSystemWriter) WriteDatabaseMeta(ctx context.Context, db, createSQL string) error {
+	fileName := path.Join(f.cfg.OutputDirPath, fmt.Sprintf("%s-schema-create.sql", db))
+	fsStringWriter := export.NewFileSystemWriter(fileName, false)
+	meta := &metaData{
+		target:  db,
+		metaSQL: createSQL,
 	}
-	return nil
+	var err error
+	export.WriteMeta(meta, fsStringWriter, f.cfg, func(e error) {
+		err = withStack(e)
+	})
+	return err
 }
 
-type dummyRow []sql.NullString
-
-func (s dummyRow) BindAddress(dst []interface{}) {
-	for i := 0; i < len(s); i++ {
-		dst[i] = &s[i]
+func (f *FileSystemWriter) WriteTableMeta(ctx context.Context, db, table, createSQL string) error {
+	fileName := path.Join(f.cfg.OutputDirPath, fmt.Sprintf("%s.%s-schema.sql", db, table))
+	fsStringWriter := export.NewFileSystemWriter(fileName, false)
+	meta := &metaData{
+		target:  table,
+		metaSQL: createSQL,
 	}
+	var err error
+	export.WriteMeta(meta, fsStringWriter, f.cfg, func(e error) {
+		err = withStack(e)
+	})
+	return err
 }
 
-func (s dummyRow) Print(table string) {
-	fmt.Printf("INSERT INTO %s VALUES (", table)
-	for i, col := range s {
-		if i != 0 {
-			fmt.Printf(", ")
-		}
-		if col.Valid {
-			fmt.Printf(col.String)
-		} else {
-			fmt.Printf("NULL")
-		}
-	}
-	fmt.Println(")")
+func (f *FileSystemWriter) WriteTableData(ctx context.Context, ir export.TableDataIR) error {
+	fileName := path.Join(f.cfg.OutputDirPath, fmt.Sprintf("%s.%s.sql", ir.DatabaseName(), ir.TableName()))
+	fsStringWriter := export.NewFileSystemWriter(fileName, false)
+
+	var err error
+	export.WriteInsert(ir, fsStringWriter, f.cfg, func(e error) {
+		err = withStack(e)
+	})
+	return err
 }

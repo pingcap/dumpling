@@ -56,7 +56,7 @@ func main() {
 	flag.Parse()
 	println(cli.LongVersion())
 
-	var conf dumpling.Config
+	conf := dumpling.DefaultConfig()
 	conf.Database = database
 	conf.Host = host
 	conf.User = user
@@ -64,7 +64,7 @@ func main() {
 	conf.Password = password
 	conf.Threads = threads
 
-	err := dumpling.Dump(&conf)
+	err := dumpling.Dump(conf)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(-1)
