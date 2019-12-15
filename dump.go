@@ -122,7 +122,7 @@ func dumpDatabase(ctx context.Context, dsn, dbName string, writer Writer) error 
 			defer wg.Done()
 			createTableSQL, err := showCreateTable(db, dbName, table)
 			if err != nil {
-				res[i] = err
+				res[ith] = err
 				return
 			}
 			writer.WriteTableMeta(ctx, dbName, table, createTableSQL)
@@ -131,12 +131,12 @@ func dumpDatabase(ctx context.Context, dsn, dbName string, writer Writer) error 
 			tableIR, err := dumpTable(ctx, db, dbName, table)
 			defer gRL.putToken()
 			if err != nil {
-				res[i] = err
+				res[ith] = err
 				return
 			}
 
 			if err := writer.WriteTableData(ctx, tableIR); err != nil {
-				res[i] = err
+				res[ith] = err
 				return
 			}
 		}(i, table, &wg, res)
