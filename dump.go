@@ -11,11 +11,6 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 )
 
-type dumper struct {
-	conn   *sql.DB
-	writer Writer
-}
-
 func Dump(conf *Config) error {
 	pool, err := sql.Open("mysql", conf.getDSN(""))
 	if err != nil {

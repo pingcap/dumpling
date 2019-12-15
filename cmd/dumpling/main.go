@@ -24,12 +24,13 @@ import (
 )
 
 var (
-	database string
-	host     string
-	user     string
-	port     int
-	password string
-	threads  int
+	database  string
+	host      string
+	user      string
+	port      int
+	password  string
+	threads   int
+	outputDir string
 )
 
 func init() {
@@ -50,6 +51,9 @@ func init() {
 
 	flag.IntVar(&threads, "threads", 4, "Number of goroutines to use, default 4")
 	flag.IntVar(&threads, "t", 4, "Number of goroutines to use, default 4")
+
+	flag.StringVar(&outputDir, "output", ".", "Output directory")
+	flag.StringVar(&outputDir, "o", ".", "Output directory")
 }
 
 func main() {
@@ -63,6 +67,7 @@ func main() {
 	conf.Port = port
 	conf.Password = password
 	conf.Threads = threads
+	conf.OutputDirPath = outputDir
 
 	err := dumpling.Dump(conf)
 	if err != nil {

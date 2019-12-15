@@ -21,14 +21,14 @@ type Config struct {
 
 func DefaultConfig() *Config {
 	return &Config{
-		Database:      "mysql",
+		Database:      "",
 		Host:          "127.0.0.1",
 		User:          "root",
 		Port:          3306,
 		Password:      "",
 		Threads:       4,
 		LineSplitter:  "\n",
-		Logger:        nil,
+		Logger:        &DummyLogger{},
 		OutputSize:    export.UnspecifiedSize,
 		OutputDirPath: ".",
 	}
@@ -45,4 +45,26 @@ func extractOutputConfig(conf *Config) *export.Config {
 		OutputSize:    conf.OutputSize,
 		OutputDirPath: conf.OutputDirPath,
 	}
+}
+
+type DummyLogger struct{}
+
+func (d *DummyLogger) Debug(format string, args ...interface{}) {
+	fmt.Printf(format, args...)
+	fmt.Println()
+}
+
+func (d *DummyLogger) Info(format string, args ...interface{}) {
+	fmt.Printf(format, args...)
+	fmt.Println()
+}
+
+func (d *DummyLogger) Warn(format string, args ...interface{}) {
+	fmt.Printf(format, args...)
+	fmt.Println()
+}
+
+func (d *DummyLogger) Error(format string, args ...interface{}) {
+	fmt.Printf(format, args...)
+	fmt.Println()
 }
