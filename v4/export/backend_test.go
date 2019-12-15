@@ -20,7 +20,7 @@ func (s *outputSuite) TestWriteInsert(c *C) {
 		{"3", "male", "john@mail.com", "020-1256", "healthy"},
 		{"4", "female", "sarah@mail.com", "020-1235", "healthy"},
 	}
-	specCmts := []string {
+	specCmts := []string{
 		"/*!40101 SET NAMES binary*/;",
 		"/*!40014 SET FOREIGN_KEY_CHECKS=0*/;",
 	}
@@ -28,7 +28,7 @@ func (s *outputSuite) TestWriteInsert(c *C) {
 	ctx := &mockContext{config: &Config{
 		LineSplitter: "\n",
 		Logger:       &DummyLogger{},
-	}, errHandler: func(error){}}
+	}, errHandler: func(error) {}}
 	strCollector := &mockStringCollector{}
 
 	WriteInsert(ctx, tableIR, strCollector)
@@ -59,5 +59,4 @@ func (s *outputSuite) TestWrite(c *C) {
 		}
 	}
 	write(mocksw, "test", nil, func(error) {})
-
 }

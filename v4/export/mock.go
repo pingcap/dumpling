@@ -29,7 +29,7 @@ func (m *mockStringCollector) WriteString(s string) (int, error) {
 
 type mockStringIter struct {
 	idx int
-	ss []string
+	ss  []string
 }
 
 func newMockStringIter(ss ...string) StringIter {
@@ -53,7 +53,7 @@ func (m *mockStringIter) HasNext() bool {
 }
 
 type mockSQLRowIterator struct {
-	idx int
+	idx  int
 	data [][]string
 }
 
@@ -73,7 +73,7 @@ func (m *mockSQLRowIterator) HasNext() bool {
 
 type mockTableDataIR struct {
 	tblName string
-	data [][]string
+	data    [][]string
 	specCmt []string
 }
 
@@ -105,7 +105,7 @@ func (m *mockTableDataIR) Rows() SQLRowIter {
 }
 
 type mockContext struct {
-	config *Config
+	config     *Config
 	errHandler ErrHandler
 }
 
