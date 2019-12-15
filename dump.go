@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/pingcap/dumpling/v4/export"
 	"strings"
 	"sync"
 
@@ -35,7 +36,8 @@ func Dump(conf *Config) error {
 	pool.Close()
 
 	for _, database := range databases {
-		if err := dumpDatabase(context.Background(), conf.getDSN(database), database, &dummyWriter{}); err != nil {
+		fsWriter := NewFileSystemWriter(extractOutputConfig(conf))
+		if err := dumpDatabase(context.Background(), conf.getDSN(database), database, fsWriter); err != nil {
 			return err
 		}
 	}
@@ -87,13 +89,26 @@ func showTables(db *sql.DB) ([]string, error) {
 	return res.data, nil
 }
 
+func showCreateDatabase(db *sql.DB, database string) (string, error) {
+	var oneRow [2]string
+	handleOneRow := func(rows *sql.Rows) error {
+		return rows.Scan(&oneRow[0], &oneRow[1])
+	}
+	query := fmt.Sprintf("SHOW CREATE DATABASE %s", database)
+	err := simpleQuery(db, query, handleOneRow)
+	if err != nil {
+		return "", err
+	}
+	return oneRow[1], nil
+}
+
 func showCreateTable(db *sql.DB, database, table string) (string, error) {
 	var oneRow [2]string
 	handleOneRow := func(rows *sql.Rows) error {
 		return rows.Scan(&oneRow[0], &oneRow[1])
 	}
-	sql := fmt.Sprintf("SHOW CREATE TABLE %s.%s", database, table)
-	err := simpleQuery(db, sql, handleOneRow)
+	query := fmt.Sprintf("SHOW CREATE TABLE %s.%s", database, table)
+	err := simpleQuery(db, query, handleOneRow)
 	if err != nil {
 		return "", err
 	}
@@ -107,7 +122,13 @@ func dumpDatabase(ctx context.Context, dsn, dbName string, writer Writer) error 
 	}
 	defer db.Close()
 
-	writer.WriteDatabaseMeta(ctx, dbName)
+	createDatabaseSQL, err := showCreateDatabase(db, dbName)
+	if err != nil {
+		return err
+	}
+	if err := writer.WriteDatabaseMeta(ctx, dbName, createDatabaseSQL); err != nil {
+		return err
+	}
 
 	tables, err := showTables(db)
 	if err != nil {
@@ -125,7 +146,10 @@ func dumpDatabase(ctx context.Context, dsn, dbName string, writer Writer) error 
 				res[ith] = err
 				return
 			}
-			writer.WriteTableMeta(ctx, dbName, table, createTableSQL)
+			if err := writer.WriteTableMeta(ctx, dbName, table, createTableSQL); err != nil {
+				res[ith] = err
+				return
+			}
 
 			gRL.getToken()
 			tableIR, err := dumpTable(ctx, db, dbName, table)
@@ -165,7 +189,7 @@ type tableDumper interface {
 	finishTable(ctx context.Context)
 }
 
-func dumpTable(ctx context.Context, db *sql.DB, database, table string) (TableDataIR, error) {
+func dumpTable(ctx context.Context, db *sql.DB, database, table string) (export.TableDataIR, error) {
 	colTypes, err := getColumnTypes(db, table)
 	if err != nil {
 		return nil, err
