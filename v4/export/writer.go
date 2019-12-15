@@ -15,7 +15,7 @@ type FileSystemWriter struct {
 }
 
 func (w *FileSystemWriter) initFileHandle() {
-	w.file, w.err = os.OpenFile(w.path, os.O_CREATE|os.O_WRONLY, 0644)
+	w.file, w.err = os.OpenFile(w.path, os.O_CREATE|os.O_WRONLY, 0755)
 }
 
 func (w *FileSystemWriter) WriteString(str string) (int, error) {

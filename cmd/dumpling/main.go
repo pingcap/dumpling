@@ -69,10 +69,15 @@ func main() {
 	conf.Threads = threads
 	conf.OutputDirPath = outputDir
 
-	err := dumpling.Dump(conf)
+	err := os.MkdirAll(outputDir, 0755)
 	if err != nil {
 		fmt.Println(err)
-		os.Exit(-1)
+		os.Exit(1)
+	}
+	err = dumpling.Dump(conf)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
 	}
 	return
 }

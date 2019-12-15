@@ -11,6 +11,11 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 )
 
+type dumper struct {
+	conn   *sql.DB
+	writer Writer
+}
+
 func Dump(conf *Config) error {
 	pool, err := sql.Open("mysql", conf.getDSN(""))
 	if err != nil {
@@ -89,8 +94,8 @@ func showCreateDatabase(db *sql.DB, database string) (string, error) {
 	handleOneRow := func(rows *sql.Rows) error {
 		return rows.Scan(&oneRow[0], &oneRow[1])
 	}
-	sqlStr := fmt.Sprintf("SHOW CREATE DATABASE %s", database)
-	err := simpleQuery(db, sqlStr, handleOneRow)
+	query := fmt.Sprintf("SHOW CREATE DATABASE %s", database)
+	err := simpleQuery(db, query, handleOneRow)
 	if err != nil {
 		return "", err
 	}
@@ -102,8 +107,8 @@ func showCreateTable(db *sql.DB, database, table string) (string, error) {
 	handleOneRow := func(rows *sql.Rows) error {
 		return rows.Scan(&oneRow[0], &oneRow[1])
 	}
-	sql := fmt.Sprintf("SHOW CREATE TABLE %s.%s", database, table)
-	err := simpleQuery(db, sql, handleOneRow)
+	query := fmt.Sprintf("SHOW CREATE TABLE %s.%s", database, table)
+	err := simpleQuery(db, query, handleOneRow)
 	if err != nil {
 		return "", err
 	}
