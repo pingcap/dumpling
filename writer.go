@@ -29,11 +29,7 @@ func (f *FileSystemWriter) WriteDatabaseMeta(ctx context.Context, db, createSQL 
 		target:  db,
 		metaSQL: createSQL,
 	}
-	var err error
-	export.WriteMeta(meta, fsStringWriter, f.cfg, func(e error) {
-		err = withStack(e)
-	})
-	return err
+	return export.WriteMeta(meta, fsStringWriter, f.cfg)
 }
 
 func (f *FileSystemWriter) WriteTableMeta(ctx context.Context, db, table, createSQL string) error {
@@ -43,20 +39,12 @@ func (f *FileSystemWriter) WriteTableMeta(ctx context.Context, db, table, create
 		target:  table,
 		metaSQL: createSQL,
 	}
-	var err error
-	export.WriteMeta(meta, fsStringWriter, f.cfg, func(e error) {
-		err = withStack(e)
-	})
-	return err
+	return export.WriteMeta(meta, fsStringWriter, f.cfg)
 }
 
 func (f *FileSystemWriter) WriteTableData(ctx context.Context, ir export.TableDataIR) error {
 	fileName := path.Join(f.cfg.OutputDirPath, fmt.Sprintf("%s.%s.sql", ir.DatabaseName(), ir.TableName()))
 	fsStringWriter := export.NewFileSystemWriter(fileName, false)
 
-	var err error
-	export.WriteInsert(ir, fsStringWriter, f.cfg, func(e error) {
-		err = withStack(e)
-	})
-	return err
+	return export.WriteInsert(ir, fsStringWriter, f.cfg)
 }
