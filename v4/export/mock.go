@@ -119,7 +119,7 @@ type mockTableDataIR struct {
 
 func newMockTableDataIR(databaseName, tableName string, data [][]string, specialComments []string) TableDataIR {
 	var nData [][]sql.NullString
-	for _, ss := range data{
+	for _, ss := range data {
 		nData = append(nData, makeNullString(ss))
 	}
 
