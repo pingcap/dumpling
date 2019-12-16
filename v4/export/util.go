@@ -1,6 +1,7 @@
 package export
 
 import (
+	"database/sql"
 	"fmt"
 	"strings"
 )
@@ -12,11 +13,14 @@ func wrapBackticks(str string) string {
 	return fmt.Sprintf("`%s`", str)
 }
 
-func handleNulls(origin []string) []string {
+func handleNulls(origin []sql.NullString) []string {
+	ret := make([]string, len(origin))
 	for i, s := range origin {
-		if len(s) == 0 {
-			origin[i] = "NULL"
+		if s.Valid {
+			ret[i] = s.String
+		} else {
+			ret[i] = "NULL"
 		}
 	}
-	return origin
+	return ret
 }

@@ -1,11 +1,12 @@
 package export
 
 import (
+	"database/sql"
 	"io"
 	"strings"
 )
 
-type dumplingRow []string
+type dumplingRow []sql.NullString
 
 func (d dumplingRow) BindAddress(args []interface{}) {
 	for i := range d {

@@ -21,5 +21,3 @@ func (r *rateLimit) putToken() {
 		panic("put a redundant token")
 	}
 }
-
-var gRL = newRateLimit(30)

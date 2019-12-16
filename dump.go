@@ -37,7 +37,7 @@ func Dump(conf *Config) error {
 
 	for _, database := range databases {
 		fsWriter := NewFileSystemWriter(extractOutputConfig(conf))
-		if err := dumpDatabase(context.Background(), conf.getDSN(database), database, fsWriter); err != nil {
+		if err := dumpDatabase(context.Background(), conf, database, fsWriter); err != nil {
 			return err
 		}
 	}
@@ -115,7 +115,8 @@ func showCreateTable(db *sql.DB, database, table string) (string, error) {
 	return oneRow[1], nil
 }
 
-func dumpDatabase(ctx context.Context, dsn, dbName string, writer Writer) error {
+func dumpDatabase(ctx context.Context, conf *Config, dbName string, writer Writer) error {
+	dsn := conf.getDSN(dbName)
 	db, err := sql.Open("mysql", dsn)
 	if err != nil {
 		return withStack(err)
@@ -135,6 +136,7 @@ func dumpDatabase(ctx context.Context, dsn, dbName string, writer Writer) error 
 		return err
 	}
 
+	rateLimit := newRateLimit(conf.Threads)
 	var wg sync.WaitGroup
 	wg.Add(len(tables))
 	res := make([]error, len(tables))
@@ -151,9 +153,9 @@ func dumpDatabase(ctx context.Context, dsn, dbName string, writer Writer) error 
 				return
 			}
 
-			gRL.getToken()
+			rateLimit.getToken()
 			tableIR, err := dumpTable(ctx, db, dbName, table)
-			defer gRL.putToken()
+			defer rateLimit.putToken()
 			if err != nil {
 				res[ith] = err
 				return
