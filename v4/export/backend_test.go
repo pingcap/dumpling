@@ -17,7 +17,6 @@ type outputSuite struct {
 
 func (s *outputSuite) SetUpSuite(c *C) {
 	s.mockCfg = &Config{
-		LineSplitter: "\n",
 		Logger:       &DummyLogger{},
 		OutputSize:   UnspecifiedSize,
 	}
