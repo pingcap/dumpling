@@ -44,7 +44,7 @@ func (f *FileSystemWriter) WriteTableMeta(ctx context.Context, db, table, create
 
 func (f *FileSystemWriter) WriteTableData(ctx context.Context, ir export.TableDataIR) error {
 	fileName := path.Join(f.cfg.OutputDirPath, fmt.Sprintf("%s.%s.sql", ir.DatabaseName(), ir.TableName()))
-	fsStringWriter := export.NewFileSystemWriter(fileName, false)
+	fsStringWriter := export.NewFileSystemWriter(fileName, true)
 
 	return export.WriteInsert(ir, fsStringWriter, f.cfg)
 }
