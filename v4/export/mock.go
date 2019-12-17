@@ -3,6 +3,7 @@
 package export
 
 import (
+	"database/sql"
 	"fmt"
 )
 
@@ -54,14 +55,14 @@ func (m *mockStringIter) HasNext() bool {
 
 type mockSQLRowIterator struct {
 	idx  int
-	data [][]string
+	data [][]sql.NullString
 }
 
 func (m *mockSQLRowIterator) Next(sp RowReceiver) error {
 	args := make([]interface{}, len(m.data[m.idx]))
 	sp.BindAddress(args)
 	for i := range args {
-		*(args[i]).(*string) = m.data[m.idx][i]
+		*(args[i]).(*sql.NullString) = m.data[m.idx][i]
 	}
 	m.idx += 1
 	return nil
@@ -97,18 +98,35 @@ func newMockMetaIR(targetName string, meta string, specialComments []string) Met
 	}
 }
 
+func makeNullString(ss []string) []sql.NullString {
+	var ns []sql.NullString
+	for _, s := range ss {
+		if len(s) != 0 {
+			ns = append(ns, sql.NullString{String: s, Valid: true})
+		} else {
+			ns = append(ns, sql.NullString{Valid: false})
+		}
+	}
+	return ns
+}
+
 type mockTableDataIR struct {
 	dbName  string
 	tblName string
-	data    [][]string
+	data    [][]sql.NullString
 	specCmt []string
 }
 
 func newMockTableDataIR(databaseName, tableName string, data [][]string, specialComments []string) TableDataIR {
+	var nData [][]sql.NullString
+	for _, ss := range data {
+		nData = append(nData, makeNullString(ss))
+	}
+
 	return &mockTableDataIR{
 		dbName:  databaseName,
 		tblName: tableName,
-		data:    data,
+		data:    nData,
 		specCmt: specialComments,
 	}
 }

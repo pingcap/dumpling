@@ -13,7 +13,6 @@ type Config struct {
 	Password string
 	Threads  int
 
-	LineSplitter  string
 	Logger        export.Logger
 	OutputSize    int
 	OutputDirPath string
@@ -27,7 +26,6 @@ func DefaultConfig() *Config {
 		Port:          3306,
 		Password:      "",
 		Threads:       4,
-		LineSplitter:  "\n",
 		Logger:        &DummyLogger{},
 		OutputSize:    export.UnspecifiedSize,
 		OutputDirPath: ".",
@@ -40,7 +38,6 @@ func (conf *Config) getDSN(db string) string {
 
 func extractOutputConfig(conf *Config) *export.Config {
 	return &export.Config{
-		LineSplitter:  conf.LineSplitter,
 		Logger:        conf.Logger,
 		OutputSize:    conf.OutputSize,
 		OutputDirPath: conf.OutputDirPath,

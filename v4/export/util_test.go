@@ -18,7 +18,7 @@ func (s *testUtilSuite) TestWrapBackticks(c *C) {
 }
 
 func (s *testUtilSuite) TestHandleNulls(c *C) {
-	src := []string{"255", "", "25535", "computer_science", "male"}
+	src := makeNullString([]string{"255", "", "25535", "computer_science", "male"})
 	exp := []string{"255", "NULL", "25535", "computer_science", "male"}
 	c.Assert(handleNulls(src), DeepEquals, exp)
 }
