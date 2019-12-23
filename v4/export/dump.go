@@ -1,10 +1,9 @@
-package dumpling
+package export
 
 import (
 	"context"
 	"database/sql"
 	"fmt"
-	"github.com/pingcap/dumpling/v4/export"
 	"strings"
 	"sync"
 
@@ -36,7 +35,7 @@ func Dump(conf *Config) error {
 	pool.Close()
 
 	for _, database := range databases {
-		fsWriter := NewFileSystemWriter(extractOutputConfig(conf))
+		fsWriter := NewDummyWriter(extractOutputConfig(conf))
 		if err := dumpDatabase(context.Background(), conf, database, fsWriter); err != nil {
 			return err
 		}
@@ -191,7 +190,7 @@ type tableDumper interface {
 	finishTable(ctx context.Context)
 }
 
-func dumpTable(ctx context.Context, db *sql.DB, database, table string) (export.TableDataIR, error) {
+func dumpTable(ctx context.Context, db *sql.DB, database, table string) (TableDataIR, error) {
 	colTypes, err := getColumnTypes(db, table)
 	if err != nil {
 		return nil, err

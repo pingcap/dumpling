@@ -19,8 +19,8 @@ import (
 	_ "net/http/pprof"
 	"os"
 
-	"github.com/pingcap/dumpling"
 	"github.com/pingcap/dumpling/v4/cli"
+	"github.com/pingcap/dumpling/v4/export"
 )
 
 var (
@@ -60,7 +60,7 @@ func main() {
 	flag.Parse()
 	println(cli.LongVersion())
 
-	conf := dumpling.DefaultConfig()
+	conf := export.DefaultConfig()
 	conf.Database = database
 	conf.Host = host
 	conf.User = user
@@ -74,7 +74,7 @@ func main() {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-	err = dumpling.Dump(conf)
+	err = export.Dump(conf)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)

@@ -1,8 +1,7 @@
-package dumpling
+package export
 
 import (
 	"database/sql"
-	"github.com/pingcap/dumpling/v4/export"
 )
 
 // rowIter implements the SQLRowIter interface.
@@ -11,7 +10,7 @@ type rowIter struct {
 	args []interface{}
 }
 
-func (iter *rowIter) Next(row export.RowReceiver) error {
+func (iter *rowIter) Next(row RowReceiver) error {
 	err := decodeFromRows(iter.rows, iter.args, row)
 	if err != nil {
 		return err
@@ -19,7 +18,7 @@ func (iter *rowIter) Next(row export.RowReceiver) error {
 	return nil
 }
 
-func decodeFromRows(rows *sql.Rows, args []interface{}, row export.RowReceiver) error {
+func decodeFromRows(rows *sql.Rows, args []interface{}, row RowReceiver) error {
 	row.BindAddress(args)
 	if err := rows.Scan(args...); err != nil {
 		rows.Close()
@@ -37,7 +36,7 @@ type stringIter struct {
 	ss  []string
 }
 
-func newStringIter(ss ...string) export.StringIter {
+func newStringIter(ss ...string) StringIter {
 	return &stringIter{
 		idx: 0,
 		ss:  ss,
@@ -77,14 +76,14 @@ func (td *tableData) ColumnCount() uint {
 	return uint(len(td.colTypes))
 }
 
-func (td *tableData) Rows() export.SQLRowIter {
+func (td *tableData) Rows() SQLRowIter {
 	return &rowIter{
 		rows: td.rows,
 		args: make([]interface{}, len(td.colTypes)),
 	}
 }
 
-func (td *tableData) SpecialComments() export.StringIter {
+func (td *tableData) SpecialComments() StringIter {
 	return newStringIter(td.specCmts...)
 }
 
@@ -94,7 +93,7 @@ type metaData struct {
 	specCmts []string
 }
 
-func (m *metaData) SpecialComments() export.StringIter {
+func (m *metaData) SpecialComments() StringIter {
 	return newStringIter(m.specCmts...)
 }
 

@@ -1,5 +1,3 @@
-//+build !codes
-
 package export
 
 import (

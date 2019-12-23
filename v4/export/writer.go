@@ -1,10 +1,54 @@
 package export
 
 import (
+	"context"
+	"fmt"
 	"io"
 	"os"
+	"path"
 	"sync"
 )
+
+type Writer interface {
+	WriteDatabaseMeta(ctx context.Context, db, createSQL string) error
+	WriteTableMeta(ctx context.Context, db, table, createSQL string) error
+	WriteTableData(ctx context.Context, ir TableDataIR) error
+}
+
+type DummyWriter struct {
+	cfg *Config
+}
+
+func NewDummyWriter(config *Config) Writer {
+	return &DummyWriter{cfg: config}
+}
+
+func (f *DummyWriter) WriteDatabaseMeta(ctx context.Context, db, createSQL string) error {
+	fileName := path.Join(f.cfg.OutputDirPath, fmt.Sprintf("%s-schema-create.sql", db))
+	fsStringWriter := NewFileSystemWriter(fileName, false)
+	meta := &metaData{
+		target:  db,
+		metaSQL: createSQL,
+	}
+	return WriteMeta(meta, fsStringWriter, f.cfg)
+}
+
+func (f *DummyWriter) WriteTableMeta(ctx context.Context, db, table, createSQL string) error {
+	fileName := path.Join(f.cfg.OutputDirPath, fmt.Sprintf("%s.%s-schema.sql", db, table))
+	fsStringWriter := NewFileSystemWriter(fileName, false)
+	meta := &metaData{
+		target:  table,
+		metaSQL: createSQL,
+	}
+	return WriteMeta(meta, fsStringWriter, f.cfg)
+}
+
+func (f *DummyWriter) WriteTableData(ctx context.Context, ir TableDataIR) error {
+	fileName := path.Join(f.cfg.OutputDirPath, fmt.Sprintf("%s.%s.sql", ir.DatabaseName(), ir.TableName()))
+	fsStringWriter := NewFileSystemWriter(fileName, true)
+
+	return WriteInsert(ir, fsStringWriter, f.cfg)
+}
 
 type FileSystemWriter struct {
 	path string
