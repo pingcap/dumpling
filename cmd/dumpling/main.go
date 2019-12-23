@@ -31,6 +31,7 @@ var (
 	password  string
 	threads   int
 	outputDir string
+	fileSize  uint64
 )
 
 func init() {
@@ -52,6 +53,9 @@ func init() {
 	flag.IntVar(&threads, "threads", 4, "Number of goroutines to use, default 4")
 	flag.IntVar(&threads, "t", 4, "Number of goroutines to use, default 4")
 
+	flag.Uint64Var(&fileSize, "F", export.UnspecifiedSize, "The approximate size of output file")
+	flag.Uint64Var(&fileSize, "filesize", export.UnspecifiedSize, "The approximate size of output file")
+
 	flag.StringVar(&outputDir, "output", ".", "Output directory")
 	flag.StringVar(&outputDir, "o", ".", "Output directory")
 }
@@ -67,14 +71,10 @@ func main() {
 	conf.Port = port
 	conf.Password = password
 	conf.Threads = threads
+	conf.FileSize = fileSize
 	conf.OutputDirPath = outputDir
 
-	err := os.MkdirAll(outputDir, 0755)
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
-	err = export.Dump(conf)
+	err := export.Dump(conf)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)

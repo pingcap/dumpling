@@ -13,7 +13,7 @@ type Config struct {
 	Threads  int
 
 	Logger        Logger
-	OutputSize    int
+	FileSize      uint64
 	OutputDirPath string
 }
 
@@ -26,7 +26,7 @@ func DefaultConfig() *Config {
 		Password:      "",
 		Threads:       4,
 		Logger:        &DummyLogger{},
-		OutputSize:    UnspecifiedSize,
+		FileSize:      UnspecifiedSize,
 		OutputDirPath: ".",
 	}
 }
@@ -38,7 +38,7 @@ func (conf *Config) getDSN(db string) string {
 func extractOutputConfig(conf *Config) *Config {
 	return &Config{
 		Logger:        conf.Logger,
-		OutputSize:    conf.OutputSize,
+		FileSize:      conf.FileSize,
 		OutputDirPath: conf.OutputDirPath,
 	}
 }
