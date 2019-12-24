@@ -1,21 +1,27 @@
 package export
 
-import (
-	"database/sql"
-)
+import "database/sql"
 
-// rowIter implements the SQLRowIter interface.
-type rowIter struct {
-	rows *sql.Rows
-	args []interface{}
+// TableDataIR is table data intermediate representation.
+type TableDataIR interface {
+	DatabaseName() string
+	TableName() string
+	ColumnCount() uint
+	ColumnTypes() []string
+
+	SpecialComments() StringIter
+	Rows() SQLRowIter
 }
 
-func (iter *rowIter) Next(row RowReceiver) error {
-	err := decodeFromRows(iter.rows, iter.args, row)
-	if err != nil {
-		return err
-	}
-	return nil
+// SQLRowIter is the iterator on a collection of sql.Row.
+type SQLRowIter interface {
+	Next(RowReceiver) error
+	HasNext() bool
+}
+
+type RowReceiver interface {
+	BindAddress([]interface{})
+	ReportSize() uint64
 }
 
 func decodeFromRows(rows *sql.Rows, args []interface{}, row RowReceiver) error {
@@ -27,80 +33,22 @@ func decodeFromRows(rows *sql.Rows, args []interface{}, row RowReceiver) error {
 	return nil
 }
 
-func (iter *rowIter) HasNext() bool {
-	return iter.rows.Next()
+// StringIter is the iterator on a collection of strings.
+type StringIter interface {
+	Next() string
+	HasNext() bool
 }
 
-type stringIter struct {
-	idx int
-	ss  []string
+type MetaIR interface {
+	SpecialComments() StringIter
+	TargetName() string
+	MetaSQL() string
 }
 
-func newStringIter(ss ...string) StringIter {
-	return &stringIter{
-		idx: 0,
-		ss:  ss,
-	}
-}
-
-func (m *stringIter) Next() string {
-	if m.idx >= len(m.ss) {
-		return ""
-	}
-	ret := m.ss[m.idx]
-	m.idx += 1
-	return ret
-}
-
-func (m *stringIter) HasNext() bool {
-	return m.idx < len(m.ss)
-}
-
-type tableData struct {
-	database string
-	table    string
-	rows     *sql.Rows
-	colTypes []*sql.ColumnType
-	specCmts []string
-}
-
-func (td *tableData) DatabaseName() string {
-	return td.database
-}
-
-func (td *tableData) TableName() string {
-	return td.table
-}
-
-func (td *tableData) ColumnCount() uint {
-	return uint(len(td.colTypes))
-}
-
-func (td *tableData) Rows() SQLRowIter {
-	return &rowIter{
-		rows: td.rows,
-		args: make([]interface{}, len(td.colTypes)),
-	}
-}
-
-func (td *tableData) SpecialComments() StringIter {
-	return newStringIter(td.specCmts...)
-}
-
-type metaData struct {
-	target   string
-	metaSQL  string
-	specCmts []string
-}
-
-func (m *metaData) SpecialComments() StringIter {
-	return newStringIter(m.specCmts...)
-}
-
-func (m *metaData) TargetName() string {
-	return m.target
-}
-
-func (m *metaData) MetaSQL() string {
-	return m.metaSQL
+// Logger used for logging when export.
+type Logger interface {
+	Debug(format string, args ...interface{})
+	Info(format string, args ...interface{})
+	Warn(format string, args ...interface{})
+	Error(format string, args ...interface{})
 }

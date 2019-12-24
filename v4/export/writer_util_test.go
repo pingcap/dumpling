@@ -9,20 +9,20 @@ func TestT(t *testing.T) {
 	TestingT(t)
 }
 
-var _ = Suite(&outputSuite{})
+var _ = Suite(&testUtilSuite{})
 
-type outputSuite struct {
+type testUtilSuite struct {
 	mockCfg *Config
 }
 
-func (s *outputSuite) SetUpSuite(c *C) {
+func (s *testUtilSuite) SetUpSuite(c *C) {
 	s.mockCfg = &Config{
-		Logger:       &DummyLogger{},
-		OutputSize:   UnspecifiedSize,
+		Logger:   &DummyLogger{},
+		FileSize: UnspecifiedSize,
 	}
 }
 
-func (s *outputSuite) TestWriteMeta(c *C) {
+func (s *testUtilSuite) TestWriteMeta(c *C) {
 	createTableStmt := "CREATE TABLE `t1` (\n" +
 		"  `a` int(11) DEFAULT NULL\n" +
 		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;"
@@ -39,18 +39,19 @@ func (s *outputSuite) TestWriteMeta(c *C) {
 	c.Assert(strCollector.buf, Equals, expected)
 }
 
-func (s *outputSuite) TestWriteInsert(c *C) {
+func (s *testUtilSuite) TestWriteInsert(c *C) {
 	data := [][]string{
 		{"1", "male", "bob@mail.com", "020-1234", ""},
 		{"2", "female", "sarah@mail.com", "020-1253", "healthy"},
 		{"3", "male", "john@mail.com", "020-1256", "healthy"},
 		{"4", "female", "sarah@mail.com", "020-1235", "healthy"},
 	}
+	colTypes := []string{"INT", "SET", "VARCHAR", "VARCHAR", "TEXT"}
 	specCmts := []string{
 		"/*!40101 SET NAMES binary*/;",
 		"/*!40014 SET FOREIGN_KEY_CHECKS=0*/;",
 	}
-	tableIR := newMockTableDataIR("test", "employee", data, specCmts)
+	tableIR := newMockTableDataIR("test", "employee", data, specCmts, colTypes)
 	strCollector := &mockStringCollector{}
 
 	err := WriteInsert(tableIR, strCollector, s.mockCfg)
@@ -58,14 +59,14 @@ func (s *outputSuite) TestWriteInsert(c *C) {
 	expected := "/*!40101 SET NAMES binary*/;\n" +
 		"/*!40014 SET FOREIGN_KEY_CHECKS=0*/;\n" +
 		"INSERT INTO `employee` VALUES \n" +
-		"(1, male, bob@mail.com, 020-1234, NULL),\n" +
-		"(2, female, sarah@mail.com, 020-1253, healthy),\n" +
-		"(3, male, john@mail.com, 020-1256, healthy),\n" +
-		"(4, female, sarah@mail.com, 020-1235, healthy);\n"
+		"(1, 'male', 'bob@mail.com', '020-1234', NULL),\n" +
+		"(2, 'female', 'sarah@mail.com', '020-1253', 'healthy'),\n" +
+		"(3, 'male', 'john@mail.com', '020-1256', 'healthy'),\n" +
+		"(4, 'female', 'sarah@mail.com', '020-1235', 'healthy');\n"
 	c.Assert(strCollector.buf, Equals, expected)
 }
 
-func (s *outputSuite) TestWrite(c *C) {
+func (s *testUtilSuite) TestWrite(c *C) {
 	mocksw := &mockStringWriter{}
 	src := []string{"test", "loooooooooooooooooooong", "poison"}
 	exp := []string{"test", "loooooooooooooooooooong", "poison_error"}
@@ -81,4 +82,11 @@ func (s *outputSuite) TestWrite(c *C) {
 	}
 	err := write(mocksw, "test", nil)
 	c.Assert(err, IsNil)
+}
+
+func (s *testUtilSuite) TestConvert(c *C) {
+	srcColTypes := []string{"INT", "CHAR", "BIGINT", "VARCHAR", "SET"}
+	src := makeNullString([]string{"255", "", "25535", "computer_science", "male"})
+	exp := []string{"255", "NULL", "25535", "'computer_science'", "'male'"}
+	c.Assert(convert(src, srcColTypes), DeepEquals, exp)
 }

@@ -15,6 +15,18 @@ func (d dumplingRow) BindAddress(args []interface{}) {
 	}
 }
 
+func (d dumplingRow) ReportSize() uint64 {
+	var totalSize uint64
+	for _, ns := range d {
+		if ns.Valid {
+			totalSize += 4
+		} else {
+			totalSize += uint64(len(ns.String))
+		}
+	}
+	return totalSize
+}
+
 func WriteMeta(meta MetaIR, w io.StringWriter, cfg *Config) error {
 	log := cfg.Logger
 	log.Debug("start dumping meta data for target %s", meta.TargetName())
@@ -49,7 +61,10 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter, cfg *Config) error {
 		}
 	}
 
-	tblName := wrapBackticks(tblIR.TableName())
+	tblName := tblIR.TableName()
+	if !strings.HasPrefix(tblName, "`") && !strings.HasSuffix(tblName, "`") {
+		tblName = wrapStringWith(tblName, "`")
+	}
 	if err := write(w, fmt.Sprintf("INSERT INTO %s VALUES \n", tblName), log); err != nil {
 		return err
 	}
@@ -61,7 +76,7 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter, cfg *Config) error {
 			return err
 		}
 
-		row := handleNulls(dumplingRow)
+		row := convert(dumplingRow, tblIR.ColumnTypes())
 
 		if err := write(w, fmt.Sprintf("(%s)", strings.Join(row, ", ")), log); err != nil {
 			return err
@@ -87,4 +102,43 @@ func write(writer io.StringWriter, str string, logger Logger) error {
 		logger.Error("writing failed, string: `%s`, error: %s", str, err.Error())
 	}
 	return err
+}
+
+func wrapStringWith(str string, wrapper string) string {
+	return fmt.Sprintf("%s%s%s", wrapper, str, wrapper)
+}
+
+func convert(origin []sql.NullString, colTypes []string) []string {
+	ret := make([]string, len(origin))
+	for i, s := range origin {
+		if !s.Valid {
+			ret[i] = "NULL"
+			continue
+		}
+
+		if isCharTypes(colTypes[i]) {
+			ret[i] = wrapStringWith(s.String, "'")
+		} else {
+			ret[i] = s.String
+		}
+	}
+	return ret
+}
+
+var charTypes = map[string]struct{}{
+	"CHAR":      {},
+	"NCHAR":     {},
+	"VARCHAR":   {},
+	"NVARCHAR":  {},
+	"BINARY":    {},
+	"VARBINARY": {},
+	"BLOB":      {},
+	"TEXT":      {},
+	"ENUM":      {},
+	"SET":       {},
+}
+
+func isCharTypes(colType string) bool {
+	_, ok := charTypes[colType]
+	return ok
 }

@@ -26,31 +26,6 @@ func (m *mockStringCollector) WriteString(s string) (int, error) {
 	return len(s), nil
 }
 
-type mockStringIter struct {
-	idx int
-	ss  []string
-}
-
-func newMockStringIter(ss ...string) StringIter {
-	return &mockStringIter{
-		idx: 0,
-		ss:  ss,
-	}
-}
-
-func (m *mockStringIter) Next() string {
-	if m.idx >= len(m.ss) {
-		return ""
-	}
-	ret := m.ss[m.idx]
-	m.idx += 1
-	return ret
-}
-
-func (m *mockStringIter) HasNext() bool {
-	return m.idx < len(m.ss)
-}
-
 type mockSQLRowIterator struct {
 	idx  int
 	data [][]sql.NullString
@@ -77,7 +52,7 @@ type mockMetaIR struct {
 }
 
 func (m *mockMetaIR) SpecialComments() StringIter {
-	return newMockStringIter(m.specCmt...)
+	return newStringIter(m.specCmt...)
 }
 
 func (m *mockMetaIR) TargetName() string {
@@ -109,23 +84,29 @@ func makeNullString(ss []string) []sql.NullString {
 }
 
 type mockTableDataIR struct {
-	dbName  string
-	tblName string
-	data    [][]sql.NullString
-	specCmt []string
+	dbName   string
+	tblName  string
+	data     [][]sql.NullString
+	specCmt  []string
+	colTypes []string
 }
 
-func newMockTableDataIR(databaseName, tableName string, data [][]string, specialComments []string) TableDataIR {
+func (m *mockTableDataIR) ColumnTypes() []string {
+	return m.colTypes
+}
+
+func newMockTableDataIR(databaseName, tableName string, data [][]string, specialComments []string, colTypes []string) TableDataIR {
 	var nData [][]sql.NullString
 	for _, ss := range data {
 		nData = append(nData, makeNullString(ss))
 	}
 
 	return &mockTableDataIR{
-		dbName:  databaseName,
-		tblName: tableName,
-		data:    nData,
-		specCmt: specialComments,
+		dbName:   databaseName,
+		tblName:  tableName,
+		data:     nData,
+		specCmt:  specialComments,
+		colTypes: colTypes,
 	}
 }
 
@@ -142,7 +123,7 @@ func (m *mockTableDataIR) ColumnCount() uint {
 }
 
 func (m *mockTableDataIR) SpecialComments() StringIter {
-	return newMockStringIter(m.specCmt...)
+	return newStringIter(m.specCmt...)
 }
 
 func (m *mockTableDataIR) Rows() SQLRowIter {
@@ -150,19 +131,6 @@ func (m *mockTableDataIR) Rows() SQLRowIter {
 		idx:  0,
 		data: m.data,
 	}
-}
-
-type mockContext struct {
-	config     *Config
-	errHandler ErrHandler
-}
-
-func (m *mockContext) GetConfig() *Config {
-	return m.config
-}
-
-func (m *mockContext) GetErrorHandler() ErrHandler {
-	return m.errHandler
 }
 
 type DummyLogger struct{}

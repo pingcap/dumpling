@@ -15,17 +15,18 @@ type Writer interface {
 	WriteTableData(ctx context.Context, ir TableDataIR) error
 }
 
-type DummyWriter struct {
+type SimpleWriter struct {
 	cfg *Config
 }
 
-func NewDummyWriter(config *Config) Writer {
-	return &DummyWriter{cfg: config}
+func NewSimpleWriter(config *Config) (Writer, error) {
+	sw := &SimpleWriter{cfg: config}
+	return sw, os.MkdirAll(config.OutputDirPath, 0755)
 }
 
-func (f *DummyWriter) WriteDatabaseMeta(ctx context.Context, db, createSQL string) error {
+func (f *SimpleWriter) WriteDatabaseMeta(ctx context.Context, db, createSQL string) error {
 	fileName := path.Join(f.cfg.OutputDirPath, fmt.Sprintf("%s-schema-create.sql", db))
-	fsStringWriter := NewFileSystemWriter(fileName, false)
+	fsStringWriter := NewFileSystemStringWriter(fileName, false)
 	meta := &metaData{
 		target:  db,
 		metaSQL: createSQL,
@@ -33,9 +34,9 @@ func (f *DummyWriter) WriteDatabaseMeta(ctx context.Context, db, createSQL strin
 	return WriteMeta(meta, fsStringWriter, f.cfg)
 }
 
-func (f *DummyWriter) WriteTableMeta(ctx context.Context, db, table, createSQL string) error {
+func (f *SimpleWriter) WriteTableMeta(ctx context.Context, db, table, createSQL string) error {
 	fileName := path.Join(f.cfg.OutputDirPath, fmt.Sprintf("%s.%s-schema.sql", db, table))
-	fsStringWriter := NewFileSystemWriter(fileName, false)
+	fsStringWriter := NewFileSystemStringWriter(fileName, false)
 	meta := &metaData{
 		target:  table,
 		metaSQL: createSQL,
@@ -43,14 +44,29 @@ func (f *DummyWriter) WriteTableMeta(ctx context.Context, db, table, createSQL s
 	return WriteMeta(meta, fsStringWriter, f.cfg)
 }
 
-func (f *DummyWriter) WriteTableData(ctx context.Context, ir TableDataIR) error {
-	fileName := path.Join(f.cfg.OutputDirPath, fmt.Sprintf("%s.%s.sql", ir.DatabaseName(), ir.TableName()))
-	fsStringWriter := NewFileSystemWriter(fileName, true)
+func (f *SimpleWriter) WriteTableData(ctx context.Context, ir TableDataIR) error {
+	if f.cfg.FileSize == UnspecifiedSize {
+		fileName := path.Join(f.cfg.OutputDirPath, fmt.Sprintf("%s.%s.sql", ir.DatabaseName(), ir.TableName()))
+		fsStringWriter := NewFileSystemStringWriter(fileName, true)
+		return WriteInsert(ir, fsStringWriter, f.cfg)
+	}
 
-	return WriteInsert(ir, fsStringWriter, f.cfg)
+	ir = splitTableDataIntoChunks(ir, f.cfg.FileSize)
+	for chunkCount := 0; ; /* loop */ chunkCount += 1 {
+		fileName := path.Join(f.cfg.OutputDirPath, fmt.Sprintf("%s.%s.%3d.sql", ir.DatabaseName(), ir.TableName(), chunkCount))
+		fsStringWriter := newInterceptStringWriter(NewFileSystemStringWriter(fileName, true))
+		err := WriteInsert(ir, fsStringWriter, f.cfg)
+		if err != nil {
+			return err
+		}
+		if fsStringWriter.writeNothingYet {
+			break
+		}
+	}
+	return nil
 }
 
-type FileSystemWriter struct {
+type FileSystemStringWriter struct {
 	path string
 
 	file *os.File
@@ -58,11 +74,11 @@ type FileSystemWriter struct {
 	err  error
 }
 
-func (w *FileSystemWriter) initFileHandle() {
+func (w *FileSystemStringWriter) initFileHandle() {
 	w.file, w.err = os.OpenFile(w.path, os.O_CREATE|os.O_WRONLY, 0755)
 }
 
-func (w *FileSystemWriter) WriteString(str string) (int, error) {
+func (w *FileSystemStringWriter) WriteString(str string) (int, error) {
 	if w.err != nil {
 		return 0, w.err
 	}
@@ -70,41 +86,30 @@ func (w *FileSystemWriter) WriteString(str string) (int, error) {
 	return w.file.WriteString(str)
 }
 
-func NewFileSystemWriter(path string, lazyHandleCreation bool) *FileSystemWriter {
-	w := &FileSystemWriter{path: path}
+func NewFileSystemStringWriter(path string, lazyHandleCreation bool) *FileSystemStringWriter {
+	w := &FileSystemStringWriter{path: path}
 	if !lazyHandleCreation {
 		w.once.Do(w.initFileHandle)
 	}
 	return w
 }
 
-// SizedWriter controls the string size output to each down-stream writer. When the limit is reached,
-// it will use the result of `changeDownStream(cnt)` to replace the current down-stream writer.
-// The argument `cnt` here means the number of used down-stream writers.
-type SizedWriter struct {
-	limitSize uint // bytes
-
-	currentSize      uint // bytes
-	downStreamCounts uint
-
-	changeDownStream func(cnt uint) io.StringWriter
-	downStream       io.StringWriter
+type interceptStringWriter struct {
+	sw              io.StringWriter
+	writeNothingYet bool
 }
 
-func NewSizedWriter(limitSizeInBytes uint, changeDownStream func(uint) io.StringWriter) *SizedWriter {
-	return &SizedWriter{
-		limitSize:        limitSizeInBytes,
-		changeDownStream: changeDownStream,
+func (i *interceptStringWriter) WriteString(str string) (int, error) {
+	writtenBytes, err := i.sw.WriteString(str)
+	if writtenBytes != 0 {
+		i.writeNothingYet = false
 	}
+	return writtenBytes, err
 }
 
-func (s *SizedWriter) WriteString(str string) (int, error) {
-	strLen := uint(len(str))
-	if s.downStream == nil || s.currentSize+strLen > s.limitSize {
-		s.downStream = s.changeDownStream(s.downStreamCounts)
-		s.downStreamCounts += 1
-		s.currentSize = 0
+func newInterceptStringWriter(sw io.StringWriter) *interceptStringWriter {
+	return &interceptStringWriter{
+		sw:              sw,
+		writeNothingYet: true,
 	}
-	s.currentSize += strLen
-	return s.downStream.WriteString(str)
 }

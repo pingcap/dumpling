@@ -10,11 +10,6 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 )
 
-type dumper struct {
-	conn   *sql.DB
-	writer Writer
-}
-
 func Dump(conf *Config) error {
 	pool, err := sql.Open("mysql", conf.getDSN(""))
 	if err != nil {
@@ -35,7 +30,10 @@ func Dump(conf *Config) error {
 	pool.Close()
 
 	for _, database := range databases {
-		fsWriter := NewDummyWriter(extractOutputConfig(conf))
+		fsWriter, err := NewSimpleWriter(extractOutputConfig(conf))
+		if err != nil {
+			return err
+		}
 		if err := dumpDatabase(context.Background(), conf, database, fsWriter); err != nil {
 			return err
 		}
