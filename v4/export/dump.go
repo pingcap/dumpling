@@ -11,26 +11,15 @@ import (
 )
 
 func Dump(conf *Config) error {
-	pool, err := sql.Open("mysql", conf.getDSN(""))
-	if err != nil {
-		return withStack(err)
-	}
-
 	var databases []string
-	if conf.Database == "" {
-		var err error
-		databases, err = showDatabases(pool)
-		if err != nil {
-			pool.Close()
-			return err
-		}
-	} else {
-		databases = strings.Split(conf.Database, ",")
+	var err error
+	databases, conf.ServerInfo, err = prepareMeta(conf)
+	if err != nil {
+		return err
 	}
-	pool.Close()
 
 	for _, database := range databases {
-		fsWriter, err := NewSimpleWriter(extractOutputConfig(conf))
+		fsWriter, err := NewSimpleWriter(conf)
 		if err != nil {
 			return err
 		}
@@ -39,6 +28,44 @@ func Dump(conf *Config) error {
 		}
 	}
 	return nil
+}
+
+func prepareMeta(conf *Config) (databases []string, info ServerInfo, err error) {
+	pool, err := sql.Open("mysql", conf.getDSN(""))
+	if err != nil {
+		return nil, UnknownServerInfo, withStack(err)
+	}
+	defer pool.Close()
+	databases, err = getDumpingDatabaseNames(pool, conf)
+	if err != nil {
+		return nil, UnknownServerInfo, withStack(err)
+	}
+	info, err = detectServerInfo(pool)
+	if err != nil {
+		return databases, UnknownServerInfo, withStack(err)
+	}
+	return
+}
+
+func getDumpingDatabaseNames(pool *sql.DB, conf *Config) ([]string, error) {
+	if conf.Database == "" {
+		return showDatabases(pool)
+	}
+	return strings.Split(conf.Database, ","), nil
+}
+
+func detectServerInfo(db *sql.DB) (ServerInfo, error) {
+	var versionInfo string
+	handleOneRow := func(rows *sql.Rows) error {
+		return rows.Scan(&versionInfo)
+	}
+	err := simpleQuery(db, "SELECT version()", handleOneRow)
+	if err != nil {
+		return ServerInfo{
+			ServerType: UnknownServerType,
+		}, err
+	}
+	return ParseServerInfo(versionInfo)
 }
 
 func simpleQuery(db *sql.DB, sql string, handleOneRow func(*sql.Rows) error) error {
@@ -151,7 +178,7 @@ func dumpDatabase(ctx context.Context, conf *Config, dbName string, writer Write
 			}
 
 			rateLimit.getToken()
-			tableIR, err := dumpTable(ctx, db, dbName, table)
+			tableIR, err := dumpTable(conf, db, dbName, table)
 			defer rateLimit.putToken()
 			if err != nil {
 				res[ith] = err
@@ -188,13 +215,17 @@ type tableDumper interface {
 	finishTable(ctx context.Context)
 }
 
-func dumpTable(ctx context.Context, db *sql.DB, database, table string) (TableDataIR, error) {
+func dumpTable(conf *Config, db *sql.DB, database, table string) (TableDataIR, error) {
 	colTypes, err := getColumnTypes(db, table)
 	if err != nil {
 		return nil, err
 	}
 
-	rows, err := db.Query(fmt.Sprintf("SELECT * from %s", table))
+	query, err := buildSelectAllQuery(conf, db, database, table)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := db.Query(query)
 	if err != nil {
 		return nil, withStack(err)
 	}
@@ -205,4 +236,60 @@ func dumpTable(ctx context.Context, db *sql.DB, database, table string) (TableDa
 		rows:     rows,
 		colTypes: colTypes,
 	}, nil
+}
+
+func buildSelectAllQuery(conf *Config, db *sql.DB, database, table string) (string, error) {
+	var query strings.Builder
+	query.WriteString("SELECT * FROM ")
+	query.WriteString(database)
+	query.WriteString(".")
+	query.WriteString(table)
+	if conf.SortByPk {
+		orderByClause, err := buildOrderByClause(conf, db, database, table)
+		if err != nil {
+			return "", err
+		}
+		if orderByClause != "" {
+			query.WriteString(" ")
+			query.WriteString(orderByClause)
+		}
+	}
+	return query.String(), nil
+}
+
+func buildOrderByClause(conf *Config, db *sql.DB, database, table string) (string, error) {
+	pkName, err := getPrimaryKeyName(db, database, table)
+	if err != nil {
+		return "", err
+	}
+	if pkName != "" {
+		// the table has primary key.
+		return fmt.Sprintf("ORDER BY %s", pkName), nil
+	}
+	switch conf.ServerInfo.ServerType {
+	case TiDBServerType:
+		return "ORDER BY _tidb_rowid", nil
+	default:
+		// ignore when there is no primary key
+		return "", nil
+	}
+}
+
+const PrimaryKeyQuery = `SELECT COLUMN_NAME
+	FROM INFORMATION_SCHEMA.COLUMNS
+	WHERE TABLE_SCHEMA = '%s'
+	AND TABLE_NAME = '%s'
+	AND COLUMN_KEY = 'PRI';`
+
+func getPrimaryKeyName(db *sql.DB, database, table string) (string, error) {
+	var colName string
+	handleOneRow := func(rows *sql.Rows) error {
+		return rows.Scan(&colName)
+	}
+	query := fmt.Sprintf(PrimaryKeyQuery, database, table)
+	err := simpleQuery(db, query, handleOneRow)
+	if err != nil {
+		return "", err
+	}
+	return colName, nil
 }
