@@ -93,4 +93,6 @@ const (
 	ServerTypeMySQL
 	ServerTypeMariaDB
 	ServerTypeTiDB
+
+	ServerTypeAll
 )

@@ -254,30 +254,47 @@ func buildSelectAllQuery(conf *Config, db *sql.DB, database, table string) (stri
 	return query.String(), nil
 }
 
+const errBadFieldCode = 1054
+
 func buildOrderByClause(conf *Config, db *sql.DB, database, table string) (string, error) {
+	if conf.ServerInfo.ServerType == ServerTypeTiDB {
+		tiDBRowIDQuery := fmt.Sprintf("SELECT _tidb_rowid from %s.%s", database, table)
+		isBadField, otherErr := queryReturnExpectedErrorCode(db, tiDBRowIDQuery, errBadFieldCode)
+		if otherErr != nil {
+			return "", otherErr
+		}
+		if isBadField {
+			return "", nil
+		}
+		return "ORDER BY _tidb_rowid", nil
+	}
 	pkName, err := getPrimaryKeyName(db, database, table)
 	if err != nil {
 		return "", err
 	}
-	if pkName != "" {
-		// the table has primary key.
+	tableContainsPriKey := pkName != ""
+	if tableContainsPriKey {
 		return fmt.Sprintf("ORDER BY %s", pkName), nil
 	}
-	switch conf.ServerInfo.ServerType {
-	case ServerTypeTiDB:
-		return "ORDER BY _tidb_rowid", nil
-	default:
-		// ignore when there is no primary key
-		return "", nil
-	}
+	return "", nil
 }
 
-const PrimaryKeyQuery =
-	`SELECT column_name FROM information_schema.columns
-		WHERE table_schema = ? AND table_name = ? AND column_key = 'PRI';`
+func queryReturnExpectedErrorCode(db *sql.DB, sql string, errCode int) (bool, error) {
+	_, err := db.Exec(sql)
+	if err != nil {
+		errMsg := strings.ToLower(err.Error())
+		if strings.Contains(errMsg, fmt.Sprintf("%d", errCode)) {
+			return true, nil
+		}
+		return false, withStack(err)
+	}
+	return false, nil
+}
 
 func getPrimaryKeyName(db *sql.DB, database, table string) (string, error) {
-	stmt, err := db.Prepare(PrimaryKeyQuery)
+	priKeyQuery := `SELECT column_name FROM information_schema.columns
+		WHERE table_schema = ? AND table_name = ? AND column_key = 'PRI';`
+	stmt, err := db.Prepare(priKeyQuery)
 	if err != nil {
 		return "", err
 	}

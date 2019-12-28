@@ -1,6 +1,7 @@
 package export
 
 import (
+	"errors"
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/coreos/go-semver/semver"
 	. "github.com/pingcap/check"
@@ -52,57 +53,70 @@ func (s *testDumpSuite) TestBuildSelectAllQuery(c *C) {
 	c.Assert(err, IsNil)
 	defer db.Close()
 
-	const database, table = "test", "t"
-	const needSortedByPK = true
-	const noNeedSortedByPK = false
-	noPriKeyInTable := func() *sqlmock.Rows {
-		return sqlmock.NewRows([]string{"COLUMN_NAME"})
-	}
-	hasPriKeyInTable := func() *sqlmock.Rows {
-		return sqlmock.NewRows([]string{"COLUMN_NAME"}).AddRow("id")
-	}
-
-	plainQuery := "SELECT * FROM test.t"
-	orderByPkQuery := "SELECT * FROM test.t ORDER BY id"
-	orderByTiDBRowIDQuery := "SELECT * FROM test.t ORDER BY _tidb_rowid"
-
 	mockConf := DefaultConfig()
-	const shouldReturn = "placeholder"
-	cases := [][]interface{}{
-		// example:
-		// if we need to sort the output by primary key and
-		//    the server is TiDB and
-		//    there is no primary key in the testing table,
-		// then `buildSelectAllQuery` should return a "select * from t order by _tidb_rowid".
-		{1, needSortedByPK, ServerTypeTiDB, noPriKeyInTable, shouldReturn, orderByTiDBRowIDQuery},
-		{2, needSortedByPK, ServerTypeTiDB, hasPriKeyInTable, shouldReturn, orderByPkQuery},
-		{3, needSortedByPK, ServerTypeUnknown, noPriKeyInTable, shouldReturn, plainQuery},
-		{4, needSortedByPK, ServerTypeUnknown, hasPriKeyInTable, shouldReturn, orderByPkQuery},
-		{5, noNeedSortedByPK, ServerTypeTiDB, noPriKeyInTable, shouldReturn, plainQuery},
-		{6, noNeedSortedByPK, ServerTypeTiDB, hasPriKeyInTable, shouldReturn, plainQuery},
-		{7, noNeedSortedByPK, ServerTypeUnknown, noPriKeyInTable, shouldReturn, plainQuery},
-		{8, noNeedSortedByPK, ServerTypeUnknown, hasPriKeyInTable, shouldReturn, plainQuery},
-	}
-	dec := func(d []interface{}) (tag int, needOrderByPk bool, tp ServerType, rowMaker func()*sqlmock.Rows, result string) {
-		return d[0].(int), d[1].(bool), ServerType(d[2].(int)), d[3].(func() *sqlmock.Rows), d[5].(string)
-	}
+	mockConf.SortByPk = true
 
-	for _, n := range cases {
-		tag, orderByPk, serverType, rowsMaker, result := dec(n)
-		cmt := Commentf("test case number: %d", tag)
-		mockConf.SortByPk = orderByPk
-		mockConf.ServerInfo.ServerType = serverType
-		if mockConf.SortByPk {
-			mock.ExpectPrepare("SELECT column_name FROM information_schema.columns").
-				ExpectQuery().WithArgs(database, table).
-				WillReturnRows(rowsMaker())
-		}
+	// Test when the server is TiDB.
+	mockConf.ServerInfo.ServerType = ServerTypeTiDB
 
-		q, err := buildSelectAllQuery(mockConf, db, database, table)
+	// _tidb_rowid is available.
+	mock.ExpectExec("SELECT _tidb_rowid from test.t").
+		WillReturnResult(sqlmock.NewResult(0, 0))
+	q, err := buildSelectAllQuery(mockConf, db, "test", "t")
+	c.Assert(q, Equals, "SELECT * FROM test.t ORDER BY _tidb_rowid")
+
+	// _tidb_rowid is unavailable, or PKIsHandle.
+	mock.ExpectExec("SELECT _tidb_rowid from test.t").
+		WillReturnError(errors.New(`1054, "Unknown column '_tidb_rowid' in 'field list'"`))
+	q, err = buildSelectAllQuery(mockConf, db, "test", "t")
+	c.Assert(q, Equals, "SELECT * FROM test.t")
+	c.Assert(mock.ExpectationsWereMet(), IsNil)
+
+	// Test other server.
+	otherServers := []ServerType{ServerTypeUnknown, ServerTypeMySQL, ServerTypeMariaDB}
+
+	// Test table with primary key.
+	for _, serverTp := range otherServers {
+		mockConf.ServerInfo.ServerType = serverTp
+		cmt := Commentf("server type: %s", serverTp)
+		mock.ExpectPrepare("SELECT column_name FROM information_schema.columns").
+			ExpectQuery().WithArgs("test", "t").
+			WillReturnRows(sqlmock.NewRows([]string{"column_name"}).AddRow("id"))
+
+		q, err := buildSelectAllQuery(mockConf, db, "test", "t")
 		c.Assert(err, IsNil, cmt)
-		c.Assert(q, Equals, result, cmt)
+		c.Assert(q, Equals, "SELECT * FROM test.t ORDER BY id", cmt)
 		err = mock.ExpectationsWereMet()
 		c.Assert(err, IsNil, cmt)
+		c.Assert(mock.ExpectationsWereMet(), IsNil, cmt)
+	}
+
+	// Test table without primary key.
+	for _, serverTp := range otherServers {
+		mockConf.ServerInfo.ServerType = serverTp
+		cmt := Commentf("server type: %s", serverTp)
+		mock.ExpectPrepare("SELECT column_name FROM information_schema.columns").
+			ExpectQuery().WithArgs("test", "t").
+			WillReturnRows(sqlmock.NewRows([]string{"column_name"}))
+
+		q, err := buildSelectAllQuery(mockConf, db, "test", "t")
+		c.Assert(err, IsNil, cmt)
+		c.Assert(q, Equals, "SELECT * FROM test.t", cmt)
+		err = mock.ExpectationsWereMet()
+		c.Assert(err, IsNil, cmt)
+		c.Assert(mock.ExpectationsWereMet(), IsNil)
+	}
+
+	// Test when config.SortByPk is disabled.
+	mockConf.SortByPk = false
+	for tp := ServerTypeUnknown; tp < ServerTypeAll; tp += 1 {
+		mockConf.ServerInfo.ServerType = ServerType(tp)
+		cmt := Commentf("current server type: ", tp)
+
+		q, err := buildSelectAllQuery(mockConf, db, "test", "t")
+		c.Assert(err, IsNil, cmt)
+		c.Assert(q, Equals, "SELECT * FROM test.t", cmt)
+		c.Assert(mock.ExpectationsWereMet(), IsNil, cmt)
 	}
 }
 
