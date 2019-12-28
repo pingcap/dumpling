@@ -1,11 +1,8 @@
 package export
 
 import (
-	"fmt"
-	"math/rand"
-	"time"
-
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/coreos/go-semver/semver"
 	. "github.com/pingcap/check"
 )
 
@@ -13,33 +10,40 @@ var _ = Suite(&testDumpSuite{})
 
 type testDumpSuite struct{}
 
-func (s *testDumpSuite) SetUpSuite(c *C) {
-	rand.Seed(time.Now().Unix())
-}
-
 func (s *testDumpSuite) TestDetectServerInfo(c *C) {
 	db, mock, err := sqlmock.New()
 	c.Assert(err, IsNil)
 	defer db.Close()
 
-	mkVer := makeServerVersion
+	mkVer := makeVersion
 	data := [][]interface{}{
-		{"8.0.18", MySQLServerType, mkVer(8, 0, 18)},
-		{"10.4.10-MariaDB-1:10.4.10+maria~bionic", MariaDBServerType, mkVer(10, 4, 10)},
-		{"5.7.25-TiDB-v4.0.0-alpha-1263-g635f2e1af", TiDBServerType, mkVer(4, 0, 0)},
-		{"5.7.25-TiDB-v3.0.7-58-g6adce2367", TiDBServerType, mkVer(3, 0, 7)},
+		{1, "8.0.18", ServerTypeMySQL, mkVer(8, 0, 18, "")},
+		{2, "10.4.10-MariaDB-1:10.4.10+maria~bionic", ServerTypeMariaDB, mkVer(10, 4, 10, "MariaDB-1")},
+		{3, "5.7.25-TiDB-v4.0.0-alpha-1263-g635f2e1af", ServerTypeTiDB, mkVer(4, 0, 0, "alpha-1263-g635f2e1af")},
+		{4, "5.7.25-TiDB-v3.0.7-58-g6adce2367", ServerTypeTiDB, mkVer(3, 0, 7, "58-g6adce2367")},
+		{5, "invalid version", ServerTypeUnknown, (*semver.Version)(nil)},
+	}
+	dec := func(d []interface{}) (tag int, verStr string, tp ServerType, v *semver.Version) {
+		return d[0].(int), d[1].(string), ServerType(d[2].(int)), d[3].(*semver.Version)
 	}
 
 	for _, datum := range data {
-		rows := sqlmock.NewRows([]string{"version"}).
-			AddRow(datum[0])
+		tag, r, serverTp, expectVer := dec(datum)
+		cmt := Commentf("test case number: %d", tag)
+
+		rows := sqlmock.NewRows([]string{"version"}).AddRow(r)
 		mock.ExpectQuery("SELECT version()").WillReturnRows(rows)
 
 		info, err := detectServerInfo(db)
-		c.Assert(err, IsNil)
-		c.Assert(info.ServerType, Equals, ServerType(datum[1].(int)))
-		c.Assert(info.ServerVersion, DeepEquals, datum[2].(*ServerVersion), Commentf("ServerType: %v", info.ServerType))
-		c.Assert(mock.ExpectationsWereMet(), IsNil)
+		c.Assert(err, IsNil, cmt)
+		c.Assert(info.ServerType, Equals, serverTp, cmt)
+		c.Assert(info.ServerVersion == nil, Equals, expectVer == nil, cmt)
+		if info.ServerVersion == nil {
+			c.Assert(expectVer, IsNil, cmt)
+		} else {
+			c.Assert(info.ServerVersion.Equal(*expectVer), IsTrue)
+		}
+		c.Assert(mock.ExpectationsWereMet(), IsNil, cmt)
 	}
 }
 
@@ -49,11 +53,8 @@ func (s *testDumpSuite) TestBuildSelectAllQuery(c *C) {
 	defer db.Close()
 
 	const database, table = "test", "t"
-	getPkQuery := fmt.Sprintf(PrimaryKeyQuery, database, table)
 	const needSortedByPK = true
 	const noNeedSortedByPK = false
-	const isTiDB = true
-	const notTiDB = false
 	noPriKeyInTable := func() *sqlmock.Rows {
 		return sqlmock.NewRows([]string{"COLUMN_NAME"})
 	}
@@ -73,32 +74,31 @@ func (s *testDumpSuite) TestBuildSelectAllQuery(c *C) {
 		//    the server is TiDB and
 		//    there is no primary key in the testing table,
 		// then `buildSelectAllQuery` should return a "select * from t order by _tidb_rowid".
-		{1, needSortedByPK, isTiDB, noPriKeyInTable, shouldReturn, orderByTiDBRowIDQuery},
-		{2, needSortedByPK, isTiDB, hasPriKeyInTable, shouldReturn, orderByPkQuery},
-		{3, needSortedByPK, notTiDB, noPriKeyInTable, shouldReturn, plainQuery},
-		{4, needSortedByPK, notTiDB, hasPriKeyInTable, shouldReturn, orderByPkQuery},
-		{5, noNeedSortedByPK, isTiDB, noPriKeyInTable, shouldReturn, plainQuery},
-		{6, noNeedSortedByPK, isTiDB, hasPriKeyInTable, shouldReturn, plainQuery},
-		{7, noNeedSortedByPK, notTiDB, noPriKeyInTable, shouldReturn, plainQuery},
-		{8, noNeedSortedByPK, notTiDB, hasPriKeyInTable, shouldReturn, plainQuery},
+		{1, needSortedByPK, ServerTypeTiDB, noPriKeyInTable, shouldReturn, orderByTiDBRowIDQuery},
+		{2, needSortedByPK, ServerTypeTiDB, hasPriKeyInTable, shouldReturn, orderByPkQuery},
+		{3, needSortedByPK, ServerTypeUnknown, noPriKeyInTable, shouldReturn, plainQuery},
+		{4, needSortedByPK, ServerTypeUnknown, hasPriKeyInTable, shouldReturn, orderByPkQuery},
+		{5, noNeedSortedByPK, ServerTypeTiDB, noPriKeyInTable, shouldReturn, plainQuery},
+		{6, noNeedSortedByPK, ServerTypeTiDB, hasPriKeyInTable, shouldReturn, plainQuery},
+		{7, noNeedSortedByPK, ServerTypeUnknown, noPriKeyInTable, shouldReturn, plainQuery},
+		{8, noNeedSortedByPK, ServerTypeUnknown, hasPriKeyInTable, shouldReturn, plainQuery},
+	}
+	dec := func(d []interface{}) (tag int, needOrderByPk bool, tp ServerType, rowMaker func()*sqlmock.Rows, result string) {
+		return d[0].(int), d[1].(bool), ServerType(d[2].(int)), d[3].(func() *sqlmock.Rows), d[5].(string)
 	}
 
 	for _, n := range cases {
-		tag, orderByPk, isTiDBType := n[0].(int), n[1].(bool), n[2].(bool)
-		rowsMaker, result := n[3].(func() *sqlmock.Rows), n[5].(string)
-
+		tag, orderByPk, serverType, rowsMaker, result := dec(n)
+		cmt := Commentf("test case number: %d", tag)
 		mockConf.SortByPk = orderByPk
+		mockConf.ServerInfo.ServerType = serverType
 		if mockConf.SortByPk {
-			mock.ExpectQuery(getPkQuery).WillReturnRows(rowsMaker())
-		}
-		if isTiDBType {
-			mockConf.ServerInfo.ServerType = TiDBServerType
-		} else {
-			mockConf.ServerInfo.ServerType = randDBType([]ServerType{UnknownServerType, MySQLServerType, MariaDBServerType})
+			mock.ExpectPrepare("SELECT column_name FROM information_schema.columns").
+				ExpectQuery().WithArgs(database, table).
+				WillReturnRows(rowsMaker())
 		}
 
 		q, err := buildSelectAllQuery(mockConf, db, database, table)
-		cmt := Commentf("The test case number is: %d", tag)
 		c.Assert(err, IsNil, cmt)
 		c.Assert(q, Equals, result, cmt)
 		err = mock.ExpectationsWereMet()
@@ -106,6 +106,12 @@ func (s *testDumpSuite) TestBuildSelectAllQuery(c *C) {
 	}
 }
 
-func randDBType(ss []ServerType) ServerType {
-	return ss[rand.Intn(len(ss))]
+func makeVersion(major, minor, patch int64, preRelease string) *semver.Version {
+	return &semver.Version{
+		Major:      major,
+		Minor:      minor,
+		Patch:      patch,
+		PreRelease: semver.PreRelease(preRelease),
+		Metadata:   "",
+	}
 }

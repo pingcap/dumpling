@@ -57,11 +57,13 @@ func init() {
 	flag.Uint64Var(&fileSize, "F", export.UnspecifiedSize, "The approximate size of output file")
 	flag.Uint64Var(&fileSize, "filesize", export.UnspecifiedSize, "The approximate size of output file")
 
-	flag.StringVar(&outputDir, "output", defaultOutputDir(), "Output directory")
-	flag.StringVar(&outputDir, "o", defaultOutputDir(), "Output directory")
+	flag.StringVar(&outputDir, "output", defaultOutputDir, "Output directory")
+	flag.StringVar(&outputDir, "o", defaultOutputDir, "Output directory")
 }
 
-func defaultOutputDir() string {
+var defaultOutputDir = timestampDirName()
+
+func timestampDirName() string {
 	return fmt.Sprintf("./export-%s", time.Now().Format(time.RFC3339))
 }
 

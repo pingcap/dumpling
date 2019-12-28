@@ -3,8 +3,9 @@ package export
 import (
 	"fmt"
 	"regexp"
-	"strconv"
 	"strings"
+
+	"github.com/coreos/go-semver/semver"
 )
 
 type Config struct {
@@ -33,7 +34,7 @@ func DefaultConfig() *Config {
 		Logger:        &DummyLogger{},
 		FileSize:      UnspecifiedSize,
 		OutputDirPath: ".",
-		ServerInfo:    UnknownServerInfo,
+		ServerInfo:    ServerInfoUnknown,
 		SortByPk:      false,
 	}
 }
@@ -46,72 +47,50 @@ const UnspecifiedSize = 0
 
 type ServerInfo struct {
 	ServerType    ServerType
-	ServerVersion *ServerVersion
+	ServerVersion *semver.Version
 }
 
-var UnknownServerInfo = ServerInfo{
-	ServerType:    UnknownServerType,
+var ServerInfoUnknown = ServerInfo{
+	ServerType:    ServerTypeUnknown,
 	ServerVersion: nil,
 }
 
-var versionRegex = regexp.MustCompile("^(\\d+\\.){2}\\d+")
-var tidbVersionRegex = regexp.MustCompile("v(\\d+\\.){2}\\d+")
+var versionRegex = regexp.MustCompile(`^\d+\.\d+\.\d+([0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?`)
+var tidbVersionRegex = regexp.MustCompile(`v\d+\.\d+\.\d+([0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?`)
 
-func ParseServerInfo(versionStr string) (ServerInfo, error) {
-	lowerCase := strings.ToLower(versionStr)
+func ParseServerInfo(src string) ServerInfo {
+	lowerCase := strings.ToLower(src)
 	serverInfo := ServerInfo{}
 	if strings.Contains(lowerCase, "tidb") {
-		serverInfo.ServerType = TiDBServerType
+		serverInfo.ServerType = ServerTypeTiDB
 	} else if strings.Contains(lowerCase, "mariadb") {
-		serverInfo.ServerType = MariaDBServerType
+		serverInfo.ServerType = ServerTypeMariaDB
 	} else if versionRegex.MatchString(lowerCase) {
-		serverInfo.ServerType = MySQLServerType
+		serverInfo.ServerType = ServerTypeMySQL
 	} else {
-		serverInfo.ServerType = UnknownServerType
+		serverInfo.ServerType = ServerTypeUnknown
 	}
 
-	var trimmedVersionStr string
-	if serverInfo.ServerType == TiDBServerType {
-		trimmedVersionStr = tidbVersionRegex.FindString(versionStr)[1:]
+	var versionStr string
+	if serverInfo.ServerType == ServerTypeTiDB {
+		versionStr = tidbVersionRegex.FindString(src)[1:]
 	} else {
-		trimmedVersionStr = versionRegex.FindString(versionStr)
+		versionStr = versionRegex.FindString(src)
 	}
-	versionNums := strings.Split(trimmedVersionStr, ".")
-	if len(versionNums) != 3 {
-		return serverInfo, nil
-	}
-	var vs [3]int
+
 	var err error
-	for i, s := range versionNums {
-		vs[i], err = strconv.Atoi(s)
-		if err != nil {
-			return serverInfo, err
-		}
+	serverInfo.ServerVersion, err = semver.NewVersion(versionStr)
+	if err != nil {
+		return serverInfo
 	}
-
-	serverInfo.ServerVersion = makeServerVersion(vs[0], vs[1], vs[2])
-	return serverInfo, nil
+	return serverInfo
 }
 
 type ServerType int8
 
 const (
-	UnknownServerType = iota
-	MySQLServerType
-	MariaDBServerType
-	TiDBServerType
+	ServerTypeUnknown = iota
+	ServerTypeMySQL
+	ServerTypeMariaDB
+	ServerTypeTiDB
 )
-
-type ServerVersion struct {
-	Major int
-	Minor int
-	Patch int
-}
-
-func makeServerVersion(major, minor, patch int) *ServerVersion {
-	return &ServerVersion{
-		Major: major,
-		Minor: minor,
-		Patch: patch,
-	}
-}

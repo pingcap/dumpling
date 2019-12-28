@@ -11,13 +11,12 @@ import (
 )
 
 func Dump(conf *Config) error {
-	var databases []string
-	var err error
-	databases, conf.ServerInfo, err = prepareMeta(conf)
+	databases, serverInfo, err := prepareMeta(conf)
 	if err != nil {
 		return err
 	}
 
+	conf.ServerInfo = serverInfo
 	for _, database := range databases {
 		fsWriter, err := NewSimpleWriter(conf)
 		if err != nil {
@@ -33,16 +32,16 @@ func Dump(conf *Config) error {
 func prepareMeta(conf *Config) (databases []string, info ServerInfo, err error) {
 	pool, err := sql.Open("mysql", conf.getDSN(""))
 	if err != nil {
-		return nil, UnknownServerInfo, withStack(err)
+		return nil, ServerInfoUnknown, withStack(err)
 	}
 	defer pool.Close()
 	databases, err = getDumpingDatabaseNames(pool, conf)
 	if err != nil {
-		return nil, UnknownServerInfo, withStack(err)
+		return nil, ServerInfoUnknown, withStack(err)
 	}
 	info, err = detectServerInfo(pool)
 	if err != nil {
-		return databases, UnknownServerInfo, withStack(err)
+		return databases, ServerInfoUnknown, withStack(err)
 	}
 	return
 }
@@ -61,11 +60,9 @@ func detectServerInfo(db *sql.DB) (ServerInfo, error) {
 	}
 	err := simpleQuery(db, "SELECT version()", handleOneRow)
 	if err != nil {
-		return ServerInfo{
-			ServerType: UnknownServerType,
-		}, err
+		return ServerInfoUnknown, withStack(err)
 	}
-	return ParseServerInfo(versionInfo)
+	return ParseServerInfo(versionInfo), nil
 }
 
 func simpleQuery(db *sql.DB, sql string, handleOneRow func(*sql.Rows) error) error {
@@ -267,7 +264,7 @@ func buildOrderByClause(conf *Config, db *sql.DB, database, table string) (strin
 		return fmt.Sprintf("ORDER BY %s", pkName), nil
 	}
 	switch conf.ServerInfo.ServerType {
-	case TiDBServerType:
+	case ServerTypeTiDB:
 		return "ORDER BY _tidb_rowid", nil
 	default:
 		// ignore when there is no primary key
@@ -275,21 +272,27 @@ func buildOrderByClause(conf *Config, db *sql.DB, database, table string) (strin
 	}
 }
 
-const PrimaryKeyQuery = `SELECT COLUMN_NAME
-	FROM INFORMATION_SCHEMA.COLUMNS
-	WHERE TABLE_SCHEMA = '%s'
-	AND TABLE_NAME = '%s'
-	AND COLUMN_KEY = 'PRI';`
+const PrimaryKeyQuery =
+	`SELECT column_name FROM information_schema.columns
+		WHERE table_schema = ? AND table_name = ? AND column_key = 'PRI';`
 
 func getPrimaryKeyName(db *sql.DB, database, table string) (string, error) {
-	var colName string
-	handleOneRow := func(rows *sql.Rows) error {
-		return rows.Scan(&colName)
-	}
-	query := fmt.Sprintf(PrimaryKeyQuery, database, table)
-	err := simpleQuery(db, query, handleOneRow)
+	stmt, err := db.Prepare(PrimaryKeyQuery)
 	if err != nil {
 		return "", err
+	}
+	defer stmt.Close()
+	rows, err := stmt.Query(database, table)
+	if err != nil {
+		return "", withStack(err)
+	}
+
+	var colName string
+	for rows.Next() {
+		if err := rows.Scan(&colName); err != nil {
+			rows.Close()
+			return "", withStack(err)
+		}
 	}
 	return colName, nil
 }
