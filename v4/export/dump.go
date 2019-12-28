@@ -258,7 +258,7 @@ const errBadFieldCode = 1054
 
 func buildOrderByClause(conf *Config, db *sql.DB, database, table string) (string, error) {
 	if conf.ServerInfo.ServerType == ServerTypeTiDB {
-		tiDBRowIDQuery := fmt.Sprintf("SELECT _tidb_rowid from %s.%s", database, table)
+		tiDBRowIDQuery := fmt.Sprintf("SELECT _tidb_rowid from %s.%s LIMIT 0", database, table)
 		isBadField, otherErr := queryReturnExpectedErrorCode(db, tiDBRowIDQuery, errBadFieldCode)
 		if otherErr != nil {
 			return "", otherErr
