@@ -7,26 +7,6 @@ import (
 	"strings"
 )
 
-type dumplingRow []sql.NullString
-
-func (d dumplingRow) BindAddress(args []interface{}) {
-	for i := range d {
-		args[i] = &d[i]
-	}
-}
-
-func (d dumplingRow) ReportSize() uint64 {
-	var totalSize uint64
-	for _, ns := range d {
-		if ns.Valid {
-			totalSize += 4
-		} else {
-			totalSize += uint64(len(ns.String))
-		}
-	}
-	return totalSize
-}
-
 func WriteMeta(meta MetaIR, w io.StringWriter, cfg *Config) error {
 	log := cfg.Logger
 	log.Debug("start dumping meta data for target %s", meta.TargetName())
@@ -70,15 +50,13 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter, cfg *Config) error {
 	}
 
 	for rowIter.HasNext() {
-		var dumplingRow = make(dumplingRow, tblIR.ColumnCount())
-		if err := rowIter.Next(dumplingRow); err != nil {
+		row := makeRowReceiver(tblIR.ColumnTypes())
+		if err := rowIter.Next(row); err != nil {
 			log.Error("scanning from sql.Row failed, error: %s", err.Error())
 			return err
 		}
 
-		row := convert(dumplingRow, tblIR.ColumnTypes())
-
-		if err := write(w, fmt.Sprintf("(%s)", strings.Join(row, ", ")), log); err != nil {
+		if err := write(w, row.ToString(), log); err != nil {
 			return err
 		}
 
@@ -108,37 +86,127 @@ func wrapStringWith(str string, wrapper string) string {
 	return fmt.Sprintf("%s%s%s", wrapper, str, wrapper)
 }
 
-func convert(origin []sql.NullString, colTypes []string) []string {
-	ret := make([]string, len(origin))
-	for i, s := range origin {
-		if !s.Valid {
-			ret[i] = "NULL"
-			continue
-		}
+func SQLTypeStringMaker() RowReceiverStringer {
+	return &SQLTypeString{}
+}
 
-		if isCharTypes(colTypes[i]) {
-			ret[i] = wrapStringWith(s.String, "'")
-		} else {
-			ret[i] = s.String
+func SQLTypeBytesMaker() RowReceiverStringer {
+	return &SQLTypeBytes{}
+}
+
+func SQLTypeIntegerMaker() RowReceiverStringer {
+	return &SQLTypeInteger{}
+}
+
+var colTypeRowReceiverMap = map[string]func() RowReceiverStringer{
+	"CHAR":      SQLTypeStringMaker,
+	"NCHAR":     SQLTypeStringMaker,
+	"VARCHAR":   SQLTypeStringMaker,
+	"NVARCHAR":  SQLTypeStringMaker,
+	"TEXT":      SQLTypeStringMaker,
+	"ENUM":      SQLTypeStringMaker,
+	"SET":       SQLTypeStringMaker,
+	"JSON":      SQLTypeStringMaker,
+	"TIMESTAMP": SQLTypeStringMaker,
+	"DATETIME":  SQLTypeStringMaker,
+	"DATE":      SQLTypeStringMaker,
+	"TIME":      SQLTypeStringMaker,
+	"YEAR":      SQLTypeStringMaker,
+
+	"BINARY":    SQLTypeBytesMaker,
+	"VARBINARY": SQLTypeBytesMaker,
+	"BLOB":      SQLTypeBytesMaker,
+	"BIT":       SQLTypeBytesMaker,
+
+	"INT":     SQLTypeIntegerMaker,
+	"FLOAT":   SQLTypeIntegerMaker,
+	"DECIMAL": SQLTypeIntegerMaker,
+}
+
+func makeRowReceiver(colTypes []string) RowReceiverStringer {
+	rowReceiverArr := make(RowReceiverArr, len(colTypes))
+	for i, colTp := range colTypes {
+		recMaker, ok := colTypeRowReceiverMap[colTp]
+		if !ok {
+			recMaker = SQLTypeStringMaker
+		}
+		rowReceiverArr[i] = recMaker()
+	}
+	return rowReceiverArr
+}
+
+type RowReceiverArr []RowReceiverStringer
+
+func (r RowReceiverArr) BindAddress(args []interface{}) {
+	for i := range args {
+		var singleAddr [1]interface{}
+		r[i].BindAddress(singleAddr[:])
+		args[i] = singleAddr[0]
+	}
+}
+func (r RowReceiverArr) ReportSize() uint64 {
+	var sum uint64
+	for _, receiver := range r {
+		sum += receiver.ReportSize()
+	}
+	return sum
+}
+func (r RowReceiverArr) ToString() string {
+	var sb strings.Builder
+	sb.WriteString("(")
+	for i, receiver := range r {
+		sb.WriteString(receiver.ToString())
+		if i != len(r)-1 {
+			sb.WriteString(", ")
 		}
 	}
-	return ret
+	sb.WriteString(")")
+	return sb.String()
 }
 
-var charTypes = map[string]struct{}{
-	"CHAR":      {},
-	"NCHAR":     {},
-	"VARCHAR":   {},
-	"NVARCHAR":  {},
-	"BINARY":    {},
-	"VARBINARY": {},
-	"BLOB":      {},
-	"TEXT":      {},
-	"ENUM":      {},
-	"SET":       {},
+type SQLTypeInteger struct {
+	SQLTypeString
 }
 
-func isCharTypes(colType string) bool {
-	_, ok := charTypes[colType]
-	return ok
+func (s SQLTypeInteger) ToString() string {
+	if s.Valid {
+		return s.String
+	} else {
+		return "NULL"
+	}
+}
+
+type SQLTypeString struct {
+	sql.NullString
+}
+
+func (s *SQLTypeString) BindAddress(arg []interface{}) {
+	arg[0] = s
+}
+func (s *SQLTypeString) ReportSize() uint64 {
+	if s.Valid {
+		return uint64(len(s.String))
+	}
+	return uint64(len("NULL"))
+}
+func (s *SQLTypeString) ToString() string {
+	if s.Valid {
+		return fmt.Sprintf(`'%s'`, s.String)
+	} else {
+		return "NULL"
+	}
+}
+
+type SQLTypeBytes struct {
+	bytes []byte
+}
+
+func (s *SQLTypeBytes) BindAddress(arg []interface{}) {
+	arg[0] = &s.bytes
+}
+func (s *SQLTypeBytes) ReportSize() uint64 {
+	return uint64(len(s.bytes))
+}
+func (s *SQLTypeBytes) ToString() string {
+	return fmt.Sprintf("x'%x'", s.bytes)
 }

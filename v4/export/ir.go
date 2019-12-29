@@ -1,6 +1,8 @@
 package export
 
-import "database/sql"
+import (
+	"database/sql"
+)
 
 // TableDataIR is table data intermediate representation.
 type TableDataIR interface {
@@ -17,6 +19,15 @@ type TableDataIR interface {
 type SQLRowIter interface {
 	Next(RowReceiver) error
 	HasNext() bool
+}
+
+type RowReceiverStringer interface {
+	RowReceiver
+	Stringer
+}
+
+type Stringer interface {
+	ToString() string
 }
 
 type RowReceiver interface {
