@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-var colTypeRowReceiverMap map[string]func() RowReceiverStringer
+var colTypeRowReceiverMap = map[string]func() RowReceiverStringer{}
 
 func init() {
 	for _, s := range dataTypeString {
@@ -22,24 +22,23 @@ func init() {
 
 var dataTypeString = []string{
 	"CHAR", "NCHAR", "VARCHAR", "NVARCHAR", "CHARACTER", "VARCHARACTER",
-	"TEXT",
-	"ENUM", "SET", "JSON",
 	"TIMESTAMP", "DATETIME", "DATE", "TIME", "YEAR", "SQL_TSI_YEAR",
+	"TEXT", "TINYTEXT", "MEDIUMTEXT", "LONGTEXT",
+	"ENUM", "SET", "JSON",
 }
 
 var dataTypeNum = []string{
-	"INT", "INT1", "INT2", "INT3", "INT8",
 	"INTEGER", "BIGINT", "TINYINT", "SMALLINT", "MEDIUMINT",
-	"BOOL", "BOOLEAN",
+	"INT", "INT1", "INT2", "INT3", "INT8",
 	"FLOAT", "REAL", "DOUBLE", "DOUBLE PRECISION",
 	"DECIMAL", "NUMERIC", "FIXED",
+	"BOOL", "BOOLEAN",
 }
 
 var dataTypeBin = []string{
+	"BLOB", "TINYBLOB", "MEDIUMBLOB", "LONGBLOB", "LONG",
 	"BINARY", "VARBINARY",
-	"BLOB", "TINYBLOB", "MEDIUMBLOB", "LONGBLOB",
-	"BIT", "TINYTEXT", "MEDIUMTEXT", "LONGTEXT",
-	"LONG",
+	"BIT",
 }
 
 func SQLTypeStringMaker() RowReceiverStringer {
@@ -98,6 +97,7 @@ func (r RowReceiverArr) ToString() string {
 type SQLTypeNumber struct {
 	SQLTypeString
 }
+
 func (s SQLTypeNumber) ToString() string {
 	if s.Valid {
 		return s.String
@@ -109,6 +109,7 @@ func (s SQLTypeNumber) ToString() string {
 type SQLTypeString struct {
 	sql.NullString
 }
+
 func (s *SQLTypeString) BindAddress(arg []interface{}) {
 	arg[0] = s
 }
@@ -134,6 +135,7 @@ func escape(src string) string {
 type SQLTypeBytes struct {
 	bytes []byte
 }
+
 func (s *SQLTypeBytes) BindAddress(arg []interface{}) {
 	arg[0] = &s.bytes
 }
