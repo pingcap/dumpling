@@ -2,9 +2,11 @@ package export
 
 import (
 	"fmt"
-	. "github.com/pingcap/check"
 	"strings"
 	"testing"
+
+	"database/sql/driver"
+	. "github.com/pingcap/check"
 )
 
 func TestT(t *testing.T) {
@@ -42,7 +44,7 @@ func (s *testUtilSuite) TestWriteMeta(c *C) {
 }
 
 func (s *testUtilSuite) TestWriteInsert(c *C) {
-	data := [][]interface{}{
+	data := [][]driver.Value{
 		{"1", "male", "bob@mail.com", "020-1234", nil},
 		{"2", "female", "sarah@mail.com", "020-1253", "healthy"},
 		{"3", "male", "john@mail.com", "020-1256", "healthy"},
@@ -69,7 +71,7 @@ func (s *testUtilSuite) TestWriteInsert(c *C) {
 }
 
 func (s *testUtilSuite) TestSQLDataTypes(c *C) {
-	data := [][]interface{}{
+	data := [][]driver.Value{
 		{"CHAR", "char1", `'char1'`},
 		{"INT", 12345, `12345`},
 		{"BINARY", 1234, "x'31323334'"},
@@ -78,7 +80,7 @@ func (s *testUtilSuite) TestSQLDataTypes(c *C) {
 	for _, datum := range data {
 		sqlType, origin, result := datum[0].(string), datum[1], datum[2].(string)
 
-		tableData := [][]interface{}{{origin}}
+		tableData := [][]driver.Value{{origin}}
 		colType := []string{sqlType}
 		tableIR := newMockTableIR("test", "t", tableData, nil, colType)
 		strCollector := &mockStringCollector{}

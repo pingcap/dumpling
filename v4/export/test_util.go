@@ -121,18 +121,11 @@ func (m *mockTableIR) Rows() SQLRowIter {
 	return newRowIter(rows, len(m.colTypes))
 }
 
-func newMockTableIR(databaseName, tableName string, data [][]interface{}, specialComments, colTypes []string) TableDataIR {
-	values := make([][]driver.Value, len(data))
-	for i := range values {
-		values[i] = make([]driver.Value, len(data[i]))
-		for j := range data[i] {
-			values[i][j] = data[i][j]
-		}
-	}
+func newMockTableIR(databaseName, tableName string, data [][]driver.Value, specialComments, colTypes []string) TableDataIR {
 	return &mockTableIR{
 		dbName:   databaseName,
 		tblName:  tableName,
-		data:     values,
+		data:     data,
 		specCmt:  specialComments,
 		colTypes: colTypes,
 	}

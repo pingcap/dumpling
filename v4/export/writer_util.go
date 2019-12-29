@@ -94,7 +94,7 @@ func SQLTypeBytesMaker() RowReceiverStringer {
 	return &SQLTypeBytes{}
 }
 
-func SQLTypeIntegerMaker() RowReceiverStringer {
+func SQLTypeNumberMaker() RowReceiverStringer {
 	return &SQLTypeInteger{}
 }
 
@@ -118,9 +118,9 @@ var colTypeRowReceiverMap = map[string]func() RowReceiverStringer{
 	"BLOB":      SQLTypeBytesMaker,
 	"BIT":       SQLTypeBytesMaker,
 
-	"INT":     SQLTypeIntegerMaker,
-	"FLOAT":   SQLTypeIntegerMaker,
-	"DECIMAL": SQLTypeIntegerMaker,
+	"INT":     SQLTypeNumberMaker,
+	"FLOAT":   SQLTypeNumberMaker,
+	"DECIMAL": SQLTypeNumberMaker,
 }
 
 func makeRowReceiver(colTypes []string) RowReceiverStringer {
@@ -191,10 +191,14 @@ func (s *SQLTypeString) ReportSize() uint64 {
 }
 func (s *SQLTypeString) ToString() string {
 	if s.Valid {
-		return fmt.Sprintf(`'%s'`, s.String)
+		return fmt.Sprintf(`'%s'`, escapeSingleQuote(s.String))
 	} else {
 		return "NULL"
 	}
+}
+
+func escapeSingleQuote(src string) string {
+	return strings.ReplaceAll(src, "'", "\\'")
 }
 
 type SQLTypeBytes struct {

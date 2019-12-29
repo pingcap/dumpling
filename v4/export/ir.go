@@ -1,8 +1,6 @@
 package export
 
-import (
-	"database/sql"
-)
+import "database/sql"
 
 // TableDataIR is table data intermediate representation.
 type TableDataIR interface {
