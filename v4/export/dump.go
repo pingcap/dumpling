@@ -3,7 +3,7 @@ package export
 import (
 	"context"
 	"database/sql"
-	"sync"
+	"golang.org/x/sync/errgroup"
 
 	_ "github.com/go-sql-driver/mysql"
 )
@@ -30,9 +30,8 @@ func Dump(conf *Config) (err error) {
 		return err
 	}
 
-	conCtrl := ConsistencyController{}
-	err = conCtrl.Setup(conf, ConsistencyNone)
-	if err != nil {
+	var conCtrl ConsistencyController = &ConsistencyNone{}
+	if err = conCtrl.Setup(); err != nil {
 		return err
 	}
 
@@ -40,10 +39,10 @@ func Dump(conf *Config) (err error) {
 	if err != nil {
 		return err
 	}
-
 	if err = dumpDatabases(context.Background(), conf, pool, fsWriter); err != nil {
 		return err
 	}
+
 	return conCtrl.TearDown()
 }
 
@@ -59,22 +58,17 @@ func dumpDatabases(ctx context.Context, conf *Config, db *sql.DB, writer Writer)
 		}
 
 		rateLimit := newRateLimit(conf.Threads)
-		var wg sync.WaitGroup
-		wg.Add(len(tables))
-		res := make([]error, len(tables))
-		for i, table := range tables {
-			go func(ith int, table string, wg *sync.WaitGroup, res []error) {
-				defer wg.Done()
+		var g errgroup.Group
+		for _, table := range tables {
+			table := table
+			g.Go(func() error {
 				rateLimit.getToken()
 				defer rateLimit.putToken()
-				res[ith] = dumpTable(ctx, conf, db, dbName, table, writer)
-			}(i, table, &wg, res)
+				return dumpTable(ctx, conf, db, dbName, table, writer)
+			})
 		}
-		wg.Wait()
-		for _, err := range res {
-			if err != nil {
-				return err
-			}
+		if err := g.Wait(); err != nil {
+			return err
 		}
 		return nil
 	}

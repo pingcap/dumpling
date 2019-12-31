@@ -209,7 +209,7 @@ func ShowMasterStatus(db *sql.DB, fieldNum int) ([]string, error) {
 }
 
 func SetTiDBSnapshot(db *sql.DB, snapshot string) error {
-	_, err := db.Exec(fmt.Sprintf("SET SESSION tidb_snapshot = '%s'", snapshot))
+	_, err := db.Exec("SET SESSION tidb_snapshot = ?", snapshot)
 	return withStack(err)
 }
 

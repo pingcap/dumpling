@@ -38,87 +38,47 @@ func listAllTables(db *sql.DB, databaseNames []string) (DatabaseTables, error) {
 	return dbTables, nil
 }
 
-type Consistency int8
+type ConsistencyController interface {
+	Setup() error
+	TearDown() error
+}
 
-const (
-	ConsistencyNone Consistency = iota
-	ConsistencyFlushTableWithReadLock
-	ConsistencyLockDumpingTables
-	ConsistencySnapshot
-)
+type ConsistencyNone struct{}
 
-type ConsistencyController struct {
-	strategy   Consistency
+func (c *ConsistencyNone) Setup() error {
+	return nil
+}
+
+func (c *ConsistencyNone) TearDown() error {
+	return nil
+}
+
+type ConsistencyFlushTableWithReadLock struct {
 	serverType ServerType
-	allTables  map[databaseName][]tableName
-	dsn        string
-	snapshot   string
 	db         *sql.DB
 }
 
-func (c *ConsistencyController) Setup(conf *Config, strategy Consistency) error {
-	c.strategy = strategy
-	c.serverType = conf.ServerInfo.ServerType
-	c.allTables = conf.Tables
-	c.dsn = conf.getDSN("")
-	c.snapshot = conf.Snapshot
-	switch strategy {
-	case ConsistencyNone:
-		return nil
-	case ConsistencyFlushTableWithReadLock:
-		return c.setupFlushTableWithReadLock()
-	case ConsistencyLockDumpingTables:
-		return c.setupTableLock()
-	case ConsistencySnapshot:
-		return c.setupSnapshot()
-	default:
-		panic("unsupported consistency strategy")
-	}
-	return nil
-}
-
-func (c *ConsistencyController) TearDown() error {
-	switch c.strategy {
-	case ConsistencyNone:
-		return nil
-	case ConsistencyFlushTableWithReadLock:
-		return c.tearDownFlushTableWithReadLock()
-	case ConsistencyLockDumpingTables:
-		return c.tearDownTableLock()
-	case ConsistencySnapshot:
-		return c.tearDownSnapshot()
-	default:
-		panic("unsupported consistency strategy")
-	}
-	return nil
-}
-
-func (c *ConsistencyController) setupFlushTableWithReadLock() error {
+func (c *ConsistencyFlushTableWithReadLock) Setup() error {
 	if c.serverType == ServerTypeTiDB {
 		return withStack(errors.New("'flush table with read lock' cannot be used to ensure the consistency in TiDB"))
-	}
-	var err error
-	c.db, err = sql.Open("mysql", c.dsn)
-	if err != nil {
-		return err
 	}
 	return FlushTableWithReadLock(c.db)
 }
 
-func (c *ConsistencyController) tearDownFlushTableWithReadLock() error {
-	if c.db == nil {
-		return withStack(errors.New("ConsistencyController lost database connection"))
+func (c *ConsistencyFlushTableWithReadLock) TearDown() error {
+	err := c.db.Ping()
+	if err != nil {
+		return withStack(errors.New("ConsistencyFlushTableWithReadLock lost database connection"))
 	}
-	defer c.db.Close()
 	return UnlockTables(c.db)
 }
 
-func (c *ConsistencyController) setupTableLock() error {
-	var err error
-	c.db, err = sql.Open("mysql", c.dsn)
-	if err != nil {
-		return err
-	}
+type ConsistencyLockDumpingTables struct {
+	db        *sql.DB
+	allTables DatabaseTables
+}
+
+func (c *ConsistencyLockDumpingTables) Setup() error {
 	for dbName, tables := range c.allTables {
 		for _, table := range tables {
 			err := LockTables(c.db, dbName, table)
@@ -130,18 +90,24 @@ func (c *ConsistencyController) setupTableLock() error {
 	return nil
 }
 
-func (c *ConsistencyController) tearDownTableLock() error {
-	if c.db == nil {
-		return withStack(errors.New("ConsistencyController lost database connection"))
+func (c *ConsistencyLockDumpingTables) TearDown() error {
+	err := c.db.Ping()
+	if err != nil {
+		return withStack(errors.New("ConsistencyLockDumpingTables lost database connection"))
 	}
-	defer c.db.Close()
 	return UnlockTables(c.db)
+}
+
+type ConsistencySnapshot struct {
+	serverType ServerType
+	snapshot   string
+	db         *sql.DB
 }
 
 const showMasterStatusFieldNum = 5
 const snapshotFieldIndex = 1
 
-func (c *ConsistencyController) setupSnapshot() error {
+func (c *ConsistencySnapshot) Setup() error {
 	if c.serverType != ServerTypeTiDB {
 		return withStack(errors.New("snapshot consistency is not supported for this server"))
 	}
@@ -155,6 +121,6 @@ func (c *ConsistencyController) setupSnapshot() error {
 	return SetTiDBSnapshot(c.db, c.snapshot)
 }
 
-func (c *ConsistencyController) tearDownSnapshot() error {
-	return c.db.Close()
+func (c *ConsistencySnapshot) TearDown() error {
+	return nil
 }
