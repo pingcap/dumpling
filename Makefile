@@ -19,3 +19,7 @@ bin/%: cmd/%/main.go $(wildcard v4/**/*.go)
 
 test:
 	$(GO) list ./... | xargs $(GO) test $(GOLDFLAGS) -coverprofile=coverage.txt -covermode=atomic
+
+integration_test:
+	$(GO) run cmd/integration_test/main.go -src ./cmd/integration_test
+	@echo "integration test passed"

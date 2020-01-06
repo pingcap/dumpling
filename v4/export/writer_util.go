@@ -44,7 +44,7 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter, cfg *Config) error {
 	if !strings.HasPrefix(tblName, "`") && !strings.HasSuffix(tblName, "`") {
 		tblName = wrapStringWith(tblName, "`")
 	}
-	if err := write(w, fmt.Sprintf("INSERT INTO %s VALUES \n", tblName), log); err != nil {
+	if err := write(w, fmt.Sprintf("INSERT INTO %s VALUES\n", tblName), log); err != nil {
 		return err
 	}
 
