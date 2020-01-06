@@ -16,8 +16,8 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log"
 	_ "net/http/pprof"
-	"os"
 	"time"
 
 	"github.com/pingcap/dumpling/v4/cli"
@@ -83,8 +83,7 @@ func main() {
 
 	err := export.Dump(conf)
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		log.Fatal(err)
 	}
 	return
 }

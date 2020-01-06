@@ -43,7 +43,7 @@ func DefaultConfig() *Config {
 	}
 }
 
-func (conf *Config) getDSN(db string) string {
+func (conf *Config) GetDSN(db string) string {
 	return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s", conf.User, conf.Password, conf.Host, conf.Port, db)
 }
 
@@ -65,13 +65,14 @@ var tidbVersionRegex = regexp.MustCompile(`v\d+\.\d+\.\d+([0-9A-Za-z-]+(\.[0-9A-
 func ParseServerInfo(src string) ServerInfo {
 	lowerCase := strings.ToLower(src)
 	serverInfo := ServerInfo{}
-	if strings.Contains(lowerCase, "tidb") {
+	switch {
+	case strings.Contains(lowerCase, "tidb"):
 		serverInfo.ServerType = ServerTypeTiDB
-	} else if strings.Contains(lowerCase, "mariadb") {
+	case strings.Contains(lowerCase, "mariadb"):
 		serverInfo.ServerType = ServerTypeMariaDB
-	} else if versionRegex.MatchString(lowerCase) {
+	case versionRegex.MatchString(lowerCase):
 		serverInfo.ServerType = ServerTypeMySQL
-	} else {
+	default:
 		serverInfo.ServerType = ServerTypeUnknown
 	}
 

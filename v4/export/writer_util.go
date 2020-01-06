@@ -17,7 +17,7 @@ func WriteMeta(meta MetaIR, w io.StringWriter, cfg *Config) error {
 		}
 	}
 
-	if err := write(w, fmt.Sprintf("%s\n", meta.MetaSQL()), log); err != nil {
+	if err := write(w, fmt.Sprintf("%s;\n", meta.MetaSQL()), log); err != nil {
 		return err
 	}
 

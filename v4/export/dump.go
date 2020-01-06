@@ -9,7 +9,7 @@ import (
 )
 
 func Dump(conf *Config) (err error) {
-	pool, err := sql.Open("mysql", conf.getDSN(""))
+	pool, err := sql.Open("mysql", conf.GetDSN(""))
 	if err != nil {
 		return withStack(err)
 	}
