@@ -16,7 +16,6 @@ type Config struct {
 	Password string
 	Threads  int
 
-	Logger        Logger
 	FileSize      uint64
 	OutputDirPath string
 	ServerInfo    ServerInfo
@@ -33,7 +32,6 @@ func DefaultConfig() *Config {
 		Port:          3306,
 		Password:      "",
 		Threads:       4,
-		Logger:        &DummyLogger{},
 		FileSize:      UnspecifiedSize,
 		OutputDirPath: ".",
 		ServerInfo:    ServerInfoUnknown,

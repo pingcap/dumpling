@@ -4,55 +4,57 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/pingcap/dumpling/v4/log"
 )
 
-func WriteMeta(meta MetaIR, w io.StringWriter, cfg *Config) error {
-	log := cfg.Logger
-	log.Debug("start dumping meta data for target %s", meta.TargetName())
+func WriteMeta(meta MetaIR, w io.StringWriter) error {
+	logger := log.Sugar()
+	logger.Debugf("start dumping meta data for target %s", meta.TargetName())
 
 	specCmtIter := meta.SpecialComments()
 	for specCmtIter.HasNext() {
-		if err := write(w, fmt.Sprintf("%s\n", specCmtIter.Next()), log); err != nil {
+		if err := write(w, fmt.Sprintf("%s\n", specCmtIter.Next())); err != nil {
 			return err
 		}
 	}
 
-	if err := write(w, fmt.Sprintf("%s;\n", meta.MetaSQL()), log); err != nil {
+	if err := write(w, fmt.Sprintf("%s;\n", meta.MetaSQL())); err != nil {
 		return err
 	}
 
-	log.Debug("finish dumping meta data for target %s", meta.TargetName())
+	logger.Debugf("finish dumping meta data for target %s", meta.TargetName())
 	return nil
 }
 
-func WriteInsert(tblIR TableDataIR, w io.StringWriter, cfg *Config) error {
-	log := cfg.Logger
+func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
+	logger := log.Sugar()
 	rowIter := tblIR.Rows()
 	if !rowIter.HasNext() {
 		return nil
 	}
 
-	log.Debug("start dumping for table %s", tblIR.TableName())
+	logger.Debugf("start dumping for table %s", tblIR.TableName())
 	specCmtIter := tblIR.SpecialComments()
 	for specCmtIter.HasNext() {
-		if err := write(w, fmt.Sprintf("%s\n", specCmtIter.Next()), log); err != nil {
+		if err := write(w, fmt.Sprintf("%s\n", specCmtIter.Next())); err != nil {
 			return err
 		}
 	}
 
 	tblName := wrapBackTicks(tblIR.TableName())
-	if err := write(w, fmt.Sprintf("INSERT INTO %s VALUES\n", tblName), log); err != nil {
+	if err := write(w, fmt.Sprintf("INSERT INTO %s VALUES\n", tblName)); err != nil {
 		return err
 	}
 
 	for rowIter.HasNext() {
 		row := MakeRowReceiver(tblIR.ColumnTypes())
 		if err := rowIter.Next(row); err != nil {
-			log.Error("scanning from sql.Row failed, error: %s", err.Error())
+			logger.Errorf("scanning from sql.Row failed, error: %s", err.Error())
 			return err
 		}
 
-		if err := write(w, row.ToString(), log); err != nil {
+		if err := write(w, row.ToString()); err != nil {
 			return err
 		}
 
@@ -62,18 +64,18 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter, cfg *Config) error {
 		} else {
 			splitter = ";"
 		}
-		if err := write(w, fmt.Sprintf("%s\n", splitter), log); err != nil {
+		if err := write(w, fmt.Sprintf("%s\n", splitter)); err != nil {
 			return err
 		}
 	}
-	log.Debug("finish dumping for table %s", tblIR.TableName())
+	logger.Debugf("finish dumping for table %s", tblIR.TableName())
 	return nil
 }
 
-func write(writer io.StringWriter, str string, logger Logger) error {
+func write(writer io.StringWriter, str string) error {
 	_, err := writer.WriteString(str)
-	if err != nil && logger != nil {
-		logger.Error("writing failed, string: `%s`, error: %s", str, err.Error())
+	if err != nil {
+		log.Sugar().Errorf("writing string '%s' failed: %s", str, err.Error())
 	}
 	return err
 }
