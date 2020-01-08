@@ -1,0 +1,22 @@
+#!/bin/sh
+
+set -e
+echo "[$(date)] Executing SQL file: $1"
+
+if [ -z "$TEST_DATABASE" ] && [ -z "$TEST_PASSWORD" ]; then
+  mysql -u "$TEST_USER" -h "$TEST_HOST" -P "$TEST_PORT" \
+    --default-character-set utf8mb4 < "$1"
+elif [ -z "$TEST_DATABASE" ] && [ -n "$TEST_PASSWORD" ]; then
+  mysql -u "$TEST_USER" -h "$TEST_HOST" -P "$TEST_PORT" \
+    --password="$TEST_PASSWORD" \
+    --default-character-set utf8mb4 < "$1"
+elif [ -n "$TEST_DATABASE" ] && [ -z "$TEST_PASSWORD" ]; then
+  mysql -u "$TEST_USER" -h "$TEST_HOST" -P "$TEST_PORT" \
+    -D "$TEST_DATABASE" \
+    --default-character-set utf8mb4 < "$1"
+elif [ -n "$TEST_DATABASE" ] && [ -n "$TEST_PASSWORD" ]; then
+  mysql -u "$TEST_USER" -h "$TEST_HOST" -P "$TEST_PORT" \
+    --password="$TEST_PASSWORD" \
+    -D "$TEST_DATABASE" \
+    --default-character-set utf8mb4 < "$1"
+fi

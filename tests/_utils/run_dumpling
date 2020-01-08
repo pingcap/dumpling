@@ -1,0 +1,7 @@
+#!/bin/sh
+
+set -e
+
+bin/dumpling -u "$TEST_USER" -h "$TEST_HOST" \
+    -P "$TEST_PORT" -B "$TEST_DATABASE" \
+    -p "$TEST_PASSWORD" -o "$OUTPUT_DIR"
