@@ -4,6 +4,6 @@ set -e
 
 echo "[$(date)] Executing SQL file: $1"
 
-mysql -u "$TEST_USER" -h "$TEST_HOST" -P "$TEST_PORT" \
-  --password="$TEST_PASSWORD" --database="$TEST_DATABASE" \
+mysql -u "$DUMPLING_TEST_USER" -h "$DUMPLING_TEST_HOST" -P "$DUMPLING_TEST_PORT" \
+  --password="$DUMPLING_TEST_PASSWORD" --database="$DUMPLING_TEST_DATABASE" \
   --default-character-set utf8mb4 < "$1"
