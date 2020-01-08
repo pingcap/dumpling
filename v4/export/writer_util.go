@@ -6,11 +6,11 @@ import (
 	"strings"
 
 	"github.com/pingcap/dumpling/v4/log"
+	"go.uber.org/zap"
 )
 
 func WriteMeta(meta MetaIR, w io.StringWriter) error {
-	logger := log.Sugar()
-	logger.Debugf("start dumping meta data for target %s", meta.TargetName())
+	log.Zap().Debug("start dumping meta data", zap.String("target", meta.TargetName()))
 
 	specCmtIter := meta.SpecialComments()
 	for specCmtIter.HasNext() {
@@ -23,18 +23,17 @@ func WriteMeta(meta MetaIR, w io.StringWriter) error {
 		return err
 	}
 
-	logger.Debugf("finish dumping meta data for target %s", meta.TargetName())
+	log.Zap().Debug("finish dumping meta data", zap.String("target", meta.TargetName()))
 	return nil
 }
 
 func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
-	logger := log.Sugar()
 	rowIter := tblIR.Rows()
 	if !rowIter.HasNext() {
 		return nil
 	}
 
-	logger.Debugf("start dumping for table %s", tblIR.TableName())
+	log.Zap().Debug("start dumping for table", zap.String("table", tblIR.TableName()))
 	specCmtIter := tblIR.SpecialComments()
 	for specCmtIter.HasNext() {
 		if err := write(w, fmt.Sprintf("%s\n", specCmtIter.Next())); err != nil {
@@ -50,7 +49,7 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
 	for rowIter.HasNext() {
 		row := MakeRowReceiver(tblIR.ColumnTypes())
 		if err := rowIter.Next(row); err != nil {
-			logger.Errorf("scanning from sql.Row failed, error: %s", err.Error())
+			log.Zap().Error("scanning from sql.Row failed", zap.String("error", err.Error()))
 			return err
 		}
 
@@ -68,7 +67,7 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
 			return err
 		}
 	}
-	logger.Debugf("finish dumping for table %s", tblIR.TableName())
+	log.Zap().Debug("finish dumping for table", zap.String("table", tblIR.TableName()))
 	return nil
 }
 

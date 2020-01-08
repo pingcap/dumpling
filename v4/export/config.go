@@ -2,12 +2,12 @@ package export
 
 import (
 	"fmt"
-	"github.com/pingcap/dumpling/v4/log"
-	"go.uber.org/zap"
 	"regexp"
 	"strings"
 
 	"github.com/coreos/go-semver/semver"
+	"github.com/pingcap/dumpling/v4/log"
+	"go.uber.org/zap"
 )
 
 type Config struct {

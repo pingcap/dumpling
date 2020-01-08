@@ -21,8 +21,3 @@ func init() {
 func Zap() *zap.Logger {
 	return globalLogger
 }
-
-// Sugar returns the sugared global dumpling logger.
-func Sugar() *zap.SugaredLogger {
-	return globalLogger.Sugar()
-}
