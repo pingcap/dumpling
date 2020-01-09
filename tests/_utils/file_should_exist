@@ -3,5 +3,5 @@
 set -eu
 
 if [ ! -f "$1" ]; then
-  echo "[$(date)] Directory $1 not found." && exit 1
+  echo "[$(date)] File $1 not found." && exit 1
 fi
