@@ -41,7 +41,7 @@ func DefaultConfig() *Config {
 		SortByPk:      false,
 		Tables:        nil,
 		Snapshot:      "",
-		Consistency:   "none",
+		Consistency:   "auto",
 	}
 }
 
