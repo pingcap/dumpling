@@ -74,7 +74,9 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
 func write(writer io.StringWriter, str string) error {
 	_, err := writer.WriteString(str)
 	if err != nil {
-		log.Sugar().Errorf("writing string '%s' failed: %s", str, err.Error())
+		log.Zap().Error("writing failed",
+			zap.String("string", str),
+			zap.String("error", err.Error()))
 	}
 	return err
 }
