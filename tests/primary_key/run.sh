@@ -6,9 +6,16 @@ run_sql "drop database if exists primary_key"
 run_sql "create database primary_key"
 export DUMPLING_TEST_DATABASE=primary_key
 
-run_sql_file "$DUMPLING_BASE_NAME/data/test_case_1.sql"
+for data in "$DUMPLING_BASE_NAME"/data/*; do
+  run_sql_file "$data"
+done
+
 run_dumpling
 
-file_should_exist "$DUMPLING_OUTPUT_DIR/primary_key.t.sql"
-file_should_exist "$DUMPLING_BASE_NAME/result/test_case_1.sql"
-diff "$DUMPLING_OUTPUT_DIR/primary_key.t.sql" "$DUMPLING_BASE_NAME/result/test_case_1.sql"
+for file_path in "$DUMPLING_BASE_NAME"/data/*; do
+  base_name=$(basename "$file_path")
+  table_name="${base_name%.sql}"
+  file_should_exist "$DUMPLING_BASE_NAME"/result/"$table_name".sql
+  file_should_exist "$DUMPLING_OUTPUT_DIR"/primary_key."$table_name".sql
+  diff "$DUMPLING_BASE_NAME"/result/"$table_name".sql "$DUMPLING_OUTPUT_DIR"/primary_key."$table_name".sql
+done
