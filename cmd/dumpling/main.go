@@ -67,7 +67,7 @@ func init() {
 
 	flag.StringVar(&logLevel, "loglevel", "info", "Log level: {debug|info|warn|error|dpanic|panic|fatal}")
 
-	flag.StringVar(&consistency, "consistency", "none", "Consistency level during dumping: {none|flush|lock|snapshot}")
+	flag.StringVar(&consistency, "consistency", "auto", "Consistency level during dumping: {auto|none|flush|lock|snapshot}")
 
 	flag.StringVar(&snapshot, "snapshot", "", "Snapshot position. Valid only when consistency=snapshot")
 }

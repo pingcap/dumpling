@@ -7,6 +7,7 @@ import (
 )
 
 func NewConsistencyController(conf *Config, session *sql.DB) (ConsistencyController, error) {
+	resolveAutoConsistency(conf)
 	switch conf.Consistency {
 	case "flush":
 		return &ConsistencyFlushTableWithReadLock{
@@ -116,4 +117,18 @@ func (c *ConsistencySnapshot) Setup() error {
 
 func (c *ConsistencySnapshot) TearDown() error {
 	return nil
+}
+
+func resolveAutoConsistency(conf *Config) {
+	if conf.Consistency != "auto" {
+		return
+	}
+	switch conf.ServerInfo.ServerType {
+	case ServerTypeTiDB:
+		conf.Consistency = "snapshot"
+	case ServerTypeMySQL, ServerTypeMariaDB:
+		conf.Consistency = "flush"
+	default:
+		conf.Consistency = "none"
+	}
 }

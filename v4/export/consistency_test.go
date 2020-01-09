@@ -81,6 +81,27 @@ func (s *testConsistencySuite) TestConsistencyController(c *C) {
 	}
 }
 
+func (s *testConsistencySuite) TestResolveAutoConsistency(c *C) {
+	conf := DefaultConfig()
+	cases := []struct {
+		serverTp            ServerType
+		resolvedConsistency string
+	}{
+		{ServerTypeTiDB, "snapshot"},
+		{ServerTypeMySQL, "flush"},
+		{ServerTypeMariaDB, "flush"},
+		{ServerTypeUnknown, "none"},
+	}
+
+	for _, x := range cases {
+		conf.Consistency = "auto"
+		conf.ServerInfo.ServerType = x.serverTp
+		resolveAutoConsistency(conf)
+		cmt := Commentf("server type %s", x.serverTp.String())
+		c.Assert(conf.Consistency, Equals, x.resolvedConsistency, cmt)
+	}
+}
+
 func (s *testConsistencySuite) TestConsistencyControllerError(c *C) {
 	db, mock, err := sqlmock.New()
 	c.Assert(err, IsNil)
