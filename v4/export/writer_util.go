@@ -52,7 +52,7 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
 	for rowIter.HasNext() {
 		row := MakeRowReceiver(tblIR.ColumnTypes())
 		if err := rowIter.Next(row); err != nil {
-			log.Zap().Error("scanning from sql.Row failed", zap.String("error", err.Error()))
+			log.Zap().Error("scanning from sql.Row failed", zap.Error(err))
 			return err
 		}
 
@@ -82,7 +82,7 @@ func write(writer io.StringWriter, str string) error {
 	if err != nil {
 		log.Zap().Error("writing failed",
 			zap.String("string", str),
-			zap.String("error", err.Error()))
+			zap.Error(err))
 	}
 	return err
 }
@@ -92,7 +92,7 @@ func buildFileWriter(path string) (io.StringWriter, func(), error) {
 	if err != nil {
 		log.Zap().Error("open file failed",
 			zap.String("path", path),
-			zap.String("error", err.Error()))
+			zap.Error(err))
 		return nil, nil, err
 	}
 	log.Zap().Debug("opened file", zap.String("path", path))
@@ -103,7 +103,9 @@ func buildFileWriter(path string) (io.StringWriter, func(), error) {
 		if err == nil {
 			return
 		}
-		log.Zap().Error("close file failed", zap.String("path", path))
+		log.Zap().Error("close file failed",
+			zap.String("path", path),
+			zap.Error(err))
 	}
 	return buf, tearDownRoutine, nil
 }
@@ -118,7 +120,7 @@ func buildLazyFileWriter(path string) (io.StringWriter, func()) {
 		if err != nil {
 			log.Zap().Error("open file failed",
 				zap.String("path", path),
-				zap.String("error", err.Error()))
+				zap.Error(err))
 		}
 		log.Zap().Debug("opened file", zap.String("path", path))
 		buf = bufio.NewWriter(file)

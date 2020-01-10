@@ -65,7 +65,7 @@ func init() {
 	flag.StringVar(&outputDir, "output", defaultOutputDir, "Output directory")
 	flag.StringVar(&outputDir, "o", defaultOutputDir, "Output directory")
 
-	flag.StringVar(&logLevel, "loglevel", "debug", "Log level: {debug|info|warn|error|dpanic|panic|fatal}")
+	flag.StringVar(&logLevel, "loglevel", "info", "Log level: {debug|info|warn|error|dpanic|panic|fatal}")
 
 	flag.StringVar(&consistency, "consistency", "auto", "Consistency level during dumping: {auto|none|flush|lock|snapshot}")
 
@@ -100,7 +100,7 @@ func main() {
 
 	err = export.Dump(conf)
 	if err != nil {
-		log.Zap().Error("dump failed", zap.String("error", err.Error()))
+		log.Zap().Error("dump failed", zap.Error(err))
 		os.Exit(1)
 	}
 	return

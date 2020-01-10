@@ -21,7 +21,7 @@ run_dumpling -filesize 200
 # the dumping result is expected to be:
 # 10 files for insertion(each conatins 10 records / 200 bytes)
 file_num=$(find "$DUMPLING_OUTPUT_DIR" -maxdepth 1 -iname "file_size.t.*.sql" | wc -l)
-if [ ! "$file_num" = 10 ]; then
+if [ "$file_num" -ne 10 ]; then
   echo "obtain file number: $file_num, but expect: 10" && exit 1
 fi
 
