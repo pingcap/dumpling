@@ -1,6 +1,8 @@
 package export
 
 import (
+	"strings"
+
 	"github.com/DATA-DOG/go-sqlmock"
 	. "github.com/pingcap/check"
 )
@@ -10,15 +12,25 @@ var _ = Suite(&testIRImplSuite{})
 type testIRImplSuite struct{}
 
 type simpleRowReceiver struct {
-	data string
+	data []string
 }
 
-func (s *simpleRowReceiver) BindAddress(arg []interface{}) {
-	arg[0] = &s.data
+func newSimpleRowReceiver(length int) *simpleRowReceiver {
+	return &simpleRowReceiver{data: make([]string, length)}
+}
+
+func (s *simpleRowReceiver) BindAddress(args []interface{}) {
+	for i := range args {
+		args[i] = &s.data[i]
+	}
 }
 
 func (s *simpleRowReceiver) ReportSize() uint64 {
-	panic("not implement")
+	sum := 0
+	for _, datum := range s.data {
+		sum += len(datum)
+	}
+	return uint64(sum)
 }
 
 func (s *testIRImplSuite) TestRowIter(c *C) {
@@ -38,15 +50,54 @@ func (s *testIRImplSuite) TestRowIter(c *C) {
 	for i := 0; i < 100; i += 1 {
 		c.Assert(iter.HasNext(), IsTrue)
 	}
-	res := &simpleRowReceiver{}
+	res := newSimpleRowReceiver(1)
 	c.Assert(iter.Next(res), IsNil)
-	c.Assert(res.data, Equals, "1")
+	c.Assert(res.data, DeepEquals, []string{"1"})
 	c.Assert(iter.HasNext(), IsTrue)
 	c.Assert(iter.HasNext(), IsTrue)
 	c.Assert(iter.Next(res), IsNil)
-	c.Assert(res.data, Equals, "2")
+	c.Assert(res.data, DeepEquals, []string{"2"})
 	c.Assert(iter.HasNext(), IsTrue)
 	c.Assert(iter.Next(res), IsNil)
-	c.Assert(res.data, Equals, "3")
+	c.Assert(res.data, DeepEquals, []string{"3"})
 	c.Assert(iter.HasNext(), IsFalse)
+}
+
+func (s *testIRImplSuite) TestSizedRowIter(c *C) {
+	db, mock, err := sqlmock.New()
+	c.Assert(err, IsNil)
+	defer db.Close()
+
+	twentyBytes := repeat("x", 20)
+	thirtyBytes := repeat("x", 30)
+	expectedRows := mock.NewRows([]string{"a", "b"})
+	for i := 0; i < 10; i += 1 {
+		expectedRows.AddRow(twentyBytes, thirtyBytes)
+	}
+	mock.ExpectQuery("SELECT a, b FROM t").WillReturnRows(expectedRows)
+	rows, err := db.Query("SELECT a, b FROM t")
+	c.Assert(err, IsNil)
+
+	sizedRowIter := sizedRowIter{
+		rowIter:   newRowIter(rows, 2),
+		sizeLimit: 200,
+	}
+	res := newSimpleRowReceiver(2)
+	for i := 0; i < 200/50; i += 1 {
+		c.Assert(sizedRowIter.HasNext(), IsTrue)
+		err := sizedRowIter.Next(res)
+		c.Assert(err, IsNil)
+	}
+	c.Assert(sizedRowIter.HasNext(), IsFalse)
+	c.Assert(sizedRowIter.HasNext(), IsFalse)
+	rows.Close()
+	c.Assert(sizedRowIter.Next(res), NotNil)
+}
+
+func repeat(x string, size int) string {
+	var sb strings.Builder
+	for i := 0; i < size; i += 1 {
+		sb.WriteString(x)
+	}
+	return sb.String()
 }
