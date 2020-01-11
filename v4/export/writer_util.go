@@ -167,7 +167,9 @@ type InterceptStringWriter struct {
 }
 
 func (w *InterceptStringWriter) WriteString(str string) (int, error) {
-	w.SomethingIsWritten = true
+	if len(str) > 0 {
+		w.SomethingIsWritten = true
+	}
 	return w.StringWriter.WriteString(str)
 }
 

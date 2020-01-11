@@ -26,11 +26,11 @@ func (s *simpleRowReceiver) BindAddress(args []interface{}) {
 }
 
 func (s *simpleRowReceiver) ReportSize() uint64 {
-	sum := 0
+	var sum uint64
 	for _, datum := range s.data {
-		sum += len(datum)
+		sum += uint64(len(datum))
 	}
-	return uint64(sum)
+	return sum
 }
 
 func (s *testIRImplSuite) TestRowIter(c *C) {
@@ -47,7 +47,7 @@ func (s *testIRImplSuite) TestRowIter(c *C) {
 	c.Assert(err, IsNil)
 
 	iter := newRowIter(rows, 1)
-	for i := 0; i < 100; i += 1 {
+	for i := 0; i < 100; i++ {
 		c.Assert(iter.HasNext(), IsTrue)
 	}
 	res := newSimpleRowReceiver(1)
@@ -68,10 +68,10 @@ func (s *testIRImplSuite) TestSizedRowIter(c *C) {
 	c.Assert(err, IsNil)
 	defer db.Close()
 
-	twentyBytes := repeat("x", 20)
-	thirtyBytes := repeat("x", 30)
+	twentyBytes := strings.Repeat("x", 20)
+	thirtyBytes := strings.Repeat("x", 30)
 	expectedRows := mock.NewRows([]string{"a", "b"})
-	for i := 0; i < 10; i += 1 {
+	for i := 0; i < 10; i++ {
 		expectedRows.AddRow(twentyBytes, thirtyBytes)
 	}
 	mock.ExpectQuery("SELECT a, b FROM t").WillReturnRows(expectedRows)
@@ -83,7 +83,7 @@ func (s *testIRImplSuite) TestSizedRowIter(c *C) {
 		sizeLimit: 200,
 	}
 	res := newSimpleRowReceiver(2)
-	for i := 0; i < 200/50; i += 1 {
+	for i := 0; i < 200/50; i++ {
 		c.Assert(sizedRowIter.HasNext(), IsTrue)
 		err := sizedRowIter.Next(res)
 		c.Assert(err, IsNil)
@@ -92,12 +92,4 @@ func (s *testIRImplSuite) TestSizedRowIter(c *C) {
 	c.Assert(sizedRowIter.HasNext(), IsFalse)
 	rows.Close()
 	c.Assert(sizedRowIter.Next(res), NotNil)
-}
-
-func repeat(x string, size int) string {
-	var sb strings.Builder
-	for i := 0; i < size; i += 1 {
-		sb.WriteString(x)
-	}
-	return sb.String()
 }
