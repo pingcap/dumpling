@@ -25,6 +25,7 @@ type Config struct {
 	Tables        DatabaseTables
 	Snapshot      string
 	Consistency   string
+	SkipView      bool
 }
 
 func DefaultConfig() *Config {
@@ -42,6 +43,7 @@ func DefaultConfig() *Config {
 		Tables:        nil,
 		Snapshot:      "",
 		Consistency:   "auto",
+		SkipView:      true,
 	}
 }
 
@@ -131,6 +133,28 @@ func init() {
 
 type databaseName = string
 
-type tableName = string
+type TableType int8
 
-type DatabaseTables map[databaseName][]tableName
+const (
+	TableTypeBase TableType = iota
+	TableTypeView
+)
+
+type TableInfo struct {
+	Name string
+	Type TableType
+}
+
+func NewTableInfos(names []string, tp TableType) []*TableInfo {
+	tbInfos := make([]*TableInfo, len(names))
+	for i, name := range names {
+		tbInfos[i] = &TableInfo{name, tp}
+	}
+	return tbInfos
+}
+
+func (t *TableInfo) Equals(other *TableInfo) bool {
+	return t.Name == other.Name && t.Type == other.Type
+}
+
+type DatabaseTables map[databaseName][]*TableInfo

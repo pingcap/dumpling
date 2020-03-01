@@ -85,7 +85,7 @@ func (s *testDumpSuite) TestDumpTable(c *C) {
 	mock.ExpectQuery("SELECT (.) FROM test.t").WillReturnRows(rows)
 
 	mockWriter := newMockWriter()
-	err = dumpTable(context.Background(), mockConfig, db, "test", "t", mockWriter)
+	err = dumpTable(context.Background(), mockConfig, db, "test", &TableInfo{Name: "t"}, mockWriter)
 	c.Assert(err, IsNil)
 
 	c.Assert(mockWriter.tableMeta["test.t"], Equals, showCreateTableResult)

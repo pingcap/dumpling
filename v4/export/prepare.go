@@ -23,19 +23,26 @@ func prepareDumpingDatabases(conf *Config, db *sql.DB) ([]string, error) {
 	}
 }
 
-func listAllTables(db *sql.DB, databaseNames []string) (DatabaseTables, error) {
+func listAllTables(db *sql.DB, databaseNames []string, skipViews bool) (DatabaseTables, error) {
 	log.Zap().Debug("list all the tables")
 	dbTables := DatabaseTables{}
 	for _, dbName := range databaseNames {
-		err := UseDatabase(db, dbName)
+		tables, err := ListAllTables(db, dbName)
 		if err != nil {
 			return nil, err
 		}
-		tables, err := ShowTables(db)
+		dbTables[dbName] = NewTableInfos(tables, TableTypeBase)
+
+		if skipViews {
+			continue
+		}
+
+		views, err := ListAllViews(db, dbName)
 		if err != nil {
 			return nil, err
 		}
-		dbTables[dbName] = tables
+
+		dbTables[dbName] = append(dbTables[dbName], NewTableInfos(views, TableTypeView)...)
 	}
 	return dbTables, nil
 }

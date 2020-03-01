@@ -38,6 +38,7 @@ var (
 	logLevel    string
 	consistency string
 	snapshot    string
+	skipView    bool
 
 	rootCmd = &cobra.Command{
 		Use:   "dumpling",
@@ -67,6 +68,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&logLevel, "loglevel", "info", "Log level: {debug|info|warn|error|dpanic|panic|fatal}")
 	rootCmd.PersistentFlags().StringVar(&consistency, "consistency", "auto", "Consistency level during dumping: {auto|none|flush|lock|snapshot}")
 	rootCmd.PersistentFlags().StringVar(&snapshot, "snapshot", "", "Snapshot position. Valid only when consistency=snapshot")
+	rootCmd.PersistentFlags().BoolVar(&skipView, "skipview", true, "Enable to skip dumping views")
 }
 
 func run() {
@@ -87,6 +89,7 @@ func run() {
 	conf.Threads = threads
 	conf.FileSize = fileSize
 	conf.OutputDirPath = outputDir
+	conf.SkipView = skipView
 
 	err = export.Dump(conf)
 	if err != nil {
