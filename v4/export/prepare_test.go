@@ -42,11 +42,10 @@ func (s *testPrepareSuite) TestListAllTables(c *C) {
 	c.Assert(err, IsNil)
 	defer db.Close()
 
-	data := map[databaseName][]*TableInfo{
-		"db1": NewTableInfos([]string{"t1", "t2"}, TableTypeBase),
-		"db2": NewTableInfos([]string{"t3", "t4", "t5"}, TableTypeBase),
-		"db3": NewTableInfos([]string{"t6", "t7", "t8"}, TableTypeView),
-	}
+	data := NewDatabaseTables().
+		AppendTables("db1", "t1", "t2").
+		AppendTables("db2", "t3", "t4", "t5").
+		AppendViews("db3", "t6", "t7", "t8")
 
 	var dbNames []databaseName
 	for dbName, tableInfos := range data {

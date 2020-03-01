@@ -64,10 +64,9 @@ func (s *testConsistencySuite) TestConsistencyController(c *C) {
 	}
 
 	conf.Consistency = "lock"
-	conf.Tables = map[databaseName][]*TableInfo{
-		"db1": NewTableInfos([]string{"t1", "t2", "t3"}, TableTypeBase),
-		"db2": NewTableInfos([]string{"t4"}, TableTypeBase),
-	}
+	conf.Tables = NewDatabaseTables().
+		AppendTables("db1", "t1", "t2", "t3").
+		AppendViews("db2", "t4")
 	for i := 0; i < 4; i++ {
 		mock.ExpectExec("LOCK TABLES").WillReturnResult(resultOk)
 	}
@@ -129,7 +128,7 @@ func (s *testConsistencySuite) TestConsistencyControllerError(c *C) {
 
 	// lock table fail
 	conf.Consistency = "lock"
-	conf.Tables = map[databaseName][]*TableInfo{"db": NewTableInfos([]string{"t"}, TableTypeBase)}
+	conf.Tables = NewDatabaseTables().AppendTables("db", "t")
 	mock.ExpectExec("LOCK TABLE").WillReturnError(errors.New(""))
 	ctrl, _ = NewConsistencyController(conf, db)
 	err = ctrl.Setup()

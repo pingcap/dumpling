@@ -45,7 +45,7 @@ func (s *testDumpSuite) TestDumpDatabase(c *C) {
 	mockConfig := DefaultConfig()
 	mockConfig.SortByPk = false
 	mockConfig.Database = "test"
-	mockConfig.Tables = map[string][]tableName{"test": {"t"}}
+	mockConfig.Tables = NewDatabaseTables().AppendTables("test", "t")
 	db, mock, err := sqlmock.New()
 	c.Assert(err, IsNil)
 

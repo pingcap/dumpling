@@ -130,31 +130,3 @@ func init() {
 	serverTypeString[ServerTypeMariaDB] = "MariaDB"
 	serverTypeString[ServerTypeTiDB] = "TiDB"
 }
-
-type databaseName = string
-
-type TableType int8
-
-const (
-	TableTypeBase TableType = iota
-	TableTypeView
-)
-
-type TableInfo struct {
-	Name string
-	Type TableType
-}
-
-func NewTableInfos(names []string, tp TableType) []*TableInfo {
-	tbInfos := make([]*TableInfo, len(names))
-	for i, name := range names {
-		tbInfos[i] = &TableInfo{name, tp}
-	}
-	return tbInfos
-}
-
-func (t *TableInfo) Equals(other *TableInfo) bool {
-	return t.Name == other.Name && t.Type == other.Type
-}
-
-type DatabaseTables map[databaseName][]*TableInfo
