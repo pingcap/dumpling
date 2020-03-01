@@ -3,10 +3,11 @@ package export
 import (
 	"context"
 	"database/sql/driver"
-	. "github.com/pingcap/check"
 	"io/ioutil"
 	"os"
 	"path"
+
+	. "github.com/pingcap/check"
 )
 
 var _ = Suite(&testWriterSuite{})

@@ -4,9 +4,8 @@ import (
 	"context"
 	"database/sql"
 
-	"golang.org/x/sync/errgroup"
-
 	_ "github.com/go-sql-driver/mysql"
+	"golang.org/x/sync/errgroup"
 )
 
 func Dump(conf *Config) (err error) {
