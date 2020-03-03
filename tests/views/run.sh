@@ -3,7 +3,6 @@
 set -eu
 
 run_sql "drop database if exists views"
-rm "$DUMPLING_OUTPUT_DIR"/views.* -r
 run_sql "create database views"
 export DUMPLING_TEST_DATABASE="views"
 

@@ -43,6 +43,9 @@ for script in tests/*/run.sh; do
     DUMPLING_OUTPUT_DIR="$DUMPLING_TEST_DIR"/sql_res."$TEST_NAME"
     export DUMPLING_OUTPUT_DIR
 
+    echo "Cleaning up test output dir: $DUMPLING_OUTPUT_DIR"
+    rm "$DUMPLING_OUTPUT_DIR" -rf
+
     PATH="tests/_utils:$PATH" \
     sh "$script"
 done
