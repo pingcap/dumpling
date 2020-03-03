@@ -25,7 +25,7 @@ type Config struct {
 	Tables        DatabaseTables
 	Snapshot      string
 	Consistency   string
-	SkipView      bool
+	NoViews       bool
 }
 
 func DefaultConfig() *Config {
@@ -43,7 +43,7 @@ func DefaultConfig() *Config {
 		Tables:        nil,
 		Snapshot:      "",
 		Consistency:   "auto",
-		SkipView:      true,
+		NoViews:       true,
 	}
 }
 

@@ -25,7 +25,7 @@ func Dump(conf *Config) (err error) {
 		return err
 	}
 
-	conf.Tables, err = listAllTables(pool, databases, conf.SkipView)
+	conf.Tables, err = listAllTables(pool, databases, conf.NoViews)
 	if err != nil {
 		return err
 	}
