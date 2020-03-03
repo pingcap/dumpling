@@ -25,9 +25,16 @@ func Dump(conf *Config) (err error) {
 		return err
 	}
 
-	conf.Tables, err = listAllTables(pool, databases, conf.NoViews)
+	conf.Tables, err = listAllTables(pool, databases)
 	if err != nil {
 		return err
+	}
+	if !conf.NoViews {
+		views, err := listAllViews(pool, databases)
+		if err != nil {
+			return err
+		}
+		conf.Tables.Merge(views)
 	}
 
 	conCtrl, err := NewConsistencyController(conf, pool)

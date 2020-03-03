@@ -62,7 +62,7 @@ func (s *testPrepareSuite) TestListAllTables(c *C) {
 		mock.ExpectQuery(query).WillReturnRows(rows)
 	}
 
-	tables, err := listAllTables(db, dbNames, true)
+	tables, err := listAllTables(db, dbNames)
 	c.Assert(err, IsNil)
 
 	for d, t := range tables {
@@ -75,18 +75,16 @@ func (s *testPrepareSuite) TestListAllTables(c *C) {
 	}
 
 	// Test list all tables and not skipping views.
-	data = map[databaseName][]*TableInfo{}
-	data["db"] = append(data["db"], &TableInfo{"t1", TableTypeBase})
-	data["db"] = append(data["db"], &TableInfo{"t2", TableTypeView})
+	data = NewDatabaseTables().
+		AppendTables("db", "t1").
+		AppendViews("db", "t2")
 	query := "SELECT table_name FROM information_schema.tables WHERE table_schema = (.*) and table_type = (.*)"
-	mock.ExpectQuery(query).WillReturnRows(sqlmock.NewRows([]string{"Table_name"}).AddRow("t1"))
 	mock.ExpectQuery(query).WillReturnRows(sqlmock.NewRows([]string{"Table_name"}).AddRow("t2"))
-	tables, err = listAllTables(db, []string{"db"}, false)
+	tables, err = listAllViews(db, []string{"db"})
 	c.Assert(err, IsNil)
 	c.Assert(len(tables), Equals, 1)
-	c.Assert(len(tables["db"]), Equals, 2)
-	c.Assert(tables["db"][0].Equals(data["db"][0]), IsTrue)
-	c.Assert(tables["db"][1].Equals(data["db"][1]), IsTrue)
+	c.Assert(len(tables["db"]), Equals, 1)
+	c.Assert(tables["db"][0].Equals(data["db"][1]), IsTrue, Commentf("%v mismatch %v", tables["db"][0], data["db"][1]))
 
 	c.Assert(mock.ExpectationsWereMet(), IsNil)
 }

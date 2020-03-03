@@ -23,7 +23,7 @@ func prepareDumpingDatabases(conf *Config, db *sql.DB) ([]string, error) {
 	}
 }
 
-func listAllTables(db *sql.DB, databaseNames []string, skipViews bool) (DatabaseTables, error) {
+func listAllTables(db *sql.DB, databaseNames []string) (DatabaseTables, error) {
 	log.Zap().Debug("list all the tables")
 	dbTables := DatabaseTables{}
 	for _, dbName := range databaseNames {
@@ -32,11 +32,14 @@ func listAllTables(db *sql.DB, databaseNames []string, skipViews bool) (Database
 			return nil, err
 		}
 		dbTables = dbTables.AppendTables(dbName, tables...)
+	}
+	return dbTables, nil
+}
 
-		if skipViews {
-			continue
-		}
-
+func listAllViews(db *sql.DB, databaseNames []string) (DatabaseTables, error) {
+	log.Zap().Debug("list all the views")
+	dbTables := DatabaseTables{}
+	for _, dbName := range databaseNames {
 		views, err := ListAllViews(db, dbName)
 		if err != nil {
 			return nil, err
@@ -82,4 +85,10 @@ func (d DatabaseTables) AppendViews(dbName string, viewNames ...string) Database
 		d[dbName] = append(d[dbName], &TableInfo{v, TableTypeView})
 	}
 	return d
+}
+
+func (d DatabaseTables) Merge(other DatabaseTables) {
+	for name, infos := range other {
+		d[name] = append(d[name], infos...)
+	}
 }
