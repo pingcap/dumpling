@@ -20,8 +20,7 @@ set -eu
 
 mkdir -p "$DUMPLING_TEST_DIR"
 PATH="tests/_utils:$PATH"
-cur=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
-source $cur/_utils/run_services
+. "tests/_utils/run_services"
 
 
 file_should_exist bin/pd-server
