@@ -29,6 +29,7 @@ func Dump(conf *Config) (err error) {
 	if err != nil {
 		return err
 	}
+	filterDirtySchemaTables(conf)
 
 	conCtrl, err := NewConsistencyController(conf, pool)
 	if err != nil {
