@@ -3,11 +3,7 @@
 # parameter 2: max check times
 
 conf=$1
-if [ $# -ge 2 ]; then
-    check_time=$2
-else
-    check_time=10
-fi
+check_time=${2-10}
 
 LOG=$DUMPLING_OUTPUT_DIR/sync_diff_inspector.log
 
