@@ -1,0 +1,9 @@
+#!/bin/sh
+
+set -eu
+
+echo "[$(date)] Executing bin/tidb-lightning..."
+
+conf=$1
+
+bin/tidb-lightning -c $1
