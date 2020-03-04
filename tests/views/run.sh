@@ -7,7 +7,7 @@ run_sql "create database views"
 export DUMPLING_TEST_DATABASE="views"
 
 run_sql "create table t (a bigint, b varchar(255))"
-run_sql "create view v as select * from t;"
+run_sql "create definer = 'root'@'localhost' view v as select * from t;"
 # insert 20 records to `t`.
 i=0; while [ $i -lt 20 ]; do
   run_sql "insert into t values ($i, \"$i\")"
