@@ -1,7 +1,7 @@
 #!/bin/sh
 
 set -eu
-cur=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
+cur=$(cd `dirname $0`; pwd)
 
 DB_NAME="e2e"
 TABLE_NAME="t"
