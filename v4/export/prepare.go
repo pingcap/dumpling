@@ -99,8 +99,7 @@ func filterDirtySchemaTables(conf *Config) {
 	switch conf.ServerInfo.ServerType {
 	case ServerTypeTiDB:
 		for dbName := range conf.Tables {
-			switch strings.ToLower(dbName) {
-			case util.InformationSchemaName.L, util.PerformanceSchemaName.L, util.MetricSchemaName.L, util.InspectionSchemaName.L:
+			if filter.IsSystemSchema(strings.ToLower(dbName)) {
 				log.Zap().Warn("unsupported dump schema in TiDB now", zap.String("schema", dbName))
 				delete(conf.Tables, dbName)
 			}
