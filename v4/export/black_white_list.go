@@ -1,7 +1,11 @@
 package export
 
 import (
+	"strings"
+
+	"github.com/pingcap/dumpling/v4/log"
 	"github.com/pingcap/tidb-tools/pkg/filter"
+	"go.uber.org/zap"
 )
 
 type BWList interface {
@@ -55,4 +59,42 @@ func NewBWList(conf BWListConf) (BWList, error) {
 	}
 
 	return &NopeBWList{}, nil
+}
+
+func filterDirtySchemaTables(conf *Config) {
+	switch conf.ServerInfo.ServerType {
+	case ServerTypeTiDB:
+		for dbName := range conf.Tables {
+			if filter.IsSystemSchema(strings.ToLower(dbName)) {
+				log.Zap().Warn("unsupported dump schema in TiDB now", zap.String("schema", dbName))
+				delete(conf.Tables, dbName)
+			}
+		}
+	}
+}
+
+func filterTables(conf *Config) error {
+	log.Zap().Debug("filter tables")
+	// filter dirty schema tables because of non-impedance implementation reasons
+	filterDirtySchemaTables(conf)
+	dbTables := DatabaseTables{}
+	bwList, err := NewBWList(conf.BlackWhiteList)
+	if err != nil {
+		return withStack(err)
+	}
+
+	for dbName, tables := range conf.Tables {
+		doTables := make([]string, 0, len(tables))
+		for _, table := range tables {
+			if bwList.Apply(dbName, table.Name) {
+				doTables = append(doTables, table.Name)
+			}
+		}
+		if len(doTables) > 0 {
+			dbTables = dbTables.AppendTables(dbName, doTables...)
+		}
+	}
+
+	conf.Tables = dbTables
+	return nil
 }

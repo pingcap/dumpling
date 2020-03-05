@@ -2,12 +2,9 @@ package export
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	. "github.com/pingcap/check"
-	"github.com/pingcap/tidb-tools/pkg/filter"
-	"github.com/pingcap/tidb/util"
 )
 
 var _ = Suite(&testPrepareSuite{})
@@ -90,43 +87,4 @@ func (s *testPrepareSuite) TestListAllTables(c *C) {
 	c.Assert(tables["db"][0].Equals(data["db"][1]), IsTrue, Commentf("%v mismatch %v", tables["db"][0], data["db"][1]))
 
 	c.Assert(mock.ExpectationsWereMet(), IsNil)
-}
-
-func (s *testPrepareSuite) TestFilterTables(c *C) {
-	dbTables := DatabaseTables{}
-	expectedDBTables := DatabaseTables{}
-
-	dbTables.AppendTables(util.InformationSchemaName.L, []string{"xxx"}...)
-	dbTables.AppendTables(strings.ToUpper(util.PerformanceSchemaName.L), []string{"xxx"}...)
-	dbTables.AppendTables("xxx", []string{"yyy"}...)
-	expectedDBTables.AppendTables("xxx", []string{"yyy"}...)
-	dbTables.AppendTables("yyy", []string{"xxx"}...)
-
-	conf := &Config{
-		ServerInfo: ServerInfo{
-			ServerType: ServerTypeTiDB,
-		},
-		Tables: dbTables,
-		BlackWhiteList: BWListConf{
-			Mode: OldToolsMode,
-			OldTools: &OldToolsConf{
-				Rules: &filter.Rules{
-					DoDBs: []string{""},
-				},
-			},
-		},
-	}
-
-	c.Assert(filterTables(conf), NotNil)
-	conf.BlackWhiteList = BWListConf{
-		Mode: OldToolsMode,
-		OldTools: &OldToolsConf{
-			Rules: &filter.Rules{
-				DoDBs: []string{"xxx"},
-			},
-		},
-	}
-	c.Assert(filterTables(conf), IsNil)
-	c.Assert(conf.Tables, HasLen, 1)
-	c.Assert(conf.Tables, DeepEquals, expectedDBTables)
 }
