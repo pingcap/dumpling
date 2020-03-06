@@ -10,7 +10,6 @@ TIDB_STATUS_ADDR="127.0.0.1:10080"
 
 stop_services() {
     killall -9 tidb-server || true
-    killall -9 pd-server || true
 
     find "$DUMPLING_TEST_DIR" -maxdepth 1 -not -path "$DUMPLING_TEST_DIR" -not -name "*.log" | xargs rm -r || true
 }
