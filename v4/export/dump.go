@@ -3,6 +3,8 @@ package export
 import (
 	"context"
 	"database/sql"
+	"fmt"
+	"path"
 
 	_ "github.com/go-sql-driver/mysql"
 	"golang.org/x/sync/errgroup"
@@ -108,6 +110,43 @@ func dumpTable(ctx context.Context, conf *Config, db *sql.DB, dbName string, tab
 	}
 	if err := writer.WriteTableMeta(ctx, dbName, tableName, createTableSQL); err != nil {
 		return err
+	}
+
+	if conf.Rows != UnspecifiedSize {
+		// Disable filesize
+		conf.FileSize = UnspecifiedSize
+		// try dump table concurrently by split table to chunks
+		chunks, err := splitTableDataIntoChunks(dbName, tableName, db, conf)
+		if err != nil {
+			return err
+		}
+		if chunks != nil {
+			rateLimit := newRateLimit(defaultDumpThreads)
+			var g errgroup.Group
+			for i := 0; i < len(chunks); i++ {
+				g.Go(func() error {
+					rateLimit.getToken()
+					defer rateLimit.putToken()
+					fileName := fmt.Sprintf("%s.%s.%d.sql", dbName, tableName, i)
+					filePath := path.Join(conf.OutputDirPath, fileName)
+					fileWriter, tearDown := buildLazyFileWriter(filePath)
+					intWriter := &InterceptStringWriter{StringWriter: fileWriter}
+					err := WriteInsert(chunks[i], intWriter)
+					tearDown()
+					if err != nil {
+						return err
+					}
+					if !intWriter.SomethingIsWritten {
+						return nil
+					}
+					return nil
+				})
+			}
+			if err := g.Wait(); err != nil {
+				return err
+			}
+			return nil
+		}
 	}
 
 	tableIR, err := SelectAllFromTable(conf, db, dbName, tableName)

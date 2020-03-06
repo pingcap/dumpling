@@ -2,6 +2,9 @@ package export
 
 import (
 	"database/sql"
+	"fmt"
+
+	"github.com/pkg/errors"
 )
 
 // rowIter implements the SQLRowIter interface.
@@ -169,12 +172,84 @@ func (t *tableDataChunks) Rows() SQLRowIter {
 	}
 }
 
-func splitTableDataIntoChunks(td TableDataIR, chunkSize uint64, statementSize uint64) *tableDataChunks {
+func splitTableDataIntoChunksIter(td TableDataIR, chunkSize uint64, statementSize uint64) *tableDataChunks {
 	return &tableDataChunks{
 		TableDataIR:        td,
 		chunkSizeLimit:     chunkSize,
 		statementSizeLimit: statementSize,
 	}
+}
+
+
+func splitTableDataIntoChunks(dbName, tableName string, db *sql.DB, conf *Config) ([]*tableDataChunks, error) {
+	field, err := pickupPossibleField(dbName, tableName, db, conf)
+	if err != nil {
+		return nil, err
+	}
+	if field == "" {
+		return nil, nil
+	}
+	query := fmt.Sprintf("SELECT MIN(`%s`),MAX(`%s`) FROM `%s`.`%s` ",
+		field, field, dbName, tableName)
+	if conf.Where != "" {
+		query = fmt.Sprintf("%s WHERE %s", query, conf.Where)
+	}
+
+	min := uint64(0)
+	max := uint64(0)
+	handleOneRow := func(rows *sql.Rows) error {
+		return rows.Scan(&min, &max)
+	}
+	err = simpleQuery(db, query, handleOneRow)
+	if err != nil {
+		return nil, withStack(errors.WithMessage(err, query))
+	}
+	if min == max {
+		return nil, nil
+	}
+	count := estimateCount(dbName, tableName, db, field, conf)
+	if count < conf.Rows {
+		// skip chunk logic if estimates are low
+		return nil, nil
+	}
+	// every chunk would have eventual adjustments
+	estimatedChunks := count / conf.Rows
+	estimatedStep := (max-min)/estimatedChunks + 1
+	cutoff := min
+	chunks := make([]tableDataChunks, 0, estimatedChunks)
+
+	colTypes, err := GetColumnTypes(db, dbName, tableName)
+	if err != nil {
+		return nil, err
+	}
+	for cutoff <= max {
+		where := fmt.Sprintf("(`%s` >= %d AND `%s` < %d)", field, cutoff, field, cutoff+estimatedStep)
+		query, err = buildSelectAllQuery(conf, db, dbName, tableName, where)
+		if err != nil {
+			return nil, err
+		}
+		rows, err := db.Query(query)
+		if err != nil {
+			return nil, withStack(errors.WithMessage(err, query))
+		}
+
+		td := &tableData{
+			database: dbName,
+			table:    tableName,
+			rows:     rows,
+			colTypes: colTypes,
+			specCmts: []string{
+				"/*!40101 SET NAMES binary*/;",
+			},
+		}
+		cutoff += estimatedStep
+		chunk := tableDataChunks{
+			TableDataIR: td,
+		}
+		chunks = append(chunks, chunk)
+	}
+
+	return nil, nil
 }
 
 type metaData struct {

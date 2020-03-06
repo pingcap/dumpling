@@ -6,8 +6,9 @@ import (
 	"os"
 	"path"
 
-	"github.com/pingcap/dumpling/v4/log"
 	"go.uber.org/zap"
+
+	"github.com/pingcap/dumpling/v4/log"
 )
 
 type Writer interface {
@@ -40,7 +41,7 @@ func (f *SimpleWriter) WriteTableMeta(ctx context.Context, db, table, createSQL 
 func (f *SimpleWriter) WriteTableData(ctx context.Context, ir TableDataIR) error {
 	log.Zap().Debug("start dumping table...", zap.String("table", ir.TableName()))
 
-	chunks := splitTableDataIntoChunks(ir, f.cfg.FileSize, f.cfg.StatementSize)
+	chunksIter := splitTableDataIntoChunksIter(ir, f.cfg.FileSize, f.cfg.StatementSize)
 	chunkCount := 0
 	fileName := fmt.Sprintf("%s.%s.sql", ir.DatabaseName(), ir.TableName())
 	if f.cfg.FileSize != UnspecifiedSize {
@@ -51,7 +52,7 @@ func (f *SimpleWriter) WriteTableData(ctx context.Context, ir TableDataIR) error
 		filePath := path.Join(f.cfg.OutputDirPath, fileName)
 		fileWriter, tearDown := buildLazyFileWriter(filePath)
 		intWriter := &InterceptStringWriter{StringWriter: fileWriter}
-		err := WriteInsert(chunks, intWriter)
+		err := WriteInsert(chunksIter, intWriter)
 		tearDown()
 		if err != nil {
 			return err
