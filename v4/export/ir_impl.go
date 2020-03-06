@@ -32,43 +32,61 @@ func (iter *rowIter) HasNext() bool {
 	return iter.hasNext
 }
 
-type chunkRowIter struct {
+func (iter *rowIter) HasNextSQLRowIter() bool {
+	return iter.hasNext
+}
+
+func (iter *rowIter) NextSQLRowIter() SQLRowIter {
+	return iter
+}
+
+type fileRowIter struct {
 	rowIter            SQLRowIter
-	chunkSizeLimit     uint64
+	fileSizeLimit      uint64
 	statementSizeLimit uint64
 
 	currentStatementSize uint64
-	currentSize          uint64
+	currentFileSize      uint64
 }
 
-func (c *chunkRowIter) Next(row RowReceiver) error {
+func (c *fileRowIter) Next(row RowReceiver) error {
 	err := c.rowIter.Next(row)
 	if err != nil {
 		return err
 	}
 
 	size := row.ReportSize()
+	c.currentFileSize += size
 	c.currentStatementSize += size
-	c.currentSize += size
 	return nil
 }
 
-func (c *chunkRowIter) HasNextStatement() bool {
-	if c.chunkSizeLimit != UnspecifiedSize && c.currentSize >= c.chunkSizeLimit {
+func (c *fileRowIter) HasNext() bool {
+	if c.fileSizeLimit != UnspecifiedSize && c.currentFileSize >= c.fileSizeLimit {
+		return false
+	}
+
+	if c.statementSizeLimit != UnspecifiedSize && c.currentStatementSize >= c.statementSizeLimit {
 		return false
 	}
 	return c.rowIter.HasNext()
 }
 
-func (c *chunkRowIter) HasNext() bool {
-	if c.chunkSizeLimit != UnspecifiedSize && c.currentStatementSize >= c.statementSizeLimit {
+func (c *fileRowIter) HasNextSQLRowIter() bool {
+	if c.fileSizeLimit != UnspecifiedSize && c.currentFileSize >= c.fileSizeLimit {
 		return false
 	}
 	return c.rowIter.HasNext()
 }
 
-func (c *chunkRowIter) NextStatement() {
-	c.currentStatementSize = 0
+func (c *fileRowIter) NextSQLRowIter() SQLRowIter {
+	return &fileRowIter{
+		rowIter:              c.rowIter,
+		fileSizeLimit:        c.fileSizeLimit,
+		statementSizeLimit:   c.statementSizeLimit,
+		currentFileSize:      c.currentFileSize,
+		currentStatementSize: 0,
+	}
 }
 
 type stringIter struct {
@@ -144,10 +162,10 @@ func (t *tableDataChunks) Rows() SQLRowIter {
 		t.rows = t.TableDataIR.Rows()
 	}
 
-	return &chunkRowIter{
+	return &fileRowIter{
 		rowIter:            t.rows,
 		statementSizeLimit: t.statementSizeLimit,
-		chunkSizeLimit:     t.chunkSizeLimit,
+		fileSizeLimit:      t.chunkSizeLimit,
 	}
 }
 

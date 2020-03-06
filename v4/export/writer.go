@@ -44,8 +44,9 @@ func (f *SimpleWriter) WriteTableData(ctx context.Context, ir TableDataIR) error
 	chunkCount := 0
 	fileName := fmt.Sprintf("%s.%s.sql", ir.DatabaseName(), ir.TableName())
 	if f.cfg.FileSize != UnspecifiedSize {
-		fileName = path.Join(f.cfg.OutputDirPath, fmt.Sprintf("%s.%s.%d.sql", ir.DatabaseName(), ir.TableName(), chunkCount))
+		fileName = fmt.Sprintf("%s.%s.%d.sql", ir.DatabaseName(), ir.TableName(), chunkCount)
 	}
+
 	for {
 		filePath := path.Join(f.cfg.OutputDirPath, fileName)
 		fileWriter, tearDown := buildLazyFileWriter(filePath)
