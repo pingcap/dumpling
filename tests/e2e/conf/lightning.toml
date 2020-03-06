@@ -4,7 +4,6 @@
 server-mode = false
 level = "error"
 check-requirements = false
-file = "/tmp/dumpling_test_result/tidb-lightning.log"
 
 [tikv-importer]
 backend="tidb"
