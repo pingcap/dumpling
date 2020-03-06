@@ -19,10 +19,7 @@ run_sql "create database $DB_NAME;"
 run_sql "create table $DB_NAME.$TABLE_NAME (a int(255));"
 
 # insert 100 records
-i=0; while [ $i -lt 100 ]; do
-  run_sql "insert into $DB_NAME.$TABLE_NAME values (\"$i\");"
-  i=$(( i + 1 ))
-done
+run_sql "insert into $DB_NAME.$TABLE_NAME values $(seq -s, 99 | sed "s/[0-9]*/('1')/g");"
 
 # dumping
 export DUMPLING_TEST_DATABASE=$DB_NAME
