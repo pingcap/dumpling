@@ -12,13 +12,6 @@ wget http://download.pingcap.org/tidb-toolkit-$TAG-linux-amd64.tar.gz -O tools.t
 tar -xzvf tools.tar.gz
 mv tidb-toolkit-$TAG-linux-amd64/bin/* bin/
 
-
-# download pd-server
-git clone -b $TAG https://github.com/pingcap/pd
-cd $pwd/pd && make
-cd $pwd
-mv pd/bin/pd-server bin/
-
 # download tidb-server
 git clone -b $TAG https://github.com/pingcap/tidb
 cd $pwd/tidb && make

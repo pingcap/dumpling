@@ -37,22 +37,6 @@ EOF
        sleep 3
     done
 
-    echo "Starting PD..."
-    bin/pd-server \
-        --client-urls "http://$PD_ADDR" \
-        --log-file "$DUMPLING_TEST_DIR/pd.log" \
-        --data-dir "$DUMPLING_TEST_DIR/pd" &
-    # wait until PD is online...
-    i=0
-    while ! curl -o /dev/null -sf "http://$PD_ADDR/pd/api/v1/version"; do
-       i=$((i+1))
-       if [ "$i" -gt 10 ]; then
-          echo 'Failed to start PD'
-          exit 1
-       fi
-       sleep 3
-    done
-
     bin/tidb-server \
         -P 4000 \
         --status 10080 \

@@ -23,7 +23,6 @@ PATH="tests/_utils:$PATH"
 . "tests/_utils/run_services"
 
 
-file_should_exist bin/pd-server
 file_should_exist bin/tidb-server
 file_should_exist bin/tidb-lightning
 file_should_exist bin/dumpling
