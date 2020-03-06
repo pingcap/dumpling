@@ -19,8 +19,8 @@ func (s *testBWListSuite) TestBWList(c *C) {
 	c.Assert(nopeBWList.Apply("nope", "nope"), IsTrue)
 
 	oldToolsBWList, err := NewBWList(BWListConf{
-		Mode: OldToolsMode,
-		OldTools: &OldToolsConf{
+		Mode: MySQLReplicationMode,
+		Rules: &MySQLReplicationConf{
 			Rules: &filter.Rules{
 				DoDBs: []string{"xxx"},
 			},
@@ -32,8 +32,8 @@ func (s *testBWListSuite) TestBWList(c *C) {
 	c.Assert(oldToolsBWList.Apply("yyy", "xxx"), IsFalse)
 
 	_, err = NewBWList(BWListConf{
-		Mode: OldToolsMode,
-		OldTools: &OldToolsConf{
+		Mode: MySQLReplicationMode,
+		Rules: &MySQLReplicationConf{
 			Rules: &filter.Rules{
 				DoDBs: []string{""},
 			},
@@ -58,8 +58,8 @@ func (s *testBWListSuite) TestFilterTables(c *C) {
 		},
 		Tables: dbTables,
 		BlackWhiteList: BWListConf{
-			Mode: OldToolsMode,
-			OldTools: &OldToolsConf{
+			Mode: MySQLReplicationMode,
+			Rules: &MySQLReplicationConf{
 				Rules: &filter.Rules{
 					DoDBs: []string{""},
 				},
@@ -69,8 +69,8 @@ func (s *testBWListSuite) TestFilterTables(c *C) {
 
 	c.Assert(filterTables(conf), NotNil)
 	conf.BlackWhiteList = BWListConf{
-		Mode: OldToolsMode,
-		OldTools: &OldToolsConf{
+		Mode: MySQLReplicationMode,
+		Rules: &MySQLReplicationConf{
 			Rules: &filter.Rules{
 				DoDBs: []string{"xxx"},
 			},

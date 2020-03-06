@@ -12,29 +12,30 @@ type BWList interface {
 	Apply(string, string) bool
 }
 
-type BWListMod byte
+type BWListMode byte
 
 const (
-	NopMode      BWListMod = 0x0
-	OldToolsMode BWListMod = 0x1
+	NopMode BWListMode = 0x0
+	// We have used this black and white list in pingcap/dm and pingcap/tidb-lightning project
+	MySQLReplicationMode BWListMode = 0x1
 )
 
-type OldToolsConf struct {
+type MySQLReplicationConf struct {
 	Rules         *filter.Rules
 	CaseSensitive bool
 }
 
 type BWListConf struct {
-	Mode BWListMod
+	Mode BWListMode
 
-	OldTools *OldToolsConf
+	Rules *MySQLReplicationConf
 }
 
-type OldToolsBWList struct {
+type MySQLReplicationBWList struct {
 	*filter.Filter
 }
 
-func (bw *OldToolsBWList) Apply(schema, table string) bool {
+func (bw *MySQLReplicationBWList) Apply(schema, table string) bool {
 	return bw.Match(&filter.Table{schema, table})
 }
 
@@ -46,15 +47,15 @@ func (bw *NopeBWList) Apply(schema, table string) bool {
 
 func NewBWList(conf BWListConf) (BWList, error) {
 	switch conf.Mode {
-	case OldToolsMode:
-		oldToolsConf := conf.OldTools
-		oldToolsBWList, err := filter.New(oldToolsConf.CaseSensitive, oldToolsConf.Rules)
+	case MySQLReplicationMode:
+		c := conf.Rules
+		f, err := filter.New(c.CaseSensitive, c.Rules)
 		if err != nil {
 			return nil, withStack(err)
 		}
 
-		return &OldToolsBWList{
-			Filter: oldToolsBWList,
+		return &MySQLReplicationBWList{
+			Filter: f,
 		}, nil
 	}
 
