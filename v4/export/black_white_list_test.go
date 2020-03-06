@@ -18,7 +18,7 @@ func (s *testBWListSuite) TestBWList(c *C) {
 
 	c.Assert(nopeBWList.Apply("nope", "nope"), IsTrue)
 
-	oldToolsBWList, err := NewBWList(BWListConf{
+	mysqlReplicationBWList, err := NewBWList(BWListConf{
 		Mode: MySQLReplicationMode,
 		Rules: &MySQLReplicationConf{
 			Rules: &filter.Rules{
@@ -28,8 +28,8 @@ func (s *testBWListSuite) TestBWList(c *C) {
 	})
 	c.Assert(err, IsNil)
 
-	c.Assert(oldToolsBWList.Apply("xxx", "yyy"), IsTrue)
-	c.Assert(oldToolsBWList.Apply("yyy", "xxx"), IsFalse)
+	c.Assert(mysqlReplicationBWList.Apply("xxx", "yyy"), IsTrue)
+	c.Assert(mysqlReplicationBWList.Apply("yyy", "xxx"), IsFalse)
 
 	_, err = NewBWList(BWListConf{
 		Mode: MySQLReplicationMode,
