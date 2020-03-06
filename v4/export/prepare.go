@@ -73,6 +73,11 @@ func NewDatabaseTables() DatabaseTables {
 	return DatabaseTables{}
 }
 
+func (d DatabaseTables) AppendTable(dbName string, table *TableInfo) DatabaseTables {
+	d[dbName] = append(d[dbName], table)
+	return d
+}
+
 func (d DatabaseTables) AppendTables(dbName string, tableNames ...string) DatabaseTables {
 	for _, t := range tableNames {
 		d[dbName] = append(d[dbName], &TableInfo{t, TableTypeBase})
@@ -91,4 +96,23 @@ func (d DatabaseTables) Merge(other DatabaseTables) {
 	for name, infos := range other {
 		d[name] = append(d[name], infos...)
 	}
+}
+
+func (d DatabaseTables) Literal() string {
+	var b strings.Builder
+	b.WriteString("tables list\n")
+	b.WriteString("\n")
+
+	for dbName, tables := range d {
+		b.WriteString("schema ")
+		b.WriteString(dbName)
+		b.WriteString(" :[")
+		for _, tbl := range tables {
+			b.WriteString(tbl.Name)
+			b.WriteString(", ")
+		}
+		b.WriteString("]")
+	}
+
+	return b.String()
 }

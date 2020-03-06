@@ -78,21 +78,24 @@ func filterTables(conf *Config) error {
 	// filter dirty schema tables because of non-impedance implementation reasons
 	filterDirtySchemaTables(conf)
 	dbTables := DatabaseTables{}
+	ignoredDBTable := DatabaseTables{}
 	bwList, err := NewBWList(conf.BlackWhiteList)
 	if err != nil {
 		return withStack(err)
 	}
 
 	for dbName, tables := range conf.Tables {
-		doTables := make([]string, 0, len(tables))
 		for _, table := range tables {
 			if bwList.Apply(dbName, table.Name) {
-				doTables = append(doTables, table.Name)
+				dbTables.AppendTable(dbName, table)
+			} else {
+				ignoredDBTable.AppendTable(dbName, table)
 			}
 		}
-		if len(doTables) > 0 {
-			dbTables = dbTables.AppendTables(dbName, doTables...)
-		}
+	}
+
+	if len(ignoredDBTable) > 0 {
+		log.Zap().Debug("ignore table", zap.String("", ignoredDBTable.Literal()))
 	}
 
 	conf.Tables = dbTables
