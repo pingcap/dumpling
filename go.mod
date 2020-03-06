@@ -5,10 +5,8 @@ require (
 	github.com/coreos/go-semver v0.3.0
 	github.com/go-sql-driver/mysql v1.4.1
 	github.com/golang/snappy v0.0.1 // indirect
-	github.com/juju/errors v0.0.0-20190930114154-d42613fe1ab9 // indirect
 	github.com/pingcap/check v0.0.0-20200212061837-5e12011dc712
 	github.com/pingcap/errors v0.11.5-0.20190809092503-95897b64e011
-	github.com/pingcap/goleveldb v0.0.0-20191226122134-f82aafb29989
 	github.com/pingcap/log v0.0.0-20200117041106-d28c14d3b1cd
 	github.com/pingcap/tidb v1.1.0-beta.0.20200305075918-dcb8b3d5ddf0
 	github.com/pingcap/tidb-tools v3.0.11+incompatible
