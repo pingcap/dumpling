@@ -65,7 +65,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&password, "password", "p", "", "User password")
 	rootCmd.PersistentFlags().IntVarP(&threads, "threads", "t", 4, "Number of goroutines to use, default 4")
 	rootCmd.PersistentFlags().Uint64VarP(&fileSize, "filesize", "F", export.UnspecifiedSize, "The approximate size of output file")
-	rootCmd.PersistentFlags().Uint64VarP(&statementSize, "statementsize", "S", export.UnspecifiedSize, "Attempted size of INSERT statement in bytes")
+	rootCmd.PersistentFlags().Uint64VarP(&statementSize, "statement-size", "S", export.UnspecifiedSize, "Attempted size of INSERT statement in bytes")
 	rootCmd.PersistentFlags().StringVarP(&outputDir, "output", "o", defaultOutputDir, "Output directory")
 	rootCmd.PersistentFlags().StringVar(&logLevel, "loglevel", "info", "Log level: {debug|info|warn|error|dpanic|panic|fatal}")
 	rootCmd.PersistentFlags().StringVar(&consistency, "consistency", "auto", "Consistency level during dumping: {auto|none|flush|lock|snapshot}")
