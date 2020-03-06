@@ -25,6 +25,7 @@ run_sql "insert into $DB_NAME.$TABLE_NAME values $(seq -s, 100 | sed 's/,*$//g' 
 export DUMPLING_TEST_DATABASE=$DB_NAME
 run_dumpling
 
+cat "$cur/conf/lightning.toml"
 # use lightning import data to tidb
 run_lightning $cur/conf/lightning.toml
 
