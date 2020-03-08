@@ -97,6 +97,8 @@ func run() {
 	conf.StatementSize = statementSize
 	conf.OutputDirPath = outputDir
 	conf.NoViews = noViews
+	conf.Rows = rows
+	conf.Where = where
 
 	err = export.Dump(conf)
 	if err != nil {

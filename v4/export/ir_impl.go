@@ -3,6 +3,7 @@ package export
 import (
 	"database/sql"
 	"fmt"
+	"strconv"
 
 	"github.com/pkg/errors"
 )
@@ -195,10 +196,18 @@ func splitTableDataIntoChunks(dbName, tableName string, db *sql.DB, conf *Config
 		query = fmt.Sprintf("%s WHERE %s", query, conf.Where)
 	}
 
-	min := uint64(0)
-	max := uint64(0)
+	var smin string
+	var smax string
 	handleOneRow := func(rows *sql.Rows) error {
-		return rows.Scan(&min, &max)
+		return rows.Scan(&smin, &smax)
+	}
+	var max uint64
+	var min uint64
+	if max, err = strconv.ParseUint(smax, 10, 64); err != nil {
+		return nil, nil
+	}
+	if min, err = strconv.ParseUint(smin, 10, 64); err != nil {
+		return nil, nil
 	}
 	err = simpleQuery(db, query, handleOneRow)
 	if err != nil {
