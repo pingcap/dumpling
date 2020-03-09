@@ -227,7 +227,7 @@ func splitTableDataIntoChunks(dbName, tableName string, db *sql.DB, conf *Config
 	estimatedChunks := count / conf.Rows
 	estimatedStep := (max-min)/estimatedChunks + 1
 	cutoff := min
-	chunks := make([]tableDataChunks, 0, estimatedChunks)
+	chunks := make([]*tableDataChunks, 0, estimatedChunks)
 
 	colTypes, err := GetColumnTypes(db, dbName, tableName)
 	if err != nil {
@@ -254,13 +254,13 @@ func splitTableDataIntoChunks(dbName, tableName string, db *sql.DB, conf *Config
 			},
 		}
 		cutoff += estimatedStep
-		chunk := tableDataChunks{
+		chunk := &tableDataChunks{
 			TableDataIR: td,
 		}
 		chunks = append(chunks, chunk)
 	}
 
-	return nil, nil
+	return chunks, nil
 }
 
 type metaData struct {

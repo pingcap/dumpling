@@ -124,14 +124,15 @@ func dumpTable(ctx context.Context, conf *Config, db *sql.DB, dbName string, tab
 			rateLimit := newRateLimit(defaultDumpThreads)
 			var g errgroup.Group
 			for i := 0; i < len(chunks); i++ {
+				index := i
 				g.Go(func() error {
 					rateLimit.getToken()
 					defer rateLimit.putToken()
-					fileName := fmt.Sprintf("%s.%s.%d.sql", dbName, tableName, i)
+					fileName := fmt.Sprintf("%s.%s.%d.sql", dbName, tableName, index)
 					filePath := path.Join(conf.OutputDirPath, fileName)
 					fileWriter, tearDown := buildLazyFileWriter(filePath)
 					intWriter := &InterceptStringWriter{StringWriter: fileWriter}
-					err := WriteInsert(chunks[i], intWriter)
+					err := WriteInsert(chunks[index], intWriter)
 					tearDown()
 					if err != nil {
 						return err
