@@ -373,7 +373,7 @@ func estimateCount(dbName, tableName string, db *sql.DB, field string, conf *Con
 	query.WriteString(fmt.Sprintf("EXPLAIN SELECT `%s` FROM `%s`.`%s`", field, dbName, tableName))
 
 	if conf.Where != "" {
-		query.WriteString(" WHERE")
+		query.WriteString(" WHERE ")
 		query.WriteString(conf.Where)
 	}
 

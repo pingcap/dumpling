@@ -6,6 +6,9 @@ import (
 	"strconv"
 
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
+	"github.com/pingcap/dumpling/v4/log"
 )
 
 // rowIter implements the SQLRowIter interface.
@@ -185,9 +188,10 @@ func splitTableDataIntoChunksIter(td TableDataIR, chunkSize uint64, statementSiz
 func splitTableDataIntoChunks(dbName, tableName string, db *sql.DB, conf *Config) ([]*tableDataChunks, error) {
 	field, err := pickupPossibleField(dbName, tableName, db, conf)
 	if err != nil {
-		return nil, err
+		return nil, withStack(err)
 	}
 	if field == "" {
+		// skip split chunk logic if not found proper field
 		return nil, nil
 	}
 	query := fmt.Sprintf("SELECT MIN(`%s`),MAX(`%s`) FROM `%s`.`%s` ",
@@ -195,6 +199,7 @@ func splitTableDataIntoChunks(dbName, tableName string, db *sql.DB, conf *Config
 	if conf.Where != "" {
 		query = fmt.Sprintf("%s WHERE %s", query, conf.Where)
 	}
+	log.Zap().Debug("split chunks", zap.String("query", query))
 
 	var smin sql.NullString
 	var smax sql.NullString
@@ -231,13 +236,13 @@ func splitTableDataIntoChunks(dbName, tableName string, db *sql.DB, conf *Config
 
 	colTypes, err := GetColumnTypes(db, dbName, tableName)
 	if err != nil {
-		return nil, err
+		return nil, withStack(err)
 	}
 	for cutoff <= max {
 		where := fmt.Sprintf("(`%s` >= %d AND `%s` < %d)", field, cutoff, field, cutoff+estimatedStep)
 		query, err = buildSelectAllQuery(conf, db, dbName, tableName, where)
 		if err != nil {
-			return nil, err
+			return nil, withStack(err)
 		}
 		rows, err := db.Query(query)
 		if err != nil {
