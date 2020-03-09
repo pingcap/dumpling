@@ -2,6 +2,8 @@
 
 set -e
 
+# FIXME: change to latest version after lightning fix issue
+# https://github.com/pingcap/tidb-lightning/issues/277
 TAG="v3.1.0-beta.1"
 pwd=$(pwd)
 
