@@ -32,6 +32,7 @@ func WriteMeta(meta MetaIR, w io.StringWriter) error {
 
 func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
 	fileRowIter := tblIR.Rows()
+	defer fileRowIter.Close()
 	if !fileRowIter.HasNext() {
 		return nil
 	}
