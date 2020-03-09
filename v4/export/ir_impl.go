@@ -238,11 +238,15 @@ func splitTableDataIntoChunks(dbName, tableName string, db *sql.DB, conf *Config
 	if err != nil {
 		return nil, withStack(err)
 	}
+	orderByClause, err := buildOrderByClause(conf, db, dbName, tableName)
+	if err != nil {
+		return nil, withStack(err)
+	}
 	for cutoff <= max {
 		where := fmt.Sprintf("(`%s` >= %d AND `%s` < %d)", field, cutoff, field, cutoff+estimatedStep)
-		query, err = buildSelectAllQuery(conf, db, dbName, tableName, where)
+		query, err = buildSelectAllQuery(conf, db, dbName, tableName, where, orderByClause)
 		if err != nil {
-			return nil, withStack(err)
+			return nil, withStack(errors.WithMessage(err, query))
 		}
 		rows, err := db.Query(query)
 		if err != nil {

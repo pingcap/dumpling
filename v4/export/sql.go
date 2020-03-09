@@ -104,7 +104,7 @@ func SelectAllFromTable(conf *Config, db *sql.DB, database, table string) (Table
 		return nil, err
 	}
 
-	query, err := buildSelectAllQuery(conf, db, database, table, "")
+	query, err := buildSelectAllQuery(conf, db, database, table, "", "")
 	if err != nil {
 		return nil, err
 	}
@@ -124,8 +124,9 @@ func SelectAllFromTable(conf *Config, db *sql.DB, database, table string) (Table
 	}, nil
 }
 
-func buildSelectAllQuery(conf *Config, db *sql.DB, database, table string, where string) (string, error) {
+func buildSelectAllQuery(conf *Config, db *sql.DB, database, table string, where string, orderByClause string) (string, error) {
 	var query strings.Builder
+	var err error
 	query.WriteString("SELECT * FROM ")
 	query.WriteString(database)
 	query.WriteString(".")
@@ -148,9 +149,11 @@ func buildSelectAllQuery(conf *Config, db *sql.DB, database, table string, where
 	}
 
 	if conf.SortByPk {
-		orderByClause, err := buildOrderByClause(conf, db, database, table)
-		if err != nil {
-			return "", err
+		if orderByClause == "" {
+			orderByClause, err = buildOrderByClause(conf, db, database, table)
+			if err != nil {
+				return "", err
+			}
 		}
 		if orderByClause != "" {
 			query.WriteString(" ")
@@ -165,7 +168,7 @@ func buildOrderByClause(conf *Config, db *sql.DB, database, table string) (strin
 	if conf.ServerInfo.ServerType == ServerTypeTiDB {
 		ok, err := SelectTiDBRowID(db, database, table)
 		if err != nil {
-			return "", err
+			return "", withStack(err)
 		}
 		if ok {
 			return "ORDER BY _tidb_rowid", nil
@@ -175,7 +178,7 @@ func buildOrderByClause(conf *Config, db *sql.DB, database, table string) (strin
 	}
 	pkName, err := GetPrimaryKeyName(db, database, table)
 	if err != nil {
-		return "", err
+		return "", withStack(err)
 	}
 	tableContainsPriKey := pkName != ""
 	if tableContainsPriKey {
