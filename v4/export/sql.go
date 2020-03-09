@@ -326,7 +326,6 @@ func simpleQuery(db *sql.DB, sql string, handleOneRow func(*sql.Rows) error) err
 	return nil
 }
 
-
 func pickupPossibleField(dbName, tableName string, db *sql.DB, conf *Config) (string, error) {
 	// If detected server is TiDB, try using _tidb_rowid
 	if conf.ServerInfo.ServerType == ServerTypeTiDB {

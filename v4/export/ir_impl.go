@@ -29,6 +29,10 @@ func newRowIter(rows *sql.Rows, argLen int) *rowIter {
 	return r
 }
 
+func (iter *rowIter) Close() error {
+	return iter.rows.Close()
+}
+
 func (iter *rowIter) Next(row RowReceiver) error {
 	err := decodeFromRows(iter.rows, iter.args, row)
 	iter.hasNext = iter.rows.Next()
@@ -54,6 +58,10 @@ type fileRowIter struct {
 
 	currentStatementSize uint64
 	currentFileSize      uint64
+}
+
+func (c *fileRowIter) Close() error {
+	return c.rowIter.Close()
 }
 
 func (c *fileRowIter) Next(row RowReceiver) error {
@@ -183,7 +191,6 @@ func splitTableDataIntoChunksIter(td TableDataIR, chunkSize uint64, statementSiz
 		statementSizeLimit: statementSize,
 	}
 }
-
 
 func splitTableDataIntoChunks(dbName, tableName string, db *sql.DB, conf *Config) ([]*tableDataChunks, error) {
 	field, err := pickupPossibleField(dbName, tableName, db, conf)

@@ -116,4 +116,3 @@ func (s *testIRImplSuite) TestChunkRowIter(c *C) {
 	rows.Close()
 	c.Assert(sqlRowIter.Next(res), NotNil)
 }
-

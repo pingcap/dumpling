@@ -19,6 +19,8 @@ type SQLRowIter interface {
 	HasNext() bool
 	HasNextSQLRowIter() bool
 	NextSQLRowIter() SQLRowIter
+	// release SQLRowIter
+	Close() error
 }
 
 type RowReceiverStringer interface {
