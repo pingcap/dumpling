@@ -146,27 +146,35 @@ func concurrentDumpTable(ctx context.Context, conf *Config, db *sql.DB, dbName s
 	}()
 
 	var g errgroup.Group
-	select {
-	case chunk := <-chunksCh:
-		g.Go(func() error {
-			fileName := fmt.Sprintf("%s.%s.%d.sql", dbName, tableName, chunk.offset)
-			filePath := path.Join(conf.OutputDirPath, fileName)
-			fileWriter, tearDown := buildLazyFileWriter(filePath)
-			intWriter := &InterceptStringWriter{StringWriter: fileWriter}
-			err := WriteInsert(chunk, intWriter)
-			tearDown()
-			if err != nil {
-				return err
+
+Loop:
+	for {
+		select {
+		case chunk, ok := <-chunksCh:
+			if ok {
+				g.Go(func() error {
+					fileName := fmt.Sprintf("%s.%s.%d.sql", dbName, tableName, chunk.offset)
+					filePath := path.Join(conf.OutputDirPath, fileName)
+					fileWriter, tearDown := buildLazyFileWriter(filePath)
+					intWriter := &InterceptStringWriter{StringWriter: fileWriter}
+					err := WriteInsert(chunk, intWriter)
+					tearDown()
+					if err != nil {
+						return err
+					}
+					if !intWriter.SomethingIsWritten {
+						return nil
+					}
+					return nil
+				})
+			} else {
+				break Loop
 			}
-			if !intWriter.SomethingIsWritten {
-				return nil
-			}
-			return nil
-		})
-	case err := <-errCh:
-		return false, err
-	case <-skipCh:
-		return true, nil
+		case err := <-errCh:
+			return false, err
+		case <-skipCh:
+			return true, nil
+		}
 	}
 	if err := g.Wait(); err != nil {
 		return false, err
