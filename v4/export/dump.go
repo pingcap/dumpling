@@ -17,6 +17,8 @@ func Dump(conf *Config) (err error) {
 	}
 	defer pool.Close()
 
+	adjustConfig(conf)
+
 	conf.ServerInfo, err = detectServerInfo(pool)
 	if err != nil {
 		return err
@@ -113,41 +115,7 @@ func dumpTable(ctx context.Context, conf *Config, db *sql.DB, dbName string, tab
 	}
 
 	if conf.Rows != UnspecifiedSize {
-		// Disable filesize
-		conf.FileSize = UnspecifiedSize
-		// try dump table concurrently by split table to chunks
-		chunks, err := splitTableDataIntoChunks(dbName, tableName, db, conf)
-		if err != nil {
-			return err
-		}
-		if chunks != nil {
-			rateLimit := newRateLimit(defaultDumpThreads)
-			var g errgroup.Group
-			for i := 0; i < len(chunks); i++ {
-				index := i
-				g.Go(func() error {
-					rateLimit.getToken()
-					defer rateLimit.putToken()
-					fileName := fmt.Sprintf("%s.%s.%d.sql", dbName, tableName, index)
-					filePath := path.Join(conf.OutputDirPath, fileName)
-					fileWriter, tearDown := buildLazyFileWriter(filePath)
-					intWriter := &InterceptStringWriter{StringWriter: fileWriter}
-					err := WriteInsert(chunks[index], intWriter)
-					tearDown()
-					if err != nil {
-						return err
-					}
-					if !intWriter.SomethingIsWritten {
-						return nil
-					}
-					return nil
-				})
-			}
-			if err := g.Wait(); err != nil {
-				return err
-			}
-			return nil
-		}
+		concurrentDumpTable(ctx, conf, db, dbName, tableName)
 	}
 
 	tableIR, err := SelectAllFromTable(conf, db, dbName, tableName)
@@ -156,6 +124,40 @@ func dumpTable(ctx context.Context, conf *Config, db *sql.DB, dbName string, tab
 	}
 
 	if err := writer.WriteTableData(ctx, tableIR); err != nil {
+		return err
+	}
+	return nil
+}
+
+func concurrentDumpTable(ctx context.Context, conf *Config, db *sql.DB, dbName string, tableName string) error {
+	// try dump table concurrently by split table to chunks
+	chunksCh := make(chan *tableDataChunks, defaultDumpThreads)
+	errCh := make(chan error, defaultDumpThreads)
+
+	splitTableDataIntoChunks(chunksCh, errCh, dbName, tableName, db, conf)
+
+	var g errgroup.Group
+	select {
+	case chunk := <- chunksCh:
+		g.Go(func() error {
+			fileName := fmt.Sprintf("%s.%s.%d.sql", dbName, tableName, chunk.offset)
+			filePath := path.Join(conf.OutputDirPath, fileName)
+			fileWriter, tearDown := buildLazyFileWriter(filePath)
+			intWriter := &InterceptStringWriter{StringWriter: fileWriter}
+			err := WriteInsert(chunk, intWriter)
+			tearDown()
+			if err != nil {
+				return err
+			}
+			if !intWriter.SomethingIsWritten {
+				return nil
+			}
+			return nil
+		})
+	case err := <- errCh:
+		return err
+	}
+	if err := g.Wait(); err != nil {
 		return err
 	}
 	return nil

@@ -170,6 +170,7 @@ type tableDataChunks struct {
 	rows               SQLRowIter
 	chunkSizeLimit     uint64
 	statementSizeLimit uint64
+	offset        int
 }
 
 func (t *tableDataChunks) Rows() SQLRowIter {
@@ -192,14 +193,14 @@ func splitTableDataIntoChunksIter(td TableDataIR, chunkSize uint64, statementSiz
 	}
 }
 
-func splitTableDataIntoChunks(dbName, tableName string, db *sql.DB, conf *Config) ([]*tableDataChunks, error) {
+func splitTableDataIntoChunks(chunksCh chan *tableDataChunks, errCh chan error, dbName, tableName string, db *sql.DB, conf *Config) {
 	field, err := pickupPossibleField(dbName, tableName, db, conf)
 	if err != nil {
-		return nil, withStack(err)
+		errCh <- withStack(err)
 	}
 	if field == "" {
 		// skip split chunk logic if not found proper field
-		return nil, nil
+		close(chunksCh)
 	}
 	query := fmt.Sprintf("SELECT MIN(`%s`),MAX(`%s`) FROM `%s`.`%s` ",
 		field, field, dbName, tableName)
@@ -215,49 +216,51 @@ func splitTableDataIntoChunks(dbName, tableName string, db *sql.DB, conf *Config
 	}
 	err = simpleQuery(db, query, handleOneRow)
 	if err != nil {
-		return nil, withStack(errors.WithMessage(err, query))
+		log.Zap().Warn("get max min failed", zap.String("field", field),zap.Error(err))
 	}
 	if !smax.Valid || !smin.Valid {
 		// found no data
-		return nil, nil
+		close(chunksCh)
 	}
 	var max uint64
 	var min uint64
 	if max, err = strconv.ParseUint(smax.String, 10, 64); err != nil {
-		return nil, nil
+		errCh <- withStack(err)
 	}
 	if min, err = strconv.ParseUint(smin.String, 10, 64); err != nil {
-		return nil, nil
+		errCh <- withStack(err)
 	}
 
 	count := estimateCount(dbName, tableName, db, field, conf)
 	if count < conf.Rows {
 		// skip chunk logic if estimates are low
-		return nil, nil
+		close(chunksCh)
 	}
 	// every chunk would have eventual adjustments
 	estimatedChunks := count / conf.Rows
 	estimatedStep := (max-min)/estimatedChunks + 1
 	cutoff := min
-	chunks := make([]*tableDataChunks, 0, estimatedChunks)
 
 	colTypes, err := GetColumnTypes(db, dbName, tableName)
 	if err != nil {
-		return nil, withStack(err)
+		errCh <- withStack(err)
 	}
 	orderByClause, err := buildOrderByClause(conf, db, dbName, tableName)
 	if err != nil {
-		return nil, withStack(err)
+		errCh <- withStack(err)
 	}
+
+	offset := 0
 	for cutoff <= max {
+		offset += 1
 		where := fmt.Sprintf("(`%s` >= %d AND `%s` < %d)", field, cutoff, field, cutoff+estimatedStep)
 		query, err = buildSelectAllQuery(conf, db, dbName, tableName, where, orderByClause)
 		if err != nil {
-			return nil, withStack(errors.WithMessage(err, query))
+			errCh <- errors.WithMessage(err, query)
 		}
 		rows, err := db.Query(query)
 		if err != nil {
-			return nil, withStack(errors.WithMessage(err, query))
+			errCh <- errors.WithMessage(err, query)
 		}
 
 		td := &tableData{
@@ -272,11 +275,10 @@ func splitTableDataIntoChunks(dbName, tableName string, db *sql.DB, conf *Config
 		cutoff += estimatedStep
 		chunk := &tableDataChunks{
 			TableDataIR: td,
+			offset: offset,
 		}
-		chunks = append(chunks, chunk)
+		chunksCh <- chunk
 	}
-
-	return chunks, nil
 }
 
 type metaData struct {

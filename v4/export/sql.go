@@ -329,12 +329,11 @@ func simpleQuery(db *sql.DB, sql string, handleOneRow func(*sql.Rows) error) err
 func pickupPossibleField(dbName, tableName string, db *sql.DB, conf *Config) (string, error) {
 	// If detected server is TiDB, try using _tidb_rowid
 	if conf.ServerInfo.ServerType == ServerTypeTiDB {
-		query := fmt.Sprintf("SELECT _tidb_rowid FROM `%s`.`%s` LIMIT 0", dbName, tableName)
-		handleOneRow := func(rows *sql.Rows) error {
-			return rows.Err()
+		ok, err := SelectTiDBRowID(db, dbName, tableName)
+		if err != nil {
+			return "", nil
 		}
-		err := simpleQuery(db, query, handleOneRow)
-		if err == nil {
+		if ok {
 			return "_tidb_rowid", nil
 		}
 	}
