@@ -222,6 +222,7 @@ func splitTableDataIntoChunks(
 	err = simpleQuery(db, query, handleOneRow)
 	if err != nil {
 		log.Zap().Warn("get max min failed", zap.String("field", field), zap.Error(err))
+		errCh <- withStack(err)
 	}
 	if !smax.Valid || !smin.Valid {
 		// found no data
