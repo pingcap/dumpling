@@ -7,6 +7,9 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
+	"github.com/pingcap/dumpling/v4/log"
 )
 
 func ShowDatabases(db *sql.DB) ([]string, error) {
@@ -386,6 +389,8 @@ func estimateCount(dbName, tableName string, db *sql.DB, field string, conf *Con
 		}
 		err := simpleQuery(db, query.String(), handleOneRow)
 		if err != nil {
+			log.Zap().Warn("can't get estimate count from tidb",
+				zap.String("query", query.String()), zap.Error(err))
 			return 0
 		}
 		/* tidb results field name is estRows
@@ -403,14 +408,14 @@ func estimateCount(dbName, tableName string, db *sql.DB, field string, conf *Con
 		}
 	} else {
 		/* mysql result field name is rows
-		+----+-------------+-------+------------+------+---------------+------+---------+------+------+----------+-------+
-		| id | select_type | table | partitions | type | possible_keys | key  | key_len | ref  | rows | filtered | Extra |
-		+----+-------------+-------+------------+------+---------------+------+---------+------+------+----------+-------+
-		|  1 | SIMPLE      | a     | NULL       | ALL  | NULL          | NULL | NULL    | NULL |    1 |   100.00 | NULL  |
-		+----+-------------+-------+------------+------+---------------+------+---------+------+------+----------+-------+
+		+------+-------------+---------+-------+---------------+------+---------+------+----------+-------------+
+		| id   | select_type | table   | type  | possible_keys | key  | key_len | ref  | rows     | Extra       |
+		+------+-------------+---------+-------+---------------+------+---------+------+----------+-------------+
+		|    1 | SIMPLE      | sbtest1 | index | NULL          | k_1  | 4       | NULL | 15000049 | Using index |
+		+------+-------------+---------+-------+---------------+------+---------+------+----------+-------------+
 		*/
-		oneRow := make([]string, 12)
-		addr := make([]interface{}, 12)
+		oneRow := make([]sql.NullString, 10)
+		addr := make([]interface{}, 10)
 		for i := range oneRow {
 			addr[i] = &oneRow[i]
 		}
@@ -419,9 +424,11 @@ func estimateCount(dbName, tableName string, db *sql.DB, field string, conf *Con
 		}
 		err := simpleQuery(db, query.String(), handleOneRow)
 		if err != nil {
+			log.Zap().Warn("can't get estimate count from mysql",
+				zap.String("query", query.String()), zap.Error(err))
 			return 0
 		}
-		estRows, err = strconv.ParseFloat(oneRow[9], 64)
+		estRows, err = strconv.ParseFloat(oneRow[8].String, 64)
 		if err != nil {
 			return 0
 		}
