@@ -96,6 +96,7 @@ func run() {
 	conf.FileSize = fileSize
 	conf.StatementSize = statementSize
 	conf.OutputDirPath = outputDir
+	conf.Consistency = consistency
 	conf.NoViews = noViews
 	conf.Rows = rows
 	conf.Where = where
