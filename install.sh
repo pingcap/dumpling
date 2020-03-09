@@ -2,7 +2,7 @@
 
 set -e
 
-TAG="v4.0.0-beta.1"
+TAG="v3.1.0-beta.1"
 pwd=$(pwd)
 
 mkdir bin/
