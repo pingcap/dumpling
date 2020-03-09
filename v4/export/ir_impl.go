@@ -170,7 +170,7 @@ type tableDataChunks struct {
 	rows               SQLRowIter
 	chunkSizeLimit     uint64
 	statementSizeLimit uint64
-	offset        int
+	offset             int
 }
 
 func (t *tableDataChunks) Rows() SQLRowIter {
@@ -193,14 +193,19 @@ func splitTableDataIntoChunksIter(td TableDataIR, chunkSize uint64, statementSiz
 	}
 }
 
-func splitTableDataIntoChunks(chunksCh chan *tableDataChunks, errCh chan error, dbName, tableName string, db *sql.DB, conf *Config) {
+func splitTableDataIntoChunks(
+	chunksCh chan *tableDataChunks,
+	errCh chan error,
+	skipCh chan struct{},
+	dbName, tableName string, db *sql.DB, conf *Config) {
 	field, err := pickupPossibleField(dbName, tableName, db, conf)
 	if err != nil {
 		errCh <- withStack(err)
 	}
 	if field == "" {
 		// skip split chunk logic if not found proper field
-		close(chunksCh)
+		log.Zap().Debug("skip concurrent dump due to no proper field", zap.String("field", field))
+		skipCh <- struct{}{}
 	}
 	query := fmt.Sprintf("SELECT MIN(`%s`),MAX(`%s`) FROM `%s`.`%s` ",
 		field, field, dbName, tableName)
@@ -216,11 +221,12 @@ func splitTableDataIntoChunks(chunksCh chan *tableDataChunks, errCh chan error, 
 	}
 	err = simpleQuery(db, query, handleOneRow)
 	if err != nil {
-		log.Zap().Warn("get max min failed", zap.String("field", field),zap.Error(err))
+		log.Zap().Warn("get max min failed", zap.String("field", field), zap.Error(err))
 	}
 	if !smax.Valid || !smin.Valid {
 		// found no data
-		close(chunksCh)
+		log.Zap().Debug("skip concurrent dump due to no data")
+		skipCh <- struct{}{}
 	}
 	var max uint64
 	var min uint64
@@ -234,7 +240,11 @@ func splitTableDataIntoChunks(chunksCh chan *tableDataChunks, errCh chan error, 
 	count := estimateCount(dbName, tableName, db, field, conf)
 	if count < conf.Rows {
 		// skip chunk logic if estimates are low
-		close(chunksCh)
+		log.Zap().Debug("skip concurrent dump due to estimate count < rows",
+			zap.Uint64("estimate count", count),
+			zap.Uint64("conf.rows", conf.Rows),
+		)
+		skipCh <- struct{}{}
 	}
 	// every chunk would have eventual adjustments
 	estimatedChunks := count / conf.Rows
@@ -275,10 +285,11 @@ func splitTableDataIntoChunks(chunksCh chan *tableDataChunks, errCh chan error, 
 		cutoff += estimatedStep
 		chunk := &tableDataChunks{
 			TableDataIR: td,
-			offset: offset,
+			offset:      offset,
 		}
 		chunksCh <- chunk
 	}
+	close(chunksCh)
 }
 
 type metaData struct {

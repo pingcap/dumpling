@@ -114,31 +114,40 @@ func dumpTable(ctx context.Context, conf *Config, db *sql.DB, dbName string, tab
 		return err
 	}
 
+	concurrentDumpSkipped := true
 	if conf.Rows != UnspecifiedSize {
-		concurrentDumpTable(ctx, conf, db, dbName, tableName)
+		concurrentDumpSkipped, err = concurrentDumpTable(ctx, conf, db, dbName, tableName)
+		if err != nil {
+			return err
+		}
 	}
 
-	tableIR, err := SelectAllFromTable(conf, db, dbName, tableName)
-	if err != nil {
-		return err
-	}
+	if concurrentDumpSkipped {
+		tableIR, err := SelectAllFromTable(conf, db, dbName, tableName)
+		if err != nil {
+			return err
+		}
 
-	if err := writer.WriteTableData(ctx, tableIR); err != nil {
-		return err
+		if err := writer.WriteTableData(ctx, tableIR); err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
-func concurrentDumpTable(ctx context.Context, conf *Config, db *sql.DB, dbName string, tableName string) error {
+func concurrentDumpTable(ctx context.Context, conf *Config, db *sql.DB, dbName string, tableName string) (bool, error) {
 	// try dump table concurrently by split table to chunks
 	chunksCh := make(chan *tableDataChunks, defaultDumpThreads)
 	errCh := make(chan error, defaultDumpThreads)
+	skipCh := make(chan struct{})
 
-	splitTableDataIntoChunks(chunksCh, errCh, dbName, tableName, db, conf)
+	go func() {
+		splitTableDataIntoChunks(chunksCh, errCh, skipCh, dbName, tableName, db, conf)
+	}()
 
 	var g errgroup.Group
 	select {
-	case chunk := <- chunksCh:
+	case chunk := <-chunksCh:
 		g.Go(func() error {
 			fileName := fmt.Sprintf("%s.%s.%d.sql", dbName, tableName, chunk.offset)
 			filePath := path.Join(conf.OutputDirPath, fileName)
@@ -154,11 +163,13 @@ func concurrentDumpTable(ctx context.Context, conf *Config, db *sql.DB, dbName s
 			}
 			return nil
 		})
-	case err := <- errCh:
-		return err
+	case err := <-errCh:
+		return false, err
+	case <-skipCh:
+		return true, nil
 	}
 	if err := g.Wait(); err != nil {
-		return err
+		return false, err
 	}
-	return nil
+	return false, nil
 }
