@@ -326,7 +326,7 @@ func pickupPossibleField(dbName, tableName string, db *sql.DB, conf *Config) (st
 	if conf.ServerInfo.ServerType == ServerTypeTiDB {
 		query := fmt.Sprintf("SELECT _tidb_rowid FROM `%s`.`%s` LIMIT 0", dbName, tableName)
 		handleOneRow := func(rows *sql.Rows) error {
-			return nil
+			return rows.Err()
 		}
 		err := simpleQuery(db, query, handleOneRow)
 		if err == nil {
@@ -359,8 +359,7 @@ func pickupPossibleField(dbName, tableName string, db *sql.DB, conf *Config) (st
 		return "", err
 	}
 	switch strings.ToLower(fieldType) {
-	case "int":
-	case "bigint":
+	case "int", "bigint":
 		return fieldName, nil
 	}
 	return "", nil

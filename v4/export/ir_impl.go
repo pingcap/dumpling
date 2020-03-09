@@ -196,26 +196,28 @@ func splitTableDataIntoChunks(dbName, tableName string, db *sql.DB, conf *Config
 		query = fmt.Sprintf("%s WHERE %s", query, conf.Where)
 	}
 
-	var smin string
-	var smax string
+	var smin sql.NullString
+	var smax sql.NullString
 	handleOneRow := func(rows *sql.Rows) error {
 		return rows.Scan(&smin, &smax)
-	}
-	var max uint64
-	var min uint64
-	if max, err = strconv.ParseUint(smax, 10, 64); err != nil {
-		return nil, nil
-	}
-	if min, err = strconv.ParseUint(smin, 10, 64); err != nil {
-		return nil, nil
 	}
 	err = simpleQuery(db, query, handleOneRow)
 	if err != nil {
 		return nil, withStack(errors.WithMessage(err, query))
 	}
-	if min == max {
+	if !smax.Valid || !smin.Valid {
+		// found no data
 		return nil, nil
 	}
+	var max uint64
+	var min uint64
+	if max, err = strconv.ParseUint(smax.String, 10, 64); err != nil {
+		return nil, nil
+	}
+	if min, err = strconv.ParseUint(smin.String, 10, 64); err != nil {
+		return nil, nil
+	}
+
 	count := estimateCount(dbName, tableName, db, field, conf)
 	if count < conf.Rows {
 		// skip chunk logic if estimates are low
