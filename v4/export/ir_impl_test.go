@@ -117,11 +117,3 @@ func (s *testIRImplSuite) TestChunkRowIter(c *C) {
 	c.Assert(sqlRowIter.Next(res), NotNil)
 }
 
-func (s *testIRImplSuite) TestPossiblePickupField(c *C) {
-	db, mock, err := sqlmock.New()
-	c.Assert(err, IsNil)
-	defer db.Close()
-
-
-}
-
