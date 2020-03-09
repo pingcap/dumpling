@@ -150,6 +150,8 @@ func concurrentDumpTable(ctx context.Context, conf *Config, db *sql.DB, dbName s
 Loop:
 	for {
 		select {
+		case <- ctx.Done():
+			return false, nil
 		case chunk, ok := <-chunksCh:
 			if ok {
 				g.Go(func() error {
