@@ -42,7 +42,7 @@ func (f *SimpleWriter) WriteTableData(ctx context.Context, ir TableDataIR) error
 	log.Zap().Debug("start dumping table...", zap.String("table", ir.TableName()))
 
 	chunksIter := splitTableDataIntoChunksIter(ir, f.cfg.FileSize, f.cfg.StatementSize)
-	defer chunksIter.rows.Close()
+	defer chunksIter.Rows().Close()
 	chunkCount := 0
 	fileName := fmt.Sprintf("%s.%s.sql", ir.DatabaseName(), ir.TableName())
 	if f.cfg.FileSize != UnspecifiedSize {

@@ -160,7 +160,7 @@ Loop:
 					fileWriter, tearDown := buildLazyFileWriter(filePath)
 					intWriter := &InterceptStringWriter{StringWriter: fileWriter}
 					err := WriteInsert(chunk, intWriter)
-					defer chunk.rows.Close()
+					defer chunk.Rows().Close()
 					tearDown()
 					if err != nil {
 						return err
