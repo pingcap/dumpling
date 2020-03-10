@@ -149,12 +149,11 @@ Loop:
 			return false, nil
 		case chunksIter, ok := <-chunksIterCh:
 			if ok {
-				g.Go(func() error {
-					return writer.WriteTableData(ctx, chunksIter)
-				})
-			} else {
 				break Loop
 			}
+			g.Go(func() error {
+				return writer.WriteTableData(ctx, chunksIter)
+			})
 		}
 	}
 	if err := g.Wait(); err != nil {
