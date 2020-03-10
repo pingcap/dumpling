@@ -115,7 +115,7 @@ func dumpTable(ctx context.Context, conf *Config, db *sql.DB, dbName string, tab
 	}
 
 	if conf.Rows != UnspecifiedSize {
-		concurrentDumpSkipped, err = concurrentDumpTable(ctx, conf, db, dbName, tableName)
+		dumpFinished, err := concurrentDumpTable(ctx, conf, db, dbName, tableName)
 		if err != nil {
 			return err
 		}
