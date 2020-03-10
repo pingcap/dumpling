@@ -14,7 +14,7 @@ import (
 type Writer interface {
 	WriteDatabaseMeta(ctx context.Context, db, createSQL string) error
 	WriteTableMeta(ctx context.Context, db, table, createSQL string) error
-	WriteTableData(ctx context.Context, ir TableDataIR) error
+	WriteTableData(ctx context.Context, dbName, tableName, fileName string, chunksIter *tableDataChunks) error
 }
 
 type SimpleWriter struct {
@@ -38,17 +38,18 @@ func (f *SimpleWriter) WriteTableMeta(ctx context.Context, db, table, createSQL 
 	return writeMetaToFile(db, createSQL, filePath)
 }
 
-func (f *SimpleWriter) WriteTableData(ctx context.Context, ir TableDataIR) error {
-	log.Zap().Debug("start dumping table...", zap.String("table", ir.TableName()))
-
-	chunksIter := splitTableDataIntoChunksIter(ir, f.cfg.FileSize, f.cfg.StatementSize)
+func (f *SimpleWriter) WriteTableData(ctx context.Context, dbName, tableName, fileName string, chunksIter *tableDataChunks) error {
 	defer chunksIter.Rows().Close()
-	chunkCount := 0
-	fileName := fmt.Sprintf("%s.%s.sql", ir.DatabaseName(), ir.TableName())
-	if f.cfg.FileSize != UnspecifiedSize {
-		fileName = fmt.Sprintf("%s.%s.%d.sql", ir.DatabaseName(), ir.TableName(), chunkCount)
+	log.Zap().Debug("start dumping table...", zap.String("table", tableName))
+
+	if fileName == "" {
+		fileName = fmt.Sprintf("%s.%s.sql", dbName, tableName)
+		if f.cfg.FileSize != UnspecifiedSize {
+			fileName = fmt.Sprintf("%s.%s.%d.sql", dbName, tableName, 0)
+		}
 	}
 
+	chunkCount := 0
 	for {
 		filePath := path.Join(f.cfg.OutputDirPath, fileName)
 		fileWriter, tearDown := buildLazyFileWriter(filePath)
@@ -67,10 +68,10 @@ func (f *SimpleWriter) WriteTableData(ctx context.Context, ir TableDataIR) error
 			break
 		}
 		chunkCount += 1
-		fileName = fmt.Sprintf("%s.%s.%d.sql", ir.DatabaseName(), ir.TableName(), chunkCount)
+		fileName = fmt.Sprintf("%s.%s.%d.sql", dbName, tableName, chunkCount)
 	}
 	log.Zap().Debug("dumping table successfully",
-		zap.String("table", ir.TableName()))
+		zap.String("table", tableName))
 	return nil
 }
 

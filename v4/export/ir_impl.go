@@ -171,7 +171,7 @@ type tableDataChunks struct {
 	rows               SQLRowIter
 	chunkSizeLimit     uint64
 	statementSizeLimit uint64
-	offset             int
+	fileIndex          int
 }
 
 func (t *tableDataChunks) Rows() SQLRowIter {
@@ -186,7 +186,7 @@ func (t *tableDataChunks) Rows() SQLRowIter {
 	}
 }
 
-func splitTableDataIntoChunksIter(td TableDataIR, chunkSize uint64, statementSize uint64) *tableDataChunks {
+func buildChunksIter(td TableDataIR, chunkSize uint64, statementSize uint64) *tableDataChunks {
 	return &tableDataChunks{
 		TableDataIR:        td,
 		chunkSizeLimit:     chunkSize,
@@ -196,7 +196,7 @@ func splitTableDataIntoChunksIter(td TableDataIR, chunkSize uint64, statementSiz
 
 func splitTableDataIntoChunks(
 	ctx context.Context,
-	chunksCh chan *tableDataChunks,
+	chunksIterCh chan *tableDataChunks,
 	errCh chan error,
 	skipCh chan struct{},
 	dbName, tableName string, db *sql.DB, conf *Config) {
@@ -287,15 +287,15 @@ LOOP:
 		cutoff += estimatedStep
 		chunk := &tableDataChunks{
 			TableDataIR: td,
-			offset:      offset,
+			fileIndex:   offset,
 		}
 		select {
 		case <-ctx.Done():
 			break LOOP
-		case chunksCh <- chunk:
+		case chunksIterCh <- chunk:
 		}
 	}
-	close(chunksCh)
+	close(chunksIterCh)
 }
 
 type metaData struct {

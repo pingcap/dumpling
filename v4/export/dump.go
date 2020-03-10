@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"path"
 
 	_ "github.com/go-sql-driver/mysql"
 	"golang.org/x/sync/errgroup"
@@ -115,7 +114,7 @@ func dumpTable(ctx context.Context, conf *Config, db *sql.DB, dbName string, tab
 	}
 
 	if conf.Rows != UnspecifiedSize {
-		dumpFinished, err := concurrentDumpTable(ctx, conf, db, dbName, tableName)
+		dumpFinished, err := concurrentDumpTable(ctx, writer, conf, db, dbName, tableName)
 		if err != nil {
 			return err
 		}
@@ -129,15 +128,16 @@ func dumpTable(ctx context.Context, conf *Config, db *sql.DB, dbName string, tab
 		return err
 	}
 
-	if err := writer.WriteTableData(ctx, tableIR); err != nil {
+	chunksIter := buildChunksIter(tableIR, conf.FileSize, conf.StatementSize)
+	if err := writer.WriteTableData(ctx, dbName, tableName, "", chunksIter); err != nil {
 		return err
 	}
 	return nil
 }
 
-func concurrentDumpTable(ctx context.Context, conf *Config, db *sql.DB, dbName string, tableName string) (bool, error) {
+func concurrentDumpTable(ctx context.Context, writer Writer, conf *Config, db *sql.DB, dbName string, tableName string) (bool, error) {
 	// try dump table concurrently by split table to chunks
-	chunksCh := make(chan *tableDataChunks, defaultDumpThreads)
+	chunksIterCh := make(chan *tableDataChunks, defaultDumpThreads)
 	errCh := make(chan error, defaultDumpThreads)
 	skipCh := make(chan struct{})
 
@@ -145,7 +145,7 @@ func concurrentDumpTable(ctx context.Context, conf *Config, db *sql.DB, dbName s
 	defer cancel1()
 	var g errgroup.Group
 	g.Go(func() error {
-		splitTableDataIntoChunks(ctx1, chunksCh, errCh, skipCh, dbName, tableName, db, conf)
+		splitTableDataIntoChunks(ctx1, chunksIterCh, errCh, skipCh, dbName, tableName, db, conf)
 		return nil
 	})
 
@@ -154,23 +154,11 @@ Loop:
 		select {
 		case <-ctx.Done():
 			return false, nil
-		case chunk, ok := <-chunksCh:
+		case chunksIter, ok := <-chunksIterCh:
 			if ok {
 				g.Go(func() error {
-					fileName := fmt.Sprintf("%s.%s.%d.sql", dbName, tableName, chunk.offset)
-					filePath := path.Join(conf.OutputDirPath, fileName)
-					fileWriter, tearDown := buildLazyFileWriter(filePath)
-					intWriter := &InterceptStringWriter{StringWriter: fileWriter}
-					err := WriteInsert(chunk, intWriter)
-					defer chunk.Rows().Close()
-					tearDown()
-					if err != nil {
-						return err
-					}
-					if !intWriter.SomethingIsWritten {
-						return nil
-					}
-					return nil
+					fileName := fmt.Sprintf("%s.%s.%d.sql", dbName, tableName, chunksIter.fileIndex)
+					return writer.WriteTableData(ctx, dbName, tableName, fileName, chunksIter)
 				})
 			} else {
 				break Loop
