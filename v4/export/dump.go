@@ -148,7 +148,7 @@ Loop:
 		case <-linear:
 			return false, nil
 		case chunksIter, ok := <-chunksIterCh:
-			if ok {
+			if !ok {
 				break Loop
 			}
 			g.Go(func() error {

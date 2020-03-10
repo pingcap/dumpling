@@ -104,7 +104,7 @@ func SelectAllFromTable(conf *Config, db *sql.DB, database, table string) (Table
 		return nil, err
 	}
 
-	query, err := buildSelectAllQuery(conf, db, database, table, "", "")
+	query, err := buildSelectQuery(conf, db, database, table, "", "")
 	if err != nil {
 		return nil, err
 	}
@@ -124,7 +124,7 @@ func SelectAllFromTable(conf *Config, db *sql.DB, database, table string) (Table
 	}, nil
 }
 
-func buildSelectAllQuery(conf *Config, db *sql.DB, database, table string, where string, orderByClause string) (string, error) {
+func buildSelectQuery(conf *Config, db *sql.DB, database, table string, where string, orderByClause string) (string, error) {
 	var query strings.Builder
 	var err error
 	query.WriteString("SELECT * FROM ")
@@ -348,7 +348,7 @@ func pickupPossibleField(dbName, tableName string, db *sql.DB, conf *Config) (st
 	}
 
 	query := fmt.Sprintf("SELECT DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS "+
-		"WHERE TABLE_NAME = `%s` AND COLUMN_NAME = `%s`", tableName, fieldName)
+		"WHERE TABLE_NAME = '%s' AND COLUMN_NAME = '%s'", tableName, fieldName)
 	var fieldType string
 	row := db.QueryRow(query)
 	err = row.Scan(&fieldType)

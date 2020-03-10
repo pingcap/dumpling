@@ -282,7 +282,7 @@ LOOP:
 	for cutoff <= max {
 		chunkIndex += 1
 		where := fmt.Sprintf("(`%s` >= %d AND `%s` < %d)", field, cutoff, field, cutoff+estimatedStep)
-		query, err = buildSelectAllQuery(conf, db, dbName, tableName, where, orderByClause)
+		query, err = buildSelectQuery(conf, db, dbName, tableName, where, orderByClause)
 		if err != nil {
 			errCh <- withStack(err)
 			return
