@@ -1,6 +1,7 @@
 package export
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"strconv"
@@ -194,6 +195,7 @@ func splitTableDataIntoChunksIter(td TableDataIR, chunkSize uint64, statementSiz
 }
 
 func splitTableDataIntoChunks(
+	ctx context.Context,
 	chunksCh chan *tableDataChunks,
 	errCh chan error,
 	skipCh chan struct{},
@@ -216,10 +218,8 @@ func splitTableDataIntoChunks(
 
 	var smin sql.NullString
 	var smax sql.NullString
-	handleOneRow := func(rows *sql.Rows) error {
-		return rows.Scan(&smin, &smax)
-	}
-	err = simpleQuery(db, query, handleOneRow)
+	row := db.QueryRow(query)
+	err = row.Scan(&smin, &smax)
 	if err != nil {
 		log.Zap().Warn("get max min failed", zap.String("field", field), zap.Error(err))
 		errCh <- withStack(err)
@@ -262,6 +262,7 @@ func splitTableDataIntoChunks(
 	}
 
 	offset := 0
+LOOP:
 	for cutoff <= max {
 		offset += 1
 		where := fmt.Sprintf("(`%s` >= %d AND `%s` < %d)", field, cutoff, field, cutoff+estimatedStep)
@@ -288,7 +289,11 @@ func splitTableDataIntoChunks(
 			TableDataIR: td,
 			offset:      offset,
 		}
-		chunksCh <- chunk
+		select {
+		case <-ctx.Done():
+			break LOOP
+		case chunksCh <- chunk:
+		}
 	}
 	close(chunksCh)
 }

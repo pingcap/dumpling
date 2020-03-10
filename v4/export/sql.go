@@ -235,24 +235,12 @@ func GetPrimaryKeyName(db *sql.DB, database, table string) (string, error) {
 }
 
 func GetUniqueIndexName(db *sql.DB, database, table string) (string, error) {
-	uniKeyQuery := `SELECT column_name FROM information_schema.columns 
-		WHERE table_schema = ? AND table_name = ? AND column_key = 'UNI';`
-	stmt, err := db.Prepare(uniKeyQuery)
-	if err != nil {
-		return "", err
-	}
-	defer stmt.Close()
-	rows, err := stmt.Query(database, table)
-	if err != nil {
-		return "", withStack(errors.WithMessage(err, uniKeyQuery))
-	}
-
+	uniKeyQuery := fmt.Sprintf("SELECT column_name FROM information_schema.columns " +
+		"WHERE table_schema = `%s` AND table_name = `%s` AND column_key = 'UNI';", database, table)
 	var colName string
-	for rows.Next() {
-		if err := rows.Scan(&colName); err != nil {
-			rows.Close()
-			return "", withStack(err)
-		}
+	row := db.QueryRow(uniKeyQuery)
+	if err := row.Scan(&colName); err != nil {
+		return "", withStack(errors.WithMessage(err, uniKeyQuery))
 	}
 	return colName, nil
 }
@@ -353,14 +341,12 @@ func pickupPossibleField(dbName, tableName string, db *sql.DB, conf *Config) (st
 	}
 
 	query := fmt.Sprintf("SELECT DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS "+
-		"WHERE table_name = '%s' AND COLUMN_NAME = '%s'", tableName, fieldName)
+		"WHERE TABLE_NAME = `%s` AND COLUMN_NAME = `%s`", tableName, fieldName)
 	var fieldType string
-	handleOneRow := func(rows *sql.Rows) error {
-		return rows.Scan(&fieldType)
-	}
-	err = simpleQuery(db, query, handleOneRow)
+	row := db.QueryRow(query)
+	err = row.Scan(&fieldType)
 	if err != nil {
-		return "", err
+		return "", withStack(errors.WithMessage(err, query))
 	}
 	switch strings.ToLower(fieldType) {
 	case "int", "bigint":
@@ -385,10 +371,8 @@ func estimateCount(dbName, tableName string, db *sql.DB, field string, conf *Con
 		for i := range oneRow {
 			addr[i] = &oneRow[i]
 		}
-		handleOneRow := func(rows *sql.Rows) error {
-			return rows.Scan(addr...)
-		}
-		err := simpleQuery(db, query.String(), handleOneRow)
+		row := db.QueryRow(query.String())
+		err := row.Scan(addr...)
 		if err != nil {
 			log.Zap().Warn("can't get estimate count from tidb",
 				zap.String("query", query.String()), zap.Error(err))
@@ -420,10 +404,8 @@ func estimateCount(dbName, tableName string, db *sql.DB, field string, conf *Con
 		for i := range oneRow {
 			addr[i] = &oneRow[i]
 		}
-		handleOneRow := func(rows *sql.Rows) error {
-			return rows.Scan(addr...)
-		}
-		err := simpleQuery(db, query.String(), handleOneRow)
+		row := db.QueryRow(query.String())
+		err := row.Scan(addr...)
 		if err != nil {
 			log.Zap().Warn("can't get estimate count from mysql",
 				zap.String("query", query.String()), zap.Error(err))
