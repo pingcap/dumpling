@@ -28,8 +28,8 @@ const (
 	mariadbShowMasterStatusFieldNum = 4
 )
 
-func newGlobalMetadata(outputDir string) globalMetadata {
-	return globalMetadata{
+func newGlobalMetadata(outputDir string) *globalMetadata {
+	return &globalMetadata{
 		filePath: path.Join(outputDir, metadataPath),
 	}
 }
