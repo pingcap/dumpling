@@ -235,12 +235,16 @@ func GetPrimaryKeyName(db *sql.DB, database, table string) (string, error) {
 }
 
 func GetUniqueIndexName(db *sql.DB, database, table string) (string, error) {
-	uniKeyQuery := fmt.Sprintf("SELECT column_name FROM information_schema.columns " +
+	uniKeyQuery := fmt.Sprintf("SELECT column_name FROM information_schema.columns "+
 		"WHERE table_schema = `%s` AND table_name = `%s` AND column_key = 'UNI';", database, table)
 	var colName string
 	row := db.QueryRow(uniKeyQuery)
 	if err := row.Scan(&colName); err != nil {
-		return "", withStack(errors.WithMessage(err, uniKeyQuery))
+		if err == sql.ErrNoRows {
+			return "", nil
+		} else {
+			return "", withStack(errors.WithMessage(err, uniKeyQuery))
+		}
 	}
 	return colName, nil
 }
@@ -333,6 +337,9 @@ func pickupPossibleField(dbName, tableName string, db *sql.DB, conf *Config) (st
 	// try to use first uniqueIndex
 	if fieldName == "" {
 		fieldName, err = GetUniqueIndexName(db, dbName, tableName)
+		if err != nil {
+			return "", err
+		}
 	}
 
 	// there is no proper index
@@ -346,7 +353,11 @@ func pickupPossibleField(dbName, tableName string, db *sql.DB, conf *Config) (st
 	row := db.QueryRow(query)
 	err = row.Scan(&fieldType)
 	if err != nil {
-		return "", withStack(errors.WithMessage(err, query))
+		if err == sql.ErrNoRows {
+			return "", nil
+		} else {
+			return "", withStack(errors.WithMessage(err, query))
+		}
 	}
 	switch strings.ToLower(fieldType) {
 	case "int", "bigint":

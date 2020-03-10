@@ -119,20 +119,18 @@ func dumpTable(ctx context.Context, conf *Config, db *sql.DB, dbName string, tab
 		if err != nil {
 			return err
 		}
-		if  dumpFinished {
-		    return nil
+		if dumpFinished {
+			return nil
 		}
 	}
 
-	if concurrentDumpSkipped {
-		tableIR, err := SelectAllFromTable(conf, db, dbName, tableName)
-		if err != nil {
-			return err
-		}
+	tableIR, err := SelectAllFromTable(conf, db, dbName, tableName)
+	if err != nil {
+		return err
+	}
 
-		if err := writer.WriteTableData(ctx, tableIR); err != nil {
-			return err
-		}
+	if err := writer.WriteTableData(ctx, tableIR); err != nil {
+		return err
 	}
 	return nil
 }
@@ -152,7 +150,7 @@ func concurrentDumpTable(ctx context.Context, conf *Config, db *sql.DB, dbName s
 Loop:
 	for {
 		select {
-		case <- ctx.Done():
+		case <-ctx.Done():
 			return false, nil
 		case chunk, ok := <-chunksCh:
 			if ok {
