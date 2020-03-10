@@ -207,12 +207,15 @@ func splitTableDataIntoChunks(
 	field, err := pickupPossibleField(dbName, tableName, db, conf)
 	if err != nil {
 		errCh <- withStack(err)
+		return
 	}
 	if field == "" {
 		// skip split chunk logic if not found proper field
 		log.Zap().Debug("skip concurrent dump due to no proper field", zap.String("field", field))
 		linear <- struct{}{}
+		return
 	}
+
 	query := fmt.Sprintf("SELECT MIN(`%s`),MAX(`%s`) FROM `%s`.`%s` ",
 		field, field, dbName, tableName)
 	if conf.Where != "" {
@@ -225,21 +228,26 @@ func splitTableDataIntoChunks(
 	row := db.QueryRow(query)
 	err = row.Scan(&smin, &smax)
 	if err != nil {
-		log.Zap().Warn("get max min failed", zap.String("field", field), zap.Error(err))
+		log.Zap().Error("split chunks - get max min failed", zap.String("query", query), zap.Error(err))
 		errCh <- withStack(err)
+		return
 	}
 	if !smax.Valid || !smin.Valid {
 		// found no data
-		log.Zap().Debug("skip concurrent dump due to no data")
-		linear <- struct{}{}
+		log.Zap().Warn("no data to dump", zap.String("schema", dbName), zap.String("table", tableName))
+		close(tableDataIRCh)
+		return
 	}
+
 	var max uint64
 	var min uint64
 	if max, err = strconv.ParseUint(smax.String, 10, 64); err != nil {
-		errCh <- withStack(err)
+		errCh <- errors.WithMessagef(err, "fail to convert max value %s in query %s", smax.String, query)
+		return
 	}
 	if min, err = strconv.ParseUint(smin.String, 10, 64); err != nil {
-		errCh <- withStack(err)
+		errCh <- errors.WithMessagef(err, "fail to convert min value %s in query %s", smin.String, query)
+		return
 	}
 
 	count := estimateCount(dbName, tableName, db, field, conf)
@@ -250,7 +258,9 @@ func splitTableDataIntoChunks(
 			zap.Uint64("conf.rows", conf.Rows),
 		)
 		linear <- struct{}{}
+		return
 	}
+
 	// every chunk would have eventual adjustments
 	estimatedChunks := count / conf.Rows
 	estimatedStep := (max-min)/estimatedChunks + 1
@@ -259,10 +269,12 @@ func splitTableDataIntoChunks(
 	colTypes, err := GetColumnTypes(db, dbName, tableName)
 	if err != nil {
 		errCh <- withStack(err)
+		return
 	}
 	orderByClause, err := buildOrderByClause(conf, db, dbName, tableName)
 	if err != nil {
 		errCh <- withStack(err)
+		return
 	}
 
 	chunkIndex := 0
@@ -272,11 +284,14 @@ LOOP:
 		where := fmt.Sprintf("(`%s` >= %d AND `%s` < %d)", field, cutoff, field, cutoff+estimatedStep)
 		query, err = buildSelectAllQuery(conf, db, dbName, tableName, where, orderByClause)
 		if err != nil {
-			errCh <- errors.WithMessage(err, query)
+			errCh <- withStack(err)
+			return
 		}
+
 		rows, err := db.Query(query)
 		if err != nil {
 			errCh <- errors.WithMessage(err, query)
+			return
 		}
 
 		td := &tableData{
