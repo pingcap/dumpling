@@ -104,10 +104,12 @@ func SelectAllFromTable(conf *Config, db *sql.DB, database, table string) (Table
 		return nil, err
 	}
 
-	query, err := buildSelectQuery(conf, db, database, table, "", "")
+	orderByClause, err := buildOrderByClause(conf, db, database, table)
 	if err != nil {
 		return nil, err
 	}
+
+	query := buildSelectQuery(database, table, buildWhereCondition(conf, ""), orderByClause)
 	rows, err := db.Query(query)
 	if err != nil {
 		return nil, withStack(errors.WithMessage(err, query))
@@ -124,47 +126,30 @@ func SelectAllFromTable(conf *Config, db *sql.DB, database, table string) (Table
 	}, nil
 }
 
-func buildSelectQuery(conf *Config, db *sql.DB, database, table string, where string, orderByClause string) (string, error) {
+func buildSelectQuery(database, table string, where string, orderByClause string) string {
 	var query strings.Builder
-	var err error
 	query.WriteString("SELECT * FROM ")
 	query.WriteString(database)
 	query.WriteString(".")
 	query.WriteString(table)
 
-	separator := "WHERE"
-	if conf.Where != "" {
-		query.WriteString(" ")
-		query.WriteString(separator)
-		query.WriteString(" ")
-		query.WriteString(conf.Where)
-		separator = "AND"
-	}
-
 	if where != "" {
-		query.WriteString(" ")
-		query.WriteString(separator)
 		query.WriteString(" ")
 		query.WriteString(where)
 	}
 
-	if conf.SortByPk {
-		if orderByClause == "" {
-			orderByClause, err = buildOrderByClause(conf, db, database, table)
-			if err != nil {
-				return "", err
-			}
-		}
-		if orderByClause != "" {
-			query.WriteString(" ")
-			query.WriteString(orderByClause)
-		}
+	if orderByClause != "" {
+		query.WriteString(" ")
+		query.WriteString(orderByClause)
 	}
 
-	return query.String(), nil
+	return query.String()
 }
 
 func buildOrderByClause(conf *Config, db *sql.DB, database, table string) (string, error) {
+	if !conf.SortByPk {
+		return "", nil
+	}
 	if conf.ServerInfo.ServerType == ServerTypeTiDB {
 		ok, err := SelectTiDBRowID(db, database, table)
 		if err != nil {
@@ -367,12 +352,11 @@ func pickupPossibleField(dbName, tableName string, db *sql.DB, conf *Config) (st
 }
 
 func estimateCount(dbName, tableName string, db *sql.DB, field string, conf *Config) uint64 {
-	var query strings.Builder
-	query.WriteString(fmt.Sprintf("EXPLAIN SELECT `%s` FROM `%s`.`%s`", field, dbName, tableName))
+	query := fmt.Sprintf("EXPLAIN SELECT `%s` FROM `%s`.`%s`", field, dbName, tableName)
 
 	if conf.Where != "" {
-		query.WriteString(" WHERE ")
-		query.WriteString(conf.Where)
+		query += " WHERE "
+		query += conf.Where
 	}
 
 	var estRows float64
@@ -382,11 +366,11 @@ func estimateCount(dbName, tableName string, db *sql.DB, field string, conf *Con
 		for i := range oneRow {
 			addr[i] = &oneRow[i]
 		}
-		row := db.QueryRow(query.String())
+		row := db.QueryRow(query)
 		err := row.Scan(addr...)
 		if err != nil {
 			log.Zap().Warn("can't get estimate count from tidb",
-				zap.String("query", query.String()), zap.Error(err))
+				zap.String("query", query), zap.Error(err))
 			return 0
 		}
 		/* tidb results field name is estRows
@@ -400,6 +384,8 @@ func estimateCount(dbName, tableName string, db *sql.DB, field string, conf *Con
 
 		estRows, err = strconv.ParseFloat(oneRow[1], 64)
 		if err != nil {
+			log.Zap().Warn("can't get parse estRows from tidb",
+				zap.String("query", query), zap.Error(err))
 			return 0
 		}
 	} else {
@@ -415,15 +401,17 @@ func estimateCount(dbName, tableName string, db *sql.DB, field string, conf *Con
 		for i := range oneRow {
 			addr[i] = &oneRow[i]
 		}
-		row := db.QueryRow(query.String())
+		row := db.QueryRow(query)
 		err := row.Scan(addr...)
 		if err != nil {
 			log.Zap().Warn("can't get estimate count from mysql",
-				zap.String("query", query.String()), zap.Error(err))
+				zap.String("query", query), zap.Error(err))
 			return 0
 		}
 		estRows, err = strconv.ParseFloat(oneRow[8].String, 64)
 		if err != nil {
+			log.Zap().Warn("can't get parse rows from mysql",
+				zap.String("query", query), zap.Error(err))
 			return 0
 		}
 	}
@@ -432,4 +420,23 @@ func estimateCount(dbName, tableName string, db *sql.DB, field string, conf *Con
 	}
 
 	return 0
+}
+
+func buildWhereCondition(conf *Config, where string) string {
+	var query strings.Builder
+	separator := "WHERE"
+	if conf.Where != "" {
+		query.WriteString(" ")
+		query.WriteString(separator)
+		query.WriteString(" ")
+		query.WriteString(conf.Where)
+		separator = "AND"
+	}
+	if where != "" {
+		query.WriteString(" ")
+		query.WriteString(separator)
+		query.WriteString(" ")
+		query.WriteString(where)
+	}
+	return query.String()
 }
