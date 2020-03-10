@@ -261,10 +261,10 @@ func splitTableDataIntoChunks(
 		errCh <- withStack(err)
 	}
 
-	offset := 0
+	fileIndex := 0
 LOOP:
 	for cutoff <= max {
-		offset += 1
+		fileIndex += 1
 		where := fmt.Sprintf("(`%s` >= %d AND `%s` < %d)", field, cutoff, field, cutoff+estimatedStep)
 		query, err = buildSelectAllQuery(conf, db, dbName, tableName, where, orderByClause)
 		if err != nil {
@@ -287,7 +287,7 @@ LOOP:
 		cutoff += estimatedStep
 		chunk := &tableDataChunks{
 			TableDataIR: td,
-			fileIndex:   offset,
+			fileIndex:   fileIndex,
 		}
 		select {
 		case <-ctx.Done():
