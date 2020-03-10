@@ -115,7 +115,7 @@ func (m globalMetadata) getGlobalMetaData(db *sql.DB, serverType ServerType) err
 		}
 		m.logFile = str[fileFieldIndex]
 		m.pos = str[posFieldIndex]
-		err = db.QueryRow("select @@global.gtid_binlog_pos").Scan(&m.gtidSet)
+		err = db.QueryRow("SELECT @@global.gtid_binlog_pos").Scan(&m.gtidSet)
 		if err != nil {
 			return err
 		}
