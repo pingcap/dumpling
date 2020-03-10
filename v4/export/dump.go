@@ -141,9 +141,11 @@ func concurrentDumpTable(ctx context.Context, conf *Config, db *sql.DB, dbName s
 	errCh := make(chan error, defaultDumpThreads)
 	skipCh := make(chan struct{})
 
+	ctx1, cancel1 := context.WithCancel(ctx)
+	defer cancel1()
 	var g errgroup.Group
 	g.Go(func() error {
-		splitTableDataIntoChunks(ctx, chunksCh, errCh, skipCh, dbName, tableName, db, conf)
+		splitTableDataIntoChunks(ctx1, chunksCh, errCh, skipCh, dbName, tableName, db, conf)
 		return nil
 	})
 
