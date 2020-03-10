@@ -119,6 +119,9 @@ func dumpTable(ctx context.Context, conf *Config, db *sql.DB, dbName string, tab
 		if err != nil {
 			return err
 		}
+		if  dumpFinished {
+		    return nil
+		}
 	}
 
 	if concurrentDumpSkipped {
