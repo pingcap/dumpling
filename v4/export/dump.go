@@ -154,6 +154,8 @@ Loop:
 			g.Go(func() error {
 				return writer.WriteTableData(ctx, chunksIter)
 			})
+		case err := <-errCh:
+			return false, err
 		}
 	}
 	if err := g.Wait(); err != nil {

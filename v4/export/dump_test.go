@@ -37,7 +37,7 @@ func (m *mockWriter) WriteTableMeta(ctx context.Context, db, table, createSQL st
 	return nil
 }
 
-func (m *mockWriter) WriteTableData(ctx context.Context, fileName string, ir TableDataIR) error {
+func (m *mockWriter) WriteTableData(ctx context.Context, ir TableDataIR) error {
 	m.tableData = append(m.tableData, ir)
 	return nil
 }
