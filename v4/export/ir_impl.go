@@ -200,9 +200,9 @@ func buildChunksIter(td TableDataIR, chunkSize uint64, statementSize uint64) *ta
 
 func splitTableDataIntoChunks(
 	ctx context.Context,
-	chunksIterCh chan *tableDataChunks,
+	tableDataIRCh chan TableDataIR,
 	errCh chan error,
-	skipCh chan struct{},
+	linear chan struct{},
 	dbName, tableName string, db *sql.DB, conf *Config) {
 	field, err := pickupPossibleField(dbName, tableName, db, conf)
 	if err != nil {
@@ -211,7 +211,7 @@ func splitTableDataIntoChunks(
 	if field == "" {
 		// skip split chunk logic if not found proper field
 		log.Zap().Debug("skip concurrent dump due to no proper field", zap.String("field", field))
-		skipCh <- struct{}{}
+		linear <- struct{}{}
 	}
 	query := fmt.Sprintf("SELECT MIN(`%s`),MAX(`%s`) FROM `%s`.`%s` ",
 		field, field, dbName, tableName)
@@ -231,7 +231,7 @@ func splitTableDataIntoChunks(
 	if !smax.Valid || !smin.Valid {
 		// found no data
 		log.Zap().Debug("skip concurrent dump due to no data")
-		skipCh <- struct{}{}
+		linear <- struct{}{}
 	}
 	var max uint64
 	var min uint64
@@ -249,7 +249,7 @@ func splitTableDataIntoChunks(
 			zap.Uint64("estimate count", count),
 			zap.Uint64("conf.rows", conf.Rows),
 		)
-		skipCh <- struct{}{}
+		linear <- struct{}{}
 	}
 	// every chunk would have eventual adjustments
 	estimatedChunks := count / conf.Rows
@@ -290,16 +290,13 @@ LOOP:
 			},
 		}
 		cutoff += estimatedStep
-		chunk := &tableDataChunks{
-			TableDataIR: td,
-		}
 		select {
 		case <-ctx.Done():
 			break LOOP
-		case chunksIterCh <- chunk:
+		case tableDataIRCh <- td:
 		}
 	}
-	close(chunksIterCh)
+	close(tableDataIRCh)
 }
 
 type metaData struct {

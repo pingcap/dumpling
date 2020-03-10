@@ -113,37 +113,30 @@ func dumpTable(ctx context.Context, conf *Config, db *sql.DB, dbName string, tab
 	}
 
 	if conf.Rows != UnspecifiedSize {
-		dumpFinished, err := concurrentDumpTable(ctx, writer, conf, db, dbName, tableName)
-		if err != nil {
+		finished, err := concurrentDumpTable(ctx, writer, conf, db, dbName, tableName)
+		if err != nil || finished {
 			return err
 		}
-		if dumpFinished {
-			return nil
-		}
 	}
-
 	tableIR, err := SelectAllFromTable(conf, db, dbName, tableName)
 	if err != nil {
 		return err
 	}
 
-	if err := writer.WriteTableData(ctx, tableIR); err != nil {
-		return err
-	}
-	return nil
+	return writer.WriteTableData(ctx, tableIR)
 }
 
 func concurrentDumpTable(ctx context.Context, writer Writer, conf *Config, db *sql.DB, dbName string, tableName string) (bool, error) {
 	// try dump table concurrently by split table to chunks
-	chunksIterCh := make(chan *tableDataChunks, defaultDumpThreads)
+	chunksIterCh := make(chan TableDataIR, defaultDumpThreads)
 	errCh := make(chan error, defaultDumpThreads)
-	skipCh := make(chan struct{})
+	linear := make(chan struct{})
 
 	ctx1, cancel1 := context.WithCancel(ctx)
 	defer cancel1()
 	var g errgroup.Group
 	g.Go(func() error {
-		splitTableDataIntoChunks(ctx1, chunksIterCh, errCh, skipCh, dbName, tableName, db, conf)
+		splitTableDataIntoChunks(ctx1, chunksIterCh, errCh, linear, dbName, tableName, db, conf)
 		return nil
 	})
 
@@ -151,6 +144,8 @@ Loop:
 	for {
 		select {
 		case <-ctx.Done():
+			return true, nil
+		case <-linear:
 			return false, nil
 		case chunksIter, ok := <-chunksIterCh:
 			if ok {
@@ -160,14 +155,10 @@ Loop:
 			} else {
 				break Loop
 			}
-		case err := <-errCh:
-			return false, err
-		case <-skipCh:
-			return true, nil
 		}
 	}
 	if err := g.Wait(); err != nil {
-		return false, err
+		return true, err
 	}
-	return false, nil
+	return true, nil
 }
