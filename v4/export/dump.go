@@ -128,8 +128,7 @@ func dumpTable(ctx context.Context, conf *Config, db *sql.DB, dbName string, tab
 		return err
 	}
 
-	chunksIter := buildChunksIter(tableIR, conf.FileSize, conf.StatementSize)
-	if err := writer.WriteTableData(ctx, dbName, tableName, "", chunksIter); err != nil {
+	if err := writer.WriteTableData(ctx, "", tableIR); err != nil {
 		return err
 	}
 	return nil
@@ -158,7 +157,7 @@ Loop:
 			if ok {
 				g.Go(func() error {
 					fileName := fmt.Sprintf("%s.%s.%d.sql", dbName, tableName, chunksIter.fileIndex)
-					return writer.WriteTableData(ctx, dbName, tableName, fileName, chunksIter)
+					return writer.WriteTableData(ctx, fileName, chunksIter.TableDataIR)
 				})
 			} else {
 				break Loop

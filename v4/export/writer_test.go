@@ -81,8 +81,7 @@ func (s *testDumpSuite) TestWriteTableData(c *C) {
 		"/*!40014 SET FOREIGN_KEY_CHECKS=0*/;",
 	}
 	tableIR := newMockTableIR("test", "employee", data, specCmts, colTypes)
-	chunksIter := buildChunksIter(tableIR, config.FileSize, config.StatementSize)
-	err = writer.WriteTableData(ctx, "test", "employee", "", chunksIter)
+	err = writer.WriteTableData(ctx, "", tableIR)
 	c.Assert(err, IsNil)
 
 	p := path.Join(dir, "test.employee.sql")
@@ -126,8 +125,7 @@ func (s *testDumpSuite) TestWriteTableDataWithFileSize(c *C) {
 		"/*!40014 SET FOREIGN_KEY_CHECKS=0*/;",
 	}
 	tableIR := newMockTableIR("test", "employee", data, specCmts, colTypes)
-	chunksIter := buildChunksIter(tableIR, config.FileSize, config.StatementSize)
-	err = writer.WriteTableData(ctx, "test", "employee", "", chunksIter)
+	err = writer.WriteTableData(ctx, "", tableIR)
 	c.Assert(err, IsNil)
 
 	cases := map[string]string{
@@ -178,8 +176,7 @@ func (s *testDumpSuite) TestWriteTableDataWithStatementSize(c *C) {
 		"/*!40014 SET FOREIGN_KEY_CHECKS=0*/;",
 	}
 	tableIR := newMockTableIR("test", "employee", data, specCmts, colTypes)
-	chunksIter := buildChunksIter(tableIR, config.FileSize, config.StatementSize)
-	err = writer.WriteTableData(ctx, "test", "employee", "", chunksIter)
+	err = writer.WriteTableData(ctx, "", tableIR)
 	c.Assert(err, IsNil)
 
 	// only with statement size
@@ -226,8 +223,7 @@ func (s *testDumpSuite) TestWriteTableDataWithStatementSize(c *C) {
 	}
 
 	tableIR = newMockTableIR("test", "employee", data, specCmts, colTypes)
-	chunksIter = buildChunksIter(tableIR, config.FileSize, config.StatementSize)
-	c.Assert(writer.WriteTableData(ctx, "test", "employee", "", chunksIter), IsNil)
+	c.Assert(writer.WriteTableData(ctx, "", tableIR), IsNil)
 	c.Assert(err, IsNil)
 	for p, expected := range cases {
 		p := path.Join(config.OutputDirPath, p)

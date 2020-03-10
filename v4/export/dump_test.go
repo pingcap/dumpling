@@ -16,7 +16,7 @@ type testDumpSuite struct{}
 type mockWriter struct {
 	databaseMeta map[string]string
 	tableMeta    map[string]string
-	tableData    []*tableDataChunks
+	tableData    []TableDataIR
 }
 
 func newMockWriter() *mockWriter {
@@ -37,8 +37,8 @@ func (m *mockWriter) WriteTableMeta(ctx context.Context, db, table, createSQL st
 	return nil
 }
 
-func (m *mockWriter) WriteTableData(ctx context.Context, dbName, tableName, fileName string, chunksIter *tableDataChunks) error {
-	m.tableData = append(m.tableData, chunksIter)
+func (m *mockWriter) WriteTableData(ctx context.Context, fileName string, ir TableDataIR) error {
+	m.tableData = append(m.tableData, ir)
 	return nil
 }
 
