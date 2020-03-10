@@ -59,15 +59,15 @@ func (m globalMetadata) String() string {
 	return str
 }
 
-func (m globalMetadata) recordStartTime(t time.Time) {
+func (m *globalMetadata) recordStartTime(t time.Time) {
 	m.startTime = t
 }
 
-func (m globalMetadata) recordFinishTime(t time.Time)  {
+func (m *globalMetadata) recordFinishTime(t time.Time)  {
 	m.finishTime = t
 }
 
-func (m globalMetadata) getGlobalMetaData(db *sql.DB, serverType ServerType) error {
+func (m *globalMetadata) getGlobalMetaData(db *sql.DB, serverType ServerType) error {
 	switch serverType {
 	// For MySQL:
 	// mysql> SHOW MASTER STATUS;
