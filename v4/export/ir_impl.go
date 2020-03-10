@@ -131,11 +131,12 @@ func (m *stringIter) HasNext() bool {
 }
 
 type tableData struct {
-	database string
-	table    string
-	rows     *sql.Rows
-	colTypes []*sql.ColumnType
-	specCmts []string
+	database   string
+	table      string
+	chunkIndex int
+	rows       *sql.Rows
+	colTypes   []*sql.ColumnType
+	specCmts   []string
 }
 
 func (td *tableData) ColumnTypes() []string {
@@ -152,6 +153,10 @@ func (td *tableData) DatabaseName() string {
 
 func (td *tableData) TableName() string {
 	return td.table
+}
+
+func (td *tableData) ChunkIndex() int {
+	return td.chunkIndex
 }
 
 func (td *tableData) ColumnCount() uint {
@@ -171,7 +176,6 @@ type tableDataChunks struct {
 	rows               SQLRowIter
 	chunkSizeLimit     uint64
 	statementSizeLimit uint64
-	fileIndex          int
 }
 
 func (t *tableDataChunks) Rows() SQLRowIter {
@@ -261,10 +265,10 @@ func splitTableDataIntoChunks(
 		errCh <- withStack(err)
 	}
 
-	fileIndex := 0
+	chunkIndex := 0
 LOOP:
 	for cutoff <= max {
-		fileIndex += 1
+		chunkIndex += 1
 		where := fmt.Sprintf("(`%s` >= %d AND `%s` < %d)", field, cutoff, field, cutoff+estimatedStep)
 		query, err = buildSelectAllQuery(conf, db, dbName, tableName, where, orderByClause)
 		if err != nil {
@@ -276,10 +280,11 @@ LOOP:
 		}
 
 		td := &tableData{
-			database: dbName,
-			table:    tableName,
-			rows:     rows,
-			colTypes: colTypes,
+			database:   dbName,
+			table:      tableName,
+			rows:       rows,
+			chunkIndex: chunkIndex,
+			colTypes:   colTypes,
 			specCmts: []string{
 				"/*!40101 SET NAMES binary*/;",
 			},
@@ -287,7 +292,6 @@ LOOP:
 		cutoff += estimatedStep
 		chunk := &tableDataChunks{
 			TableDataIR: td,
-			fileIndex:   fileIndex,
 		}
 		select {
 		case <-ctx.Done():

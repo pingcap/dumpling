@@ -6,6 +6,7 @@ import "database/sql"
 type TableDataIR interface {
 	DatabaseName() string
 	TableName() string
+	ChunkIndex() int
 	ColumnCount() uint
 	ColumnTypes() []string
 

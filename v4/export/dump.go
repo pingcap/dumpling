@@ -3,7 +3,6 @@ package export
 import (
 	"context"
 	"database/sql"
-	"fmt"
 
 	_ "github.com/go-sql-driver/mysql"
 	"golang.org/x/sync/errgroup"
@@ -128,7 +127,7 @@ func dumpTable(ctx context.Context, conf *Config, db *sql.DB, dbName string, tab
 		return err
 	}
 
-	if err := writer.WriteTableData(ctx, "", tableIR); err != nil {
+	if err := writer.WriteTableData(ctx, tableIR); err != nil {
 		return err
 	}
 	return nil
@@ -156,8 +155,7 @@ Loop:
 		case chunksIter, ok := <-chunksIterCh:
 			if ok {
 				g.Go(func() error {
-					fileName := fmt.Sprintf("%s.%s.%d.sql", dbName, tableName, chunksIter.fileIndex)
-					return writer.WriteTableData(ctx, fileName, chunksIter.TableDataIR)
+					return writer.WriteTableData(ctx, chunksIter)
 				})
 			} else {
 				break Loop
