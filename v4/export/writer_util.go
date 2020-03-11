@@ -95,6 +95,7 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
 		}
 	}
 
+	close(batch.input)
 	log.Zap().Debug("dumping table",
 		zap.String("table", tblIR.TableName()),
 		zap.Int("record counts", counter))

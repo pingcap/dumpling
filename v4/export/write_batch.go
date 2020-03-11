@@ -45,7 +45,6 @@ func (w writeBatch) Run() {
 	defer func() {
 		close(w.closed)
 		close(w.errCh)
-		close(w.input)
 	}()
 	var (
 		str string
