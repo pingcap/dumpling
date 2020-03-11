@@ -132,10 +132,10 @@ func SelectAllFromTable(conf *Config, db *sql.DB, database, table string) (Table
 	}, nil
 }
 
-func buildSelectQuery(database, table string, field string, where string, orderByClause string) string {
+func buildSelectQuery(database, table string, fields string, where string, orderByClause string) string {
 	var query strings.Builder
 	query.WriteString("SELECT ")
-	query.WriteString(field)
+	query.WriteString(fields)
 	query.WriteString(" FROM ")
 	query.WriteString(database)
 	query.WriteString(".")
@@ -194,8 +194,8 @@ func SelectTiDBRowID(db *sql.DB, database, table string) (bool, error) {
 	return true, nil
 }
 
-func GetColumnTypes(db *sql.DB, field, database, table string) ([]*sql.ColumnType, error) {
-	query := fmt.Sprintf("SELECT %s FROM %s.%s LIMIT 1", field, database, table)
+func GetColumnTypes(db *sql.DB, fields, database, table string) ([]*sql.ColumnType, error) {
+	query := fmt.Sprintf("SELECT %s FROM %s.%s LIMIT 1", fields, database, table)
 	rows, err := db.Query(query)
 	if err != nil {
 		return nil, withStack(errors.WithMessage(err, query))
