@@ -20,7 +20,7 @@ type writeBatch struct {
 func NewWriteBatch(ctx context.Context, writer io.StringWriter) *writeBatch {
 	return &writeBatch{
 		ctx:    ctx,
-		input:  make(chan string, 1024),
+		input:  make(chan string, 500 * 1024),
 		writer: writer,
 		closed: make(chan struct{}),
 		errCh:  make(chan error, 1),
