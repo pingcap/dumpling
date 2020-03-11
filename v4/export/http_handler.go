@@ -7,8 +7,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pingcap/dumpling/v4/log"
+
 	"github.com/pingcap/errors"
-	"github.com/pingcap/log"
 	"github.com/soheilhy/cmux"
 	"go.uber.org/zap"
 )
@@ -31,7 +32,7 @@ func startHTTPServer(lis net.Listener) {
 	}
 	err := httpServer.Serve(lis)
 	if err != nil && !isErrNetClosing(err) && err != http.ErrServerClosed {
-		log.L().Error("http server return with error", zap.Error(err))
+		log.Zap().Error("http server return with error", zap.Error(err))
 	}
 }
 
