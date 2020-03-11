@@ -46,7 +46,10 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
 	go batch.Run()
 	go func() {
 		select {
-		case err = <-batch.Error():
+		case err1, ok := <-batch.Error():
+			if ok {
+				err = err1
+			}
 			cancel()
 		case <-ctx.Done():
 		}
@@ -102,9 +105,9 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
 	select {
 	case <-batch.closed:
 	case <-time.After(time.Minute):
-		err = errors.New("fail to write left string in 1 minute")
+		return errors.New("fail to write left string in 1 minute")
 	}
-	return err
+	return nil
 }
 
 func write(writer io.StringWriter, str string) error {
