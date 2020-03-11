@@ -40,6 +40,7 @@ var (
 	consistency   string
 	snapshot      string
 	noViews       bool
+	dumpAddr      string
 
 	rootCmd = &cobra.Command{
 		Use:   "dumpling",
@@ -71,6 +72,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&consistency, "consistency", "auto", "Consistency level during dumping: {auto|none|flush|lock|snapshot}")
 	rootCmd.PersistentFlags().StringVar(&snapshot, "snapshot", "", "Snapshot position. Valid only when consistency=snapshot")
 	rootCmd.PersistentFlags().BoolVarP(&noViews, "no-views", "W", true, "Do not dump views")
+	rootCmd.PersistentFlags().StringVar(&dumpAddr, "dump-addr", ":8281", "dumpling API server and status addr")
 }
 
 func run() {
@@ -94,6 +96,7 @@ func run() {
 	conf.OutputDirPath = outputDir
 	conf.Consistency = consistency
 	conf.NoViews = noViews
+	conf.DumpAddr = dumpAddr
 
 	err = export.Dump(conf)
 	if err != nil {

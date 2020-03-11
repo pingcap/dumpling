@@ -12,6 +12,12 @@ import (
 )
 
 func Dump(conf *Config) (err error) {
+	go func() {
+		err1 := startDumplingService(conf.DumpAddr)
+		if err1 != nil {
+			log.L().Error("dumpling stops to serving service", zap.Error(err1))
+		}
+	}()
 	pool, err := sql.Open("mysql", conf.getDSN(""))
 	if err != nil {
 		return withStack(err)
