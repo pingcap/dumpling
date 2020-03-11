@@ -220,10 +220,10 @@ func GetPrimaryKeyName(db *sql.DB, database, table string) (string, error) {
 }
 
 func GetUniqueIndexName(db *sql.DB, database, table string) (string, error) {
-	uniKeyQuery := fmt.Sprintf("SELECT column_name FROM information_schema.columns "+
-		"WHERE table_schema = `%s` AND table_name = `%s` AND column_key = 'UNI';", database, table)
+	uniKeyQuery := "SELECT column_name FROM information_schema.columns "+
+		"WHERE table_schema = ? AND table_name = ? AND column_key = 'UNI';"
 	var colName string
-	row := db.QueryRow(uniKeyQuery)
+	row := db.QueryRow(uniKeyQuery, database, table)
 	if err := row.Scan(&colName); err != nil {
 		if err == sql.ErrNoRows {
 			return "", nil
@@ -332,10 +332,10 @@ func pickupPossibleField(dbName, tableName string, db *sql.DB, conf *Config) (st
 		return "", nil
 	}
 
-	query := fmt.Sprintf("SELECT DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS "+
-		"WHERE TABLE_NAME = '%s' AND COLUMN_NAME = '%s'", tableName, fieldName)
+	query := "SELECT DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS "+
+		"WHERE TABLE_NAME = ? AND COLUMN_NAME = ?"
 	var fieldType string
-	row := db.QueryRow(query)
+	row := db.QueryRow(query, tableName, fieldName)
 	err = row.Scan(&fieldType)
 	if err != nil {
 		if err == sql.ErrNoRows {
