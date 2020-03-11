@@ -266,18 +266,18 @@ func splitTableDataIntoChunks(
 	estimatedStep := (max-min)/estimatedChunks + 1
 	cutoff := min
 
-	colTypes, err := GetColumnTypes(db, dbName, tableName)
-	if err != nil {
-		errCh <- withStack(err)
-		return
-	}
-	orderByClause, err := buildOrderByClause(conf, db, dbName, tableName)
+	selectedField, err := buildSelectField(db, dbName, tableName)
 	if err != nil {
 		errCh <- withStack(err)
 		return
 	}
 
-	selectedField, err := buildSelectField(db, dbName, tableName)
+	colTypes, err := GetColumnTypes(db, selectedField, dbName, tableName)
+	if err != nil {
+		errCh <- withStack(err)
+		return
+	}
+	orderByClause, err := buildOrderByClause(conf, db, dbName, tableName)
 	if err != nil {
 		errCh <- withStack(err)
 		return

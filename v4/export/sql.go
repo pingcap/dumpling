@@ -99,17 +99,17 @@ func SelectVersion(db *sql.DB) (string, error) {
 }
 
 func SelectAllFromTable(conf *Config, db *sql.DB, database, table string) (TableDataIR, error) {
-	colTypes, err := GetColumnTypes(db, database, table)
+	selectedField, err := buildSelectField(db, database, table)
+	if err != nil {
+		return nil, err
+	}
+
+	colTypes, err := GetColumnTypes(db, selectedField, database, table)
 	if err != nil {
 		return nil, err
 	}
 
 	orderByClause, err := buildOrderByClause(conf, db, database, table)
-	if err != nil {
-		return nil, err
-	}
-
-	selectedField, err := buildSelectField(db, database, table)
 	if err != nil {
 		return nil, err
 	}
@@ -193,9 +193,9 @@ func SelectTiDBRowID(db *sql.DB, database, table string) (bool, error) {
 	return true, nil
 }
 
-func GetColumnTypes(db *sql.DB, database, table string) ([]*sql.ColumnType, error) {
-	query := fmt.Sprintf("SELECT * FROM %s.%s LIMIT 1", database, table)
-	rows, err := db.Query(fmt.Sprintf("SELECT * FROM %s.%s LIMIT 1", database, table))
+func GetColumnTypes(db *sql.DB, field, database, table string) ([]*sql.ColumnType, error) {
+	query := fmt.Sprintf("SELECT %s FROM %s.%s LIMIT 1", field, database, table)
+	rows, err := db.Query(query)
 	if err != nil {
 		return nil, withStack(errors.WithMessage(err, query))
 	}

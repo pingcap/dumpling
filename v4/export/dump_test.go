@@ -58,8 +58,8 @@ func (s *testDumpSuite) TestDumpDatabase(c *C) {
 	rows = mock.NewRows([]string{"Table", "Create Table"}).AddRow("t", showCreateTableResult)
 	mock.ExpectQuery("SHOW CREATE TABLE test.t").WillReturnRows(rows)
 	rows = mock.NewRows([]string{"a"}).AddRow(1)
-	mock.ExpectQuery("SELECT (.) FROM test.t LIMIT 1").WillReturnRows(rows)
 	mock.ExpectQuery("SELECT").WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg()).WillReturnError(sql.ErrNoRows)
+	mock.ExpectQuery("SELECT (.) FROM test.t LIMIT 1").WillReturnRows(rows)
 	rows = mock.NewRows([]string{"a"}).AddRow(1).AddRow(2)
 	mock.ExpectQuery("SELECT (.) FROM test.t").WillReturnRows(rows)
 
@@ -83,8 +83,8 @@ func (s *testDumpSuite) TestDumpTable(c *C) {
 	rows := mock.NewRows([]string{"Table", "Create Table"}).AddRow("t", showCreateTableResult)
 	mock.ExpectQuery("SHOW CREATE TABLE test.t").WillReturnRows(rows)
 	rows = mock.NewRows([]string{"a"}).AddRow(1)
-	mock.ExpectQuery("SELECT (.) FROM test.t LIMIT 1").WillReturnRows(rows)
 	mock.ExpectQuery("SELECT").WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg()).WillReturnError(sql.ErrNoRows)
+	mock.ExpectQuery("SELECT (.) FROM test.t LIMIT 1").WillReturnRows(rows)
 	rows = mock.NewRows([]string{"a"}).AddRow(1).AddRow(2)
 	mock.ExpectQuery("SELECT (.) FROM test.t").WillReturnRows(rows)
 
@@ -124,8 +124,8 @@ func (s *testDumpSuite) TestDumpTableWhereClause(c *C) {
 	mock.ExpectQuery("SHOW CREATE TABLE test.t").WillReturnRows(rows)
 
 	rows = mock.NewRows([]string{"a"}).AddRow(1)
-	mock.ExpectQuery("SELECT (.) FROM test.t LIMIT 1").WillReturnRows(rows)
 	mock.ExpectQuery("SELECT").WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg()).WillReturnError(sql.ErrNoRows)
+	mock.ExpectQuery("SELECT (.) FROM test.t LIMIT 1").WillReturnRows(rows)
 	rows = mock.NewRows([]string{"a"})
 	for i := 4; i < 9; i++ {
 		rows.AddRow(i)
