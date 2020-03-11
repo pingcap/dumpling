@@ -41,6 +41,8 @@ var (
 	snapshot      string
 	noViews       bool
 	statusAddr    string
+	rows          uint64
+	where         string
 
 	rootCmd = &cobra.Command{
 		Use:   "dumpling",
@@ -73,6 +75,8 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&snapshot, "snapshot", "", "Snapshot position. Valid only when consistency=snapshot")
 	rootCmd.PersistentFlags().BoolVarP(&noViews, "no-views", "W", true, "Do not dump views")
 	rootCmd.PersistentFlags().StringVar(&statusAddr, "status-addr", ":8281", "dumpling API server and pprof addr")
+	rootCmd.PersistentFlags().Uint64VarP(&rows, "rows", "r", export.UnspecifiedSize, "Split table into chunks of this many rows, default unlimited")
+	rootCmd.PersistentFlags().StringVar(&where, "where", "", "Dump only selected records")
 }
 
 func run() {
@@ -97,6 +101,8 @@ func run() {
 	conf.Consistency = consistency
 	conf.NoViews = noViews
 	conf.StatusAddr = statusAddr
+	conf.Rows = rows
+	conf.Where = where
 
 	err = export.Dump(conf)
 	if err != nil {
