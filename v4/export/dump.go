@@ -14,7 +14,7 @@ import (
 
 func Dump(conf *Config) (err error) {
 	go func() {
-		err1 := startDumplingService(conf.DumpAddr)
+		err1 := startDumplingService(conf.StatusAddr)
 		if err1 != nil {
 			log.Zap().Error("dumpling stops to serving service", zap.Error(err1))
 		}

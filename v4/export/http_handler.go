@@ -36,8 +36,8 @@ func startHTTPServer(lis net.Listener) {
 	}
 }
 
-func startDumplingService(dumpAddr string) error {
-	rootLis, err := net.Listen("tcp", dumpAddr)
+func startDumplingService(addr string) error {
+	rootLis, err := net.Listen("tcp", addr)
 	if err != nil {
 		return errors.Annotate(err, "start listening")
 	}
