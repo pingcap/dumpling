@@ -109,7 +109,12 @@ func SelectAllFromTable(conf *Config, db *sql.DB, database, table string) (Table
 		return nil, err
 	}
 
-	query := buildSelectQuery(database, table, buildWhereCondition(conf, ""), orderByClause)
+	selectedField, err := buildSelectField(db, database, table)
+	if err != nil {
+		return nil, err
+	}
+
+	query := buildSelectQuery(database, table, selectedField, buildWhereCondition(conf, ""), orderByClause)
 	rows, err := db.Query(query)
 	if err != nil {
 		return nil, withStack(errors.WithMessage(err, query))
@@ -126,9 +131,11 @@ func SelectAllFromTable(conf *Config, db *sql.DB, database, table string) (Table
 	}, nil
 }
 
-func buildSelectQuery(database, table string, where string, orderByClause string) string {
+func buildSelectQuery(database, table string, field string, where string, orderByClause string) string {
 	var query strings.Builder
-	query.WriteString("SELECT * FROM ")
+	query.WriteString("SELECT ")
+	query.WriteString(field)
+	query.WriteString(" FROM ")
 	query.WriteString(database)
 	query.WriteString(".")
 	query.WriteString(table)
@@ -220,7 +227,7 @@ func GetPrimaryKeyName(db *sql.DB, database, table string) (string, error) {
 }
 
 func GetUniqueIndexName(db *sql.DB, database, table string) (string, error) {
-	uniKeyQuery := "SELECT column_name FROM information_schema.columns "+
+	uniKeyQuery := "SELECT column_name FROM information_schema.columns " +
 		"WHERE table_schema = ? AND table_name = ? AND column_key = 'UNI';"
 	var colName string
 	row := db.QueryRow(uniKeyQuery, database, table)
@@ -273,6 +280,41 @@ func ShowMasterStatus(db *sql.DB, fieldNum int) ([]string, error) {
 func SetTiDBSnapshot(db *sql.DB, snapshot string) error {
 	_, err := db.Exec("SET SESSION tidb_snapshot = ?", snapshot)
 	return withStack(err)
+}
+
+func existsGeneratedFields(db *sql.DB, dbName, tableName string) (bool, error) {
+	query := `SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=?
+		AND TABLE_NAME=? AND EXTRA REGEXP '(STORED|VIRTUAL) GENERATED';`
+	row := db.QueryRow(query, dbName, tableName)
+	detected := 0
+	err := row.Scan(&detected)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return false, nil
+		} else {
+			return false, withStack(errors.WithMessage(err, query))
+		}
+	}
+	return detected == 1, nil
+}
+func getInsertableFields(db *sql.DB, dbName, tableName string) (string, error) {
+	query := `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=?
+		AND TABLE_NAME=? and EXTRA NOT REGEXP '(STORED|VIRTUAL) GENERATED';`
+	rows, err := db.Query(query, dbName, tableName)
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+	availableFields := make([]string, 0)
+	var fieldName string
+	for rows.Next() {
+		err = rows.Scan(&fieldName)
+		if err != nil {
+			return "", withStack(errors.WithMessage(err, query))
+		}
+		availableFields = append(availableFields, fieldName)
+	}
+	return strings.Join(availableFields, ","), nil
 }
 
 type oneStrColumnTable struct {
@@ -332,7 +374,7 @@ func pickupPossibleField(dbName, tableName string, db *sql.DB, conf *Config) (st
 		return "", nil
 	}
 
-	query := "SELECT DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS "+
+	query := "SELECT DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS " +
 		"WHERE TABLE_NAME = ? AND COLUMN_NAME = ?"
 	var fieldType string
 	row := db.QueryRow(query, tableName, fieldName)
@@ -398,7 +440,7 @@ func estimateCount(dbName, tableName string, db *sql.DB, field string, conf *Con
 func detectEstimateRows(db *sql.DB, query string, dbType string, fieldIndex int, fieldLength int) int {
 	oneRow := make([]sql.NullString, fieldLength)
 	addr := make([]interface{}, fieldLength)
-	for i := range oneRow{
+	for i := range oneRow {
 		addr[i] = &oneRow[i]
 	}
 	row := db.QueryRow(query)
@@ -436,4 +478,19 @@ func buildWhereCondition(conf *Config, where string) string {
 		query.WriteString(where)
 	}
 	return query.String()
+}
+
+func buildSelectField(db *sql.DB, dbName, tableName string) (string, error) {
+	field := "*"
+	exists, err := existsGeneratedFields(db, dbName, tableName)
+	if err != nil {
+		return "", withStack(err)
+	}
+	if exists {
+		field, err = getInsertableFields(db, dbName, tableName)
+		if err != nil {
+			return "", withStack(err)
+		}
+	}
+	return field, nil
 }

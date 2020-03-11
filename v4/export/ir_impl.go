@@ -277,12 +277,18 @@ func splitTableDataIntoChunks(
 		return
 	}
 
+	selectedField, err := buildSelectField(db, dbName, tableName)
+	if err != nil {
+		errCh <- withStack(err)
+		return
+	}
+
 	chunkIndex := 0
 LOOP:
 	for cutoff <= max {
 		chunkIndex += 1
 		where := fmt.Sprintf("(`%s` >= %d AND `%s` < %d)", field, cutoff, field, cutoff+estimatedStep)
-		query = buildSelectQuery(dbName, tableName, buildWhereCondition(conf, where), orderByClause)
+		query = buildSelectQuery(dbName, tableName, selectedField, buildWhereCondition(conf, where), orderByClause)
 		rows, err := db.Query(query)
 		if err != nil {
 			errCh <- errors.WithMessage(err, query)
