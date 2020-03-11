@@ -3,7 +3,7 @@
 set -eu
 cur=$(cd `dirname $0`; pwd)
 
-DB_NAME="rows"
+DB_NAME="rows_params"
 TABLE_NAME="t"
 
 # drop database on tidb

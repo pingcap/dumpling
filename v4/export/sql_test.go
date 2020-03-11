@@ -1,7 +1,6 @@
 package export
 
 import (
-	"database/sql"
 	"errors"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -69,12 +68,11 @@ func (s *testDumpSuite) TestBuildSelectAllQuery(c *C) {
 	orderByClause, err := buildOrderByClause(mockConf, db, "test", "t")
 	c.Assert(err, IsNil)
 
-	mock.ExpectQuery("SELECT").
+	mock.ExpectQuery("SELECT COLUMN_NAME").
 		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg()).
-		WillReturnError(sql.ErrNoRows)
+		WillReturnRows(sqlmock.NewRows([]string{"column_name", "extra"}).AddRow("id", ""))
 
 	selectedField, err := buildSelectField(db, "test", "t")
-
 	c.Assert(err, IsNil)
 	q := buildSelectQuery("test", "t", selectedField, "", orderByClause)
 	c.Assert(q, Equals, "SELECT * FROM test.t ORDER BY _tidb_rowid")
@@ -86,9 +84,9 @@ func (s *testDumpSuite) TestBuildSelectAllQuery(c *C) {
 	orderByClause, err = buildOrderByClause(mockConf, db, "test", "t")
 	c.Assert(err, IsNil)
 
-	mock.ExpectQuery("SELECT").
+	mock.ExpectQuery("SELECT COLUMN_NAME").
 		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg()).
-		WillReturnError(sql.ErrNoRows)
+		WillReturnRows(sqlmock.NewRows([]string{"column_name", "extra"}).AddRow("id", ""))
 
 	selectedField, err = buildSelectField(db, "test", "t")
 	c.Assert(err, IsNil)
@@ -109,9 +107,9 @@ func (s *testDumpSuite) TestBuildSelectAllQuery(c *C) {
 		orderByClause, err := buildOrderByClause(mockConf, db, "test", "t")
 		c.Assert(err, IsNil, cmt)
 
-		mock.ExpectQuery("SELECT").
+		mock.ExpectQuery("SELECT COLUMN_NAME").
 			WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg()).
-			WillReturnError(sql.ErrNoRows)
+			WillReturnRows(sqlmock.NewRows([]string{"column_name", "extra"}).AddRow("id", ""))
 
 		selectedField, err = buildSelectField(db, "test", "t")
 		c.Assert(err, IsNil)
@@ -133,9 +131,9 @@ func (s *testDumpSuite) TestBuildSelectAllQuery(c *C) {
 		orderByClause, err := buildOrderByClause(mockConf, db, "test", "t")
 		c.Assert(err, IsNil, cmt)
 
-		mock.ExpectQuery("SELECT").
+		mock.ExpectQuery("SELECT COLUMN_NAME").
 			WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg()).
-			WillReturnError(sql.ErrNoRows)
+			WillReturnRows(sqlmock.NewRows([]string{"column_name", "extra"}).AddRow("id", ""))
 
 		selectedField, err = buildSelectField(db, "test", "t")
 		c.Assert(err, IsNil)
@@ -152,9 +150,9 @@ func (s *testDumpSuite) TestBuildSelectAllQuery(c *C) {
 		mockConf.ServerInfo.ServerType = ServerType(tp)
 		cmt := Commentf("current server type: ", tp)
 
-		mock.ExpectQuery("SELECT").
+		mock.ExpectQuery("SELECT COLUMN_NAME").
 			WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg()).
-			WillReturnError(sql.ErrNoRows)
+			WillReturnRows(sqlmock.NewRows([]string{"column_name", "extra"}).AddRow("id", ""))
 
 		selectedField, err := buildSelectField(db, "test", "t")
 		c.Assert(err, IsNil)
@@ -170,9 +168,9 @@ func (s *testDumpSuite) TestBuildSelectField(c *C) {
 	defer db.Close()
 
 	// generate columns not found
-	mock.ExpectQuery("SELECT").
+	mock.ExpectQuery("SELECT COLUMN_NAME").
 		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg()).
-		WillReturnError(sql.ErrNoRows)
+		WillReturnRows(sqlmock.NewRows([]string{"column_name", "extra"}).AddRow("id", ""))
 
 	selectedField, err := buildSelectField(db, "test", "t")
 	c.Assert(selectedField, Equals, "*")
@@ -180,16 +178,13 @@ func (s *testDumpSuite) TestBuildSelectField(c *C) {
 	c.Assert(mock.ExpectationsWereMet(), IsNil)
 
 	// found generate columns, rest columns is `id`,`name`
-	mock.ExpectQuery("SELECT 1 FROM").
+	mock.ExpectQuery("SELECT COLUMN_NAME").
 		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg()).
-		WillReturnRows(sqlmock.NewRows([]string{"1"}).AddRow(1))
-
-	mock.ExpectQuery("SELECT COLUMN_NAME FROM").
-		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg()).
-		WillReturnRows(sqlmock.NewRows([]string{"column_name"}).AddRow("id").AddRow("name"))
+		WillReturnRows(sqlmock.NewRows([]string{"column_name", "extra"}).
+			AddRow("id", "").AddRow("name", "").AddRow("generated", "VIRTUAL GENERATED"))
 
 	selectedField, err = buildSelectField(db, "test", "t")
-	c.Assert(selectedField, Equals, "id,name")
+	c.Assert(selectedField, Equals, "`id`,`name`")
 	c.Assert(err, IsNil)
 	c.Assert(mock.ExpectationsWereMet(), IsNil)
 

@@ -283,39 +283,34 @@ func SetTiDBSnapshot(db *sql.DB, snapshot string) error {
 	return withStack(err)
 }
 
-func existsGeneratedFields(db *sql.DB, dbName, tableName string) (bool, error) {
-	query := `SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=?
-		AND TABLE_NAME=? AND EXTRA REGEXP '(STORED|VIRTUAL) GENERATED';`
-	row := db.QueryRow(query, dbName, tableName)
-	detected := 0
-	err := row.Scan(&detected)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return false, nil
-		} else {
-			return false, withStack(errors.WithMessage(err, query))
-		}
-	}
-	return detected == 1, nil
-}
-func buildInsertableFields(db *sql.DB, dbName, tableName string) (string, error) {
-	query := `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=?
-		AND TABLE_NAME=? and EXTRA NOT REGEXP '(STORED|VIRTUAL) GENERATED';`
+func buildSelectField(db *sql.DB, dbName, tableName string) (string, error) {
+	query := `SELECT COLUMN_NAME,EXTRA FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=? AND TABLE_NAME=?;`
 	rows, err := db.Query(query, dbName, tableName)
 	if err != nil {
 		return "", err
 	}
 	defer rows.Close()
 	availableFields := make([]string, 0)
+
+	hasGenerateColumn := false
 	var fieldName string
+	var extra string
 	for rows.Next() {
-		err = rows.Scan(&fieldName)
+		err = rows.Scan(&fieldName, &extra)
 		if err != nil {
 			return "", withStack(errors.WithMessage(err, query))
 		}
-		availableFields = append(availableFields, fieldName)
+		switch extra {
+		case "STORED GENERATED", "VIRTUAL GENERATED":
+			hasGenerateColumn = true
+			continue
+		}
+		availableFields = append(availableFields, wrapBackTicks(fieldName))
 	}
-	return strings.Join(availableFields, ","), nil
+	if hasGenerateColumn {
+		return strings.Join(availableFields, ","), nil
+	}
+	return "*", nil
 }
 
 type oneStrColumnTable struct {
@@ -479,19 +474,4 @@ func buildWhereCondition(conf *Config, where string) string {
 		query.WriteString(where)
 	}
 	return query.String()
-}
-
-func buildSelectField(db *sql.DB, dbName, tableName string) (string, error) {
-	field := "*"
-	exists, err := existsGeneratedFields(db, dbName, tableName)
-	if err != nil {
-		return "", withStack(err)
-	}
-	if exists {
-		field, err = buildInsertableFields(db, dbName, tableName)
-		if err != nil {
-			return "", withStack(err)
-		}
-	}
-	return field, nil
 }
