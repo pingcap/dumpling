@@ -297,7 +297,7 @@ func existsGeneratedFields(db *sql.DB, dbName, tableName string) (bool, error) {
 	}
 	return detected == 1, nil
 }
-func getInsertableFields(db *sql.DB, dbName, tableName string) (string, error) {
+func buildInsertableFields(db *sql.DB, dbName, tableName string) (string, error) {
 	query := `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=?
 		AND TABLE_NAME=? and EXTRA NOT REGEXP '(STORED|VIRTUAL) GENERATED';`
 	rows, err := db.Query(query, dbName, tableName)
@@ -487,7 +487,7 @@ func buildSelectField(db *sql.DB, dbName, tableName string) (string, error) {
 		return "", withStack(err)
 	}
 	if exists {
-		field, err = getInsertableFields(db, dbName, tableName)
+		field, err = buildInsertableFields(db, dbName, tableName)
 		if err != nil {
 			return "", withStack(err)
 		}
