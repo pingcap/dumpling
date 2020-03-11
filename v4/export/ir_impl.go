@@ -131,12 +131,13 @@ func (m *stringIter) HasNext() bool {
 }
 
 type tableData struct {
-	database   string
-	table      string
-	chunkIndex int
-	rows       *sql.Rows
-	colTypes   []*sql.ColumnType
-	specCmts   []string
+	database      string
+	table         string
+	chunkIndex    int
+	rows          *sql.Rows
+	colTypes      []*sql.ColumnType
+	selectedField string
+	specCmts      []string
 }
 
 func (td *tableData) ColumnTypes() []string {
@@ -165,6 +166,13 @@ func (td *tableData) ColumnCount() uint {
 
 func (td *tableData) Rows() SQLRowIter {
 	return newRowIter(td.rows, len(td.colTypes))
+}
+
+func (td *tableData) SelectedField() string {
+	if td.selectedField == "*" {
+		return ""
+	}
+	return fmt.Sprintf("(%s)", td.selectedField)
 }
 
 func (td *tableData) SpecialComments() StringIter {
@@ -296,11 +304,12 @@ LOOP:
 		}
 
 		td := &tableData{
-			database:   dbName,
-			table:      tableName,
-			rows:       rows,
-			chunkIndex: chunkIndex,
-			colTypes:   colTypes,
+			database:      dbName,
+			table:         tableName,
+			rows:          rows,
+			chunkIndex:    chunkIndex,
+			colTypes:      colTypes,
+			selectedField: selectedField,
 			specCmts: []string{
 				"/*!40101 SET NAMES binary*/;",
 			},

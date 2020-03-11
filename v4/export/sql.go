@@ -121,10 +121,11 @@ func SelectAllFromTable(conf *Config, db *sql.DB, database, table string) (Table
 	}
 
 	return &tableData{
-		database: database,
-		table:    table,
-		rows:     rows,
-		colTypes: colTypes,
+		database:      database,
+		table:         table,
+		rows:          rows,
+		colTypes:      colTypes,
+		selectedField: selectedField,
 		specCmts: []string{
 			"/*!40101 SET NAMES binary*/;",
 		},
