@@ -2,11 +2,14 @@ package export
 
 import (
 	"bufio"
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/pingcap/dumpling/v4/log"
 	"go.uber.org/zap"
@@ -36,10 +39,26 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
 		return nil
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	batch := NewWriteBatch(ctx, w)
+	var err error
+	go batch.Run()
+	go func() {
+		select {
+		case err = <-batch.Error():
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
+
 	specCmtIter := tblIR.SpecialComments()
 	for specCmtIter.HasNext() {
-		if err := write(w, fmt.Sprintf("%s\n", specCmtIter.Next())); err != nil {
+		batch.Write(fmt.Sprintf("%s\n", specCmtIter.Next()))
+		select {
+		case <-ctx.Done():
 			return err
+		default:
 		}
 	}
 
@@ -49,20 +68,16 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
 		counter               = 0
 	)
 	for fileRowIter.HasNextSQLRowIter() {
-		if err := write(w, insertStatementPrefix); err != nil {
-			return err
-		}
+		batch.Write(insertStatementPrefix)
 
 		fileRowIter = fileRowIter.NextSQLRowIter()
 		for fileRowIter.HasNext() {
-			if err := fileRowIter.Next(row); err != nil {
+			if err = fileRowIter.Next(row); err != nil {
 				log.Zap().Error("scanning from sql.Row failed", zap.Error(err))
 				return err
 			}
 
-			if err := write(w, row.ToString()); err != nil {
-				return err
-			}
+			batch.Write(row.ToString())
 			counter += 1
 
 			var splitter string
@@ -71,8 +86,11 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
 			} else {
 				splitter = ";"
 			}
-			if err := write(w, fmt.Sprintf("%s\n", splitter)); err != nil {
+			batch.Write(fmt.Sprintf("%s\n", splitter))
+			select {
+			case <-ctx.Done():
 				return err
+			default:
 			}
 		}
 	}
@@ -80,7 +98,12 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
 	log.Zap().Debug("dumping table",
 		zap.String("table", tblIR.TableName()),
 		zap.Int("record counts", counter))
-	return nil
+	select {
+	case <-batch.closed:
+	case <-time.After(time.Minute):
+		err = errors.New("fail to write left string in 1 minute")
+	}
+	return err
 }
 
 func write(writer io.StringWriter, str string) error {
