@@ -3,9 +3,10 @@ package export
 import (
 	"context"
 	"io"
+	"strings"
 )
 
-const lengthLimit = 1048576
+const lengthLimit = 500 * (1 << 20)
 
 type writeBatch struct {
 	ctx context.Context
@@ -47,41 +48,45 @@ func (w writeBatch) Run() {
 		close(w.errCh)
 	}()
 	var (
-		str string
+		str []string
 		err error
+		length int
 	)
 	for {
 		select {
 		case s, ok := <-w.input:
 			if !ok {
 				if len(str) > 0 {
-					err = write(w.writer, str)
+					err = write(w.writer, strings.Join(str, ""))
 					if err != nil {
 						w.errCh <- err
 					}
-					str = ""
+					str = str[:0]
+					length = 0
 				}
 				return
 			}
-			str += s
-			if len(str) > lengthLimit {
-				err = write(w.writer, str)
+			str = append(str, s)
+			length += len(s)
+			if length > lengthLimit {
+				err = write(w.writer, strings.Join(str, ""))
 				if err != nil {
 					w.errCh <- err
 					return
 				}
-				str = ""
+				str = str[:0]
+				length = 0
 			}
 		case <-w.ctx.Done():
 			return
 		default:
 			if len(str) > 0 {
-				err = write(w.writer, str)
+				err = write(w.writer, strings.Join(str, ""))
 				if err != nil {
 					w.errCh <- err
-					return
 				}
-				str = ""
+				str = str[:0]
+				length = 0
 			}
 		}
 	}
