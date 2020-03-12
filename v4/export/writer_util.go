@@ -30,6 +30,54 @@ func NewDao() (d *Dao) {
 	return
 }
 
+type buffPipe struct {
+	input chan string
+	bf    *bytes.Buffer
+}
+
+func (b *buffPipe) Run() {
+	for {
+		select {
+		case s, ok := <-b.input:
+			if !ok {
+				return
+			}
+			b.bf.WriteString(s)
+		}
+	}
+}
+
+type writerPipe struct {
+	sync.Mutex
+
+	input chan string
+	w io.StringWriter
+	err error
+}
+
+func (b *writerPipe) Run() {
+	for {
+		select {
+		case s, ok := <-b.input:
+			if !ok {
+				return
+			}
+			err := write(b.w, s)
+			if b.err != nil {
+				b.Lock()
+				b.err = err
+				b.Unlock()
+			}
+		}
+	}
+}
+
+func (b *writerPipe) Error() error {
+	b.Lock()
+	defer b.Unlock()
+	return b.err
+}
+
 func WriteMeta(meta MetaIR, w io.StringWriter) error {
 	log.Zap().Debug("start dumping meta data", zap.String("target", meta.TargetName()))
 
@@ -59,6 +107,16 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
 	dao := NewDao()
 	bf := dao.bp.Get().(*bytes.Buffer)
 	bf.Grow(lengthLimit)
+	bfp := &buffPipe{
+		input: make(chan string),
+		bf:    bf,
+	}
+	wp := &writerPipe{
+		input: make(chan string),
+		w:     w,
+	}
+	go bfp.Run()
+	go wp.Run()
 	specCmtIter := tblIR.SpecialComments()
 	for specCmtIter.HasNext() {
 		bf.WriteString(specCmtIter.Next())
@@ -72,7 +130,7 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
 	)
 
 	for fileRowIter.HasNextSQLRowIter() {
-		bf.WriteString(insertStatementPrefix)
+		bfp.input <- insertStatementPrefix
 
 		fileRowIter = fileRowIter.NextSQLRowIter()
 		for fileRowIter.HasNext() {
@@ -81,24 +139,23 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
 				return err
 			}
 
-			row.WriteToStringBuilder(bf)
+			row.WriteToStringBuilder(bfp)
 			counter += 1
 
 			var splitter string
 			if fileRowIter.HasNext() {
-				splitter = ","
+				splitter = ",\n"
 			} else {
-				splitter = ";"
+				splitter = ";\n"
 			}
-			bf.WriteString(splitter)
-			bf.WriteString("\n")
+			bfp.input <- splitter
 
 			if bf.Len() >= lengthLimit {
-				err = write(w, bf.String())
-				if err != nil {
-					return err
-				}
+				wp.input <- bf.String()
 				bf.Reset()
+			}
+			if err = wp.Error(); err != nil {
+				return err
 			}
 		}
 	}

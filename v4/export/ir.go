@@ -1,7 +1,6 @@
 package export
 
 import (
-	"bytes"
 	"database/sql"
 )
 
@@ -34,7 +33,7 @@ type RowReceiverStringer interface {
 
 type Stringer interface {
 	ToString() string
-	WriteToStringBuilder(bf *bytes.Buffer)
+	WriteToStringBuilder(bf *buffPipe)
 }
 
 type RowReceiver interface {

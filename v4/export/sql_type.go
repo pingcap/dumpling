@@ -1,7 +1,6 @@
 package export
 
 import (
-	"bytes"
 	"database/sql"
 	"fmt"
 	"strings"
@@ -93,15 +92,15 @@ func (r RowReceiverArr) ToString() string {
 	return sb.String()
 }
 
-func (r RowReceiverArr) WriteToStringBuilder (bf *bytes.Buffer) {
-	bf.WriteString("(")
+func (r RowReceiverArr) WriteToStringBuilder (bf *buffPipe) {
+	bf.input <- "("
 	for i, receiver := range r {
 		receiver.WriteToStringBuilder(bf)
 		if i != len(r)-1 {
-			bf.WriteString(", ")
+			bf.input <- ", "
 		}
 	}
-	bf.WriteString(")")
+	bf.input <- ")"
 }
 
 
@@ -117,11 +116,11 @@ func (s SQLTypeNumber) ToString() string {
 	}
 }
 
-func (s SQLTypeNumber) WriteToStringBuilder (bf *bytes.Buffer) {
+func (s SQLTypeNumber) WriteToStringBuilder (bf *buffPipe) {
 	if s.Valid {
-		bf.WriteString(s.String)
+		bf.input <- s.String
 	} else {
-		bf.WriteString("NULL")
+		bf.input <- "NULL"
 	}
 }
 
@@ -146,30 +145,11 @@ func (s *SQLTypeString) ToString() string {
 	}
 }
 
-func (s *SQLTypeString) WriteToStringBuilder (bf *bytes.Buffer) {
+func (s *SQLTypeString) WriteToStringBuilder (bf *buffPipe) {
 	if s.Valid {
-		l := len(s.String)
-		var escape byte
-		for i := 0; i < l; i++ {
-			c := s.String[i]
-
-			escape = 0
-			switch c {
-			case '\\':
-				escape = '\\'
-				break
-			case '\'':
-				escape = '\''
-				break
-			}
-
-			if escape != 0 {
-				bf.WriteByte(escape)
-			}
-			bf.WriteByte(c)
-		}
+		bf.input <- escape(s.String)
 	} else {
-		bf.WriteString("NULL")
+		bf.input <- "NULL"
 	}
 }
 
@@ -192,6 +172,6 @@ func (s *SQLTypeBytes) ToString() string {
 	return fmt.Sprintf("x'%x'", s.bytes)
 }
 
-func (s *SQLTypeBytes) WriteToStringBuilder (bf *bytes.Buffer) {
-	bf.WriteString(fmt.Sprintf("x'%x'", s.bytes))
+func (s *SQLTypeBytes) WriteToStringBuilder (bf *buffPipe) {
+	bf.input <- fmt.Sprintf("x'%x'", s.bytes)
 }
