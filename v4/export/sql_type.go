@@ -92,6 +92,18 @@ func (r RowReceiverArr) ToString() string {
 	return sb.String()
 }
 
+func (r RowReceiverArr) WriteToStringBuilder (sb *strings.Builder) {
+	sb.WriteString("(")
+	for i, receiver := range r {
+		receiver.WriteToStringBuilder(sb)
+		if i != len(r)-1 {
+			sb.WriteString(", ")
+		}
+	}
+	sb.WriteString(")")
+}
+
+
 type SQLTypeNumber struct {
 	SQLTypeString
 }
@@ -101,6 +113,14 @@ func (s SQLTypeNumber) ToString() string {
 		return s.String
 	} else {
 		return "NULL"
+	}
+}
+
+func (s SQLTypeNumber) WriteToStringBuilder (sb *strings.Builder) {
+	if s.Valid {
+		sb.WriteString(escape(s.String))
+	} else {
+		sb.WriteString("NULL")
 	}
 }
 
@@ -125,6 +145,14 @@ func (s *SQLTypeString) ToString() string {
 	}
 }
 
+func (s *SQLTypeString) WriteToStringBuilder (sb *strings.Builder) {
+	if s.Valid {
+		sb.WriteString(escape(s.String))
+	} else {
+		sb.WriteString("NULL")
+	}
+}
+
 func escape(src string) string {
 	src = strings.ReplaceAll(src, "'", "''")
 	return strings.ReplaceAll(src, `\`, `\\`)
@@ -142,4 +170,8 @@ func (s *SQLTypeBytes) ReportSize() uint64 {
 }
 func (s *SQLTypeBytes) ToString() string {
 	return fmt.Sprintf("x'%x'", s.bytes)
+}
+
+func (s *SQLTypeBytes) WriteToStringBuilder (sb *strings.Builder) {
+	sb.WriteString(fmt.Sprintf("x'%x'", s.bytes))
 }

@@ -2,18 +2,16 @@ package export
 
 import (
 	"bufio"
-	"context"
-	"errors"
 	"fmt"
+	"github.com/pingcap/dumpling/v4/log"
+	"go.uber.org/zap"
 	"io"
 	"os"
 	"strings"
 	"sync"
-	"time"
-
-	"github.com/pingcap/dumpling/v4/log"
-	"go.uber.org/zap"
 )
+
+const lengthLimit = 1048576
 
 func WriteMeta(meta MetaIR, w io.StringWriter) error {
 	log.Zap().Debug("start dumping meta data", zap.String("target", meta.TargetName()))
@@ -39,30 +37,14 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
 		return nil
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	batch := NewWriteBatch(ctx, w)
 	var err error
-	go batch.Run()
-	go func() {
-		select {
-		case err1, ok := <-batch.Error():
-			if ok {
-				err = err1
-			}
-			cancel()
-		case <-ctx.Done():
-		}
-	}()
 
+	var sb strings.Builder
+	sb.Grow(lengthLimit)
 	specCmtIter := tblIR.SpecialComments()
 	for specCmtIter.HasNext() {
-		batch.Write(fmt.Sprintf("%s\n", specCmtIter.Next()))
-		select {
-		case <-ctx.Done():
-			return err
-		default:
-		}
+		sb.WriteString(specCmtIter.Next())
+		sb.WriteString("\n")
 	}
 
 	var (
@@ -70,8 +52,9 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
 		row                   = MakeRowReceiver(tblIR.ColumnTypes())
 		counter               = 0
 	)
+
 	for fileRowIter.HasNextSQLRowIter() {
-		batch.Write(insertStatementPrefix)
+		sb.WriteString(insertStatementPrefix)
 
 		fileRowIter = fileRowIter.NextSQLRowIter()
 		for fileRowIter.HasNext() {
@@ -80,7 +63,7 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
 				return err
 			}
 
-			batch.Write(row.ToString())
+			row.WriteToStringBuilder(&sb)
 			counter += 1
 
 			var splitter string
@@ -89,23 +72,29 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
 			} else {
 				splitter = ";"
 			}
-			batch.Write(fmt.Sprintf("%s\n", splitter))
-			select {
-			case <-ctx.Done():
-				return err
-			default:
+			sb.WriteString(splitter)
+			sb.WriteString("\n")
+
+			if sb.Len() >= lengthLimit {
+				err = write(w, sb.String())
+				if err != nil {
+					return err
+				}
+				sb.Reset()
+				sb.Grow(lengthLimit)
 			}
 		}
 	}
 
-	close(batch.input)
 	log.Zap().Debug("dumping table",
 		zap.String("table", tblIR.TableName()),
 		zap.Int("record counts", counter))
-	select {
-	case <-batch.closed:
-	case <-time.After(time.Minute):
-		return errors.New("fail to write left string in 1 minute")
+	if sb.Len() > 0 {
+		err = write(w, sb.String())
+		if err != nil {
+			return err
+		}
+		sb.Reset()
 	}
 	return nil
 }
