@@ -96,6 +96,7 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
 				if err != nil {
 					return err
 				}
+				sb.Reset()
 				dao.bp.Put(sb)
 				sb = dao.bp.Get().(*strings.Builder)
 				sb.Grow(lengthLimit)
@@ -111,6 +112,7 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
 		if err != nil {
 			return err
 		}
+		sb.Reset()
 		dao.bp.Put(sb)
 	}
 	return nil
