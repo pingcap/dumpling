@@ -108,13 +108,14 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
 	bf := dao.bp.Get().(*bytes.Buffer)
 	bf.Grow(lengthLimit)
 	bfp := &buffPipe{
-		input: make(chan string),
+		input: make(chan string, 5),
 		bf:    bf,
 	}
 	wp := &writerPipe{
-		input: make(chan string),
+		input: make(chan string, 5),
 		w:     w,
 	}
+	defer close(bfp.input)
 	go bfp.Run()
 	go wp.Run()
 	specCmtIter := tblIR.SpecialComments()
