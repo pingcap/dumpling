@@ -13,6 +13,21 @@ import (
 
 const lengthLimit = 1048576
 
+type Dao struct {
+	bp      sync.Pool
+}
+
+func NewDao() (d *Dao) {
+	d = &Dao{
+		bp: sync.Pool{
+			New: func() interface{} {
+				return &strings.Builder{}
+			},
+		},
+	}
+	return
+}
+
 func WriteMeta(meta MetaIR, w io.StringWriter) error {
 	log.Zap().Debug("start dumping meta data", zap.String("target", meta.TargetName()))
 
@@ -39,7 +54,8 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
 
 	var err error
 
-	var sb strings.Builder
+	dao := NewDao()
+	sb := dao.bp.Get().(*strings.Builder)
 	sb.Grow(lengthLimit)
 	specCmtIter := tblIR.SpecialComments()
 	for specCmtIter.HasNext() {
@@ -63,7 +79,7 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
 				return err
 			}
 
-			row.WriteToStringBuilder(&sb)
+			row.WriteToStringBuilder(sb)
 			counter += 1
 
 			var splitter string
@@ -80,7 +96,8 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
 				if err != nil {
 					return err
 				}
-				sb.Reset()
+				dao.bp.Put(sb)
+				sb = dao.bp.Get().(*strings.Builder)
 				sb.Grow(lengthLimit)
 			}
 		}
@@ -94,7 +111,7 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
 		if err != nil {
 			return err
 		}
-		sb.Reset()
+		dao.bp.Put(sb)
 	}
 	return nil
 }
