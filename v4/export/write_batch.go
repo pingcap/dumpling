@@ -3,7 +3,6 @@ package export
 import (
 	"context"
 	"io"
-	"strings"
 )
 
 const lengthLimit = 500 * (1 << 20)
@@ -47,47 +46,20 @@ func (w writeBatch) Run() {
 		close(w.closed)
 		close(w.errCh)
 	}()
-	var (
-		str []string
-		err error
-		length int
-	)
+	var err error
 	for {
 		select {
 		case s, ok := <-w.input:
 			if !ok {
-				if len(str) > 0 {
-					err = write(w.writer, strings.Join(str, ""))
-					if err != nil {
-						w.errCh <- err
-					}
-					str = str[:0]
-					length = 0
-				}
 				return
 			}
-			str = append(str, s)
-			length += len(s)
-			if length > lengthLimit {
-				err = write(w.writer, strings.Join(str, ""))
-				if err != nil {
-					w.errCh <- err
-					return
-				}
-				str = str[:0]
-				length = 0
+			err = write(w.writer, s)
+			if err != nil {
+				w.errCh <- err
+				return
 			}
 		case <-w.ctx.Done():
 			return
-		default:
-			if len(str) > 0 {
-				err = write(w.writer, strings.Join(str, ""))
-				if err != nil {
-					w.errCh <- err
-				}
-				str = str[:0]
-				length = 0
-			}
 		}
 	}
 }
