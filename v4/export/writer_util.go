@@ -2,13 +2,15 @@ package export
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
-	"github.com/pingcap/dumpling/v4/log"
-	"go.uber.org/zap"
 	"io"
 	"os"
 	"strings"
 	"sync"
+
+	"github.com/pingcap/dumpling/v4/log"
+	"go.uber.org/zap"
 )
 
 const lengthLimit = 1048576
@@ -21,7 +23,7 @@ func NewDao() (d *Dao) {
 	d = &Dao{
 		bp: sync.Pool{
 			New: func() interface{} {
-				return &strings.Builder{}
+				return &bytes.Buffer{}
 			},
 		},
 	}
@@ -55,12 +57,12 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
 	var err error
 
 	dao := NewDao()
-	sb := dao.bp.Get().(*strings.Builder)
-	sb.Grow(lengthLimit)
+	bf := dao.bp.Get().(*bytes.Buffer)
+	bf.Grow(lengthLimit)
 	specCmtIter := tblIR.SpecialComments()
 	for specCmtIter.HasNext() {
-		sb.WriteString(specCmtIter.Next())
-		sb.WriteString("\n")
+		bf.WriteString(specCmtIter.Next())
+		bf.WriteString("\n")
 	}
 
 	var (
@@ -70,7 +72,7 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
 	)
 
 	for fileRowIter.HasNextSQLRowIter() {
-		sb.WriteString(insertStatementPrefix)
+		bf.WriteString(insertStatementPrefix)
 
 		fileRowIter = fileRowIter.NextSQLRowIter()
 		for fileRowIter.HasNext() {
@@ -79,7 +81,7 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
 				return err
 			}
 
-			row.WriteToStringBuilder(sb)
+			row.WriteToStringBuilder(bf)
 			counter += 1
 
 			var splitter string
@@ -88,30 +90,28 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
 			} else {
 				splitter = ";"
 			}
-			sb.WriteString(splitter)
-			sb.WriteString("\n")
+			bf.WriteString(splitter)
+			bf.WriteString("\n")
 
-			if sb.Len() >= lengthLimit {
-				err = write(w, sb.String())
+			if bf.Len() >= lengthLimit {
+				err = write(w, bf.String())
 				if err != nil {
 					return err
 				}
-				sb.Reset()
-				sb.Grow(lengthLimit)
+				bf.Reset()
 			}
 		}
 	}
-
 	log.Zap().Debug("dumping table",
 		zap.String("table", tblIR.TableName()),
 		zap.Int("record counts", counter))
-	if sb.Len() > 0 {
-		err = write(w, sb.String())
+	if bf.Len() > 0 {
+		err = write(w, bf.String())
 		if err != nil {
 			return err
 		}
-		sb.Reset()
-		dao.bp.Put(sb)
+		bf.Reset()
+		dao.bp.Put(bf)
 	}
 	return nil
 }
