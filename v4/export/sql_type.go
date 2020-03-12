@@ -69,9 +69,7 @@ type RowReceiverArr []RowReceiverStringer
 
 func (r RowReceiverArr) BindAddress(args []interface{}) {
 	for i := range args {
-		var singleAddr [1]interface{}
-		r[i].BindAddress(singleAddr[:])
-		args[i] = singleAddr[0]
+		r[i].BindAddress(args[i:i+1])
 	}
 }
 func (r RowReceiverArr) ReportSize() uint64 {
