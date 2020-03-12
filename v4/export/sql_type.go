@@ -1,7 +1,6 @@
 package export
 
 import (
-	"bytes"
 	"database/sql"
 	"fmt"
 	"strings"
@@ -93,15 +92,15 @@ func (r RowReceiverArr) ToString() string {
 	return sb.String()
 }
 
-func (r RowReceiverArr) WriteToStringBuilder (bf *bytes.Buffer) {
-	bf.WriteString("(")
+func (r RowReceiverArr) WriteToStringBuilder (sb *strings.Builder) {
+	sb.WriteString("(")
 	for i, receiver := range r {
-		receiver.WriteToStringBuilder(bf)
+		receiver.WriteToStringBuilder(sb)
 		if i != len(r)-1 {
-			bf.WriteString(", ")
+			sb.WriteString(", ")
 		}
 	}
-	bf.WriteString(")")
+	sb.WriteString(")")
 }
 
 
@@ -117,11 +116,11 @@ func (s SQLTypeNumber) ToString() string {
 	}
 }
 
-func (s SQLTypeNumber) WriteToStringBuilder (bf *bytes.Buffer) {
+func (s SQLTypeNumber) WriteToStringBuilder (sb *strings.Builder) {
 	if s.Valid {
-		bf.WriteString(s.String)
+		sb.WriteString(s.String)
 	} else {
-		bf.WriteString("NULL")
+		sb.WriteString("NULL")
 	}
 }
 
@@ -146,7 +145,7 @@ func (s *SQLTypeString) ToString() string {
 	}
 }
 
-func (s *SQLTypeString) WriteToStringBuilder (bf *bytes.Buffer) {
+func (s *SQLTypeString) WriteToStringBuilder (sb *strings.Builder) {
 	if s.Valid {
 		l := len(s.String)
 		var escape byte
@@ -164,12 +163,12 @@ func (s *SQLTypeString) WriteToStringBuilder (bf *bytes.Buffer) {
 			}
 
 			if escape != 0 {
-				bf.WriteByte(escape)
+				sb.WriteByte(escape)
 			}
-			bf.WriteByte(c)
+			sb.WriteByte(c)
 		}
 	} else {
-		bf.WriteString("NULL")
+		sb.WriteString("NULL")
 	}
 }
 
@@ -192,6 +191,6 @@ func (s *SQLTypeBytes) ToString() string {
 	return fmt.Sprintf("x'%x'", s.bytes)
 }
 
-func (s *SQLTypeBytes) WriteToStringBuilder (bf *bytes.Buffer) {
-	bf.WriteString(fmt.Sprintf("x'%x'", s.bytes))
+func (s *SQLTypeBytes) WriteToStringBuilder (sb *strings.Builder) {
+	sb.WriteString(fmt.Sprintf("x'%x'", s.bytes))
 }
