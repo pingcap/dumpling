@@ -147,26 +147,27 @@ func (s *SQLTypeString) ToString() string {
 
 func (s *SQLTypeString) WriteToStringBuilder (wm *writeManager) {
 	if s.Valid {
-		l := len(s.String)
-		var escape byte
-		for i := 0; i < l; i++ {
-			c := s.String[i]
-
-			escape = 0
-			switch c {
-			case '\\':
-				escape = '\\'
-				break
-			case '\'':
-				escape = '\''
-				break
-			}
-
-			if escape != 0 {
-				wm.WriteByte(escape)
-			}
-			wm.WriteByte(c)
-		}
+		//l := len(s.String)
+		//var escape byte
+		//for i := 0; i < l; i++ {
+		//	c := s.String[i]
+		//
+		//	escape = 0
+		//	switch c {
+		//	case '\\':
+		//		escape = '\\'
+		//		break
+		//	case '\'':
+		//		escape = '\''
+		//		break
+		//	}
+		//
+		//	if escape != 0 {
+		//		wm.WriteByte(escape)
+		//	}
+		//	wm.WriteByte(c)
+		//}
+		wm.WriteString(escape(s.String))
 	} else {
 		wm.WriteString("NULL")
 	}

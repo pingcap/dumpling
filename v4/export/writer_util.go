@@ -62,20 +62,21 @@ func (w writeManager) WriteString(s string) {
 	if w.err != nil {
 		return
 	}
-	if len(s) >= w.lengthLimit {
-		w.err = w.flushSb()
-		if w.err != nil {
-			return
-		}
-		w.err = write(w.writer, s)
-		return
-	} else if w.sb.Len() + len(s) >= w.lengthLimit {
-		w.err = w.flushSb()
-		if w.err != nil {
-			return
-		}
-	}
-	w.sb.WriteString(s)
+	//if len(s) >= w.lengthLimit {
+	//	w.err = w.flushSb()
+	//	if w.err != nil {
+	//		return
+	//	}
+	//	w.err = write(w.writer, s)
+	//	return
+	//} else if w.sb.Len() + len(s) >= w.lengthLimit {
+	//	w.err = w.flushSb()
+	//	if w.err != nil {
+	//		return
+	//	}
+	//}
+	//w.sb.WriteString(s)
+	w.err = write(w.writer, s)
 }
 
 func (w writeManager) WriteByte(s byte) {
