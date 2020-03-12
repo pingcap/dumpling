@@ -118,7 +118,7 @@ func (s SQLTypeNumber) ToString() string {
 
 func (s SQLTypeNumber) WriteToStringBuilder (sb *strings.Builder) {
 	if s.Valid {
-		sb.WriteString(escape(s.String))
+		sb.WriteString(s.String)
 	} else {
 		sb.WriteString("NULL")
 	}
@@ -147,7 +147,26 @@ func (s *SQLTypeString) ToString() string {
 
 func (s *SQLTypeString) WriteToStringBuilder (sb *strings.Builder) {
 	if s.Valid {
-		sb.WriteString(escape(s.String))
+		l := len(s.String)
+		var escape byte
+		for i := 0; i < l; i++ {
+			c := s.String[i]
+
+			escape = 0
+			switch c {
+			case '\\':
+				escape = '\\'
+				break
+			case '\'':
+				escape = '\''
+				break
+			}
+
+			if escape != 0 {
+				sb.WriteByte(escape)
+			}
+			sb.WriteByte(c)
+		}
 	} else {
 		sb.WriteString("NULL")
 	}
