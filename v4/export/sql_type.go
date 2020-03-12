@@ -92,15 +92,15 @@ func (r RowReceiverArr) ToString() string {
 	return sb.String()
 }
 
-func (r RowReceiverArr) WriteToStringBuilder (sb *strings.Builder) {
-	sb.WriteString("(")
+func (r RowReceiverArr) WriteToStringBuilder (wm *writeManager) {
+	wm.WriteString("(")
 	for i, receiver := range r {
-		receiver.WriteToStringBuilder(sb)
+		receiver.WriteToStringBuilder(wm)
 		if i != len(r)-1 {
-			sb.WriteString(", ")
+			wm.WriteString(", ")
 		}
 	}
-	sb.WriteString(")")
+	wm.WriteString(")")
 }
 
 
@@ -116,11 +116,11 @@ func (s SQLTypeNumber) ToString() string {
 	}
 }
 
-func (s SQLTypeNumber) WriteToStringBuilder (sb *strings.Builder) {
+func (s SQLTypeNumber) WriteToStringBuilder (wm *writeManager) {
 	if s.Valid {
-		sb.WriteString(s.String)
+		wm.WriteString(s.String)
 	} else {
-		sb.WriteString("NULL")
+		wm.WriteString("NULL")
 	}
 }
 
@@ -145,7 +145,7 @@ func (s *SQLTypeString) ToString() string {
 	}
 }
 
-func (s *SQLTypeString) WriteToStringBuilder (sb *strings.Builder) {
+func (s *SQLTypeString) WriteToStringBuilder (wm *writeManager) {
 	if s.Valid {
 		l := len(s.String)
 		var escape byte
@@ -163,12 +163,12 @@ func (s *SQLTypeString) WriteToStringBuilder (sb *strings.Builder) {
 			}
 
 			if escape != 0 {
-				sb.WriteByte(escape)
+				wm.WriteByte(escape)
 			}
-			sb.WriteByte(c)
+			wm.WriteByte(c)
 		}
 	} else {
-		sb.WriteString("NULL")
+		wm.WriteString("NULL")
 	}
 }
 
@@ -191,6 +191,6 @@ func (s *SQLTypeBytes) ToString() string {
 	return fmt.Sprintf("x'%x'", s.bytes)
 }
 
-func (s *SQLTypeBytes) WriteToStringBuilder (sb *strings.Builder) {
-	sb.WriteString(fmt.Sprintf("x'%x'", s.bytes))
+func (s *SQLTypeBytes) WriteToStringBuilder (wm *writeManager) {
+	wm.WriteString(fmt.Sprintf("x'%x'", s.bytes))
 }

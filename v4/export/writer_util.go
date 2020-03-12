@@ -28,6 +28,69 @@ func NewDao() (d *Dao) {
 	return
 }
 
+type writeManager struct {
+	sb *strings.Builder
+	writer io.StringWriter
+	lengthLimit int
+
+	err error
+}
+
+func newWriteManager(sb *strings.Builder, writer io.StringWriter, lengthLimit int) *writeManager {
+	return &writeManager{
+		sb:          sb,
+		writer:      writer,
+		lengthLimit: lengthLimit,
+		err:         nil,
+	}
+}
+
+func (w writeManager) flushSb() error {
+	if w.sb.Len() == 0 {
+		return nil
+	}
+	err := write(w.writer, w.sb.String())
+	w.sb.Reset()
+	w.sb.Grow(lengthLimit)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (w writeManager) WriteString(s string) {
+	if w.err != nil {
+		return
+	}
+	if len(s) >= w.lengthLimit {
+		w.err = w.flushSb()
+		if w.err != nil {
+			return
+		}
+		w.err = write(w.writer, s)
+		return
+	} else if w.sb.Len() + len(s) >= w.lengthLimit {
+		w.err = w.flushSb()
+		if w.err != nil {
+			return
+		}
+	}
+	w.sb.WriteString(s)
+}
+
+func (w writeManager) WriteByte(s byte) {
+	if w.err != nil {
+		return
+	}
+	if w.sb.Len() + 1 >= w.lengthLimit {
+		w.err = w.flushSb()
+		if w.err != nil {
+			return
+		}
+	}
+	w.sb.WriteByte(s)
+}
+
 func WriteMeta(meta MetaIR, w io.StringWriter) error {
 	log.Zap().Debug("start dumping meta data", zap.String("target", meta.TargetName()))
 
@@ -57,10 +120,11 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
 	dao := NewDao()
 	sb := dao.bp.Get().(*strings.Builder)
 	sb.Grow(lengthLimit)
+	wm := newWriteManager(sb, w, lengthLimit)
 	specCmtIter := tblIR.SpecialComments()
 	for specCmtIter.HasNext() {
-		sb.WriteString(specCmtIter.Next())
-		sb.WriteString("\n")
+		wm.WriteString(specCmtIter.Next())
+		wm.WriteString("\n")
 	}
 
 	var (
@@ -70,7 +134,7 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
 	)
 
 	for fileRowIter.HasNextSQLRowIter() {
-		sb.WriteString(insertStatementPrefix)
+		wm.WriteString(insertStatementPrefix)
 
 		fileRowIter = fileRowIter.NextSQLRowIter()
 		for fileRowIter.HasNext() {
@@ -79,7 +143,7 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
 				return err
 			}
 
-			row.WriteToStringBuilder(sb)
+			row.WriteToStringBuilder(wm)
 			counter += 1
 
 			var splitter string
@@ -88,16 +152,11 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
 			} else {
 				splitter = ";"
 			}
-			sb.WriteString(splitter)
-			sb.WriteString("\n")
+			wm.WriteString(splitter)
+			wm.WriteString("\n")
 
-			if sb.Len() >= lengthLimit {
-				err = write(w, sb.String())
-				if err != nil {
-					return err
-				}
-				sb.Reset()
-				sb.Grow(lengthLimit)
+			if wm.err != nil {
+				return err
 			}
 		}
 	}
@@ -105,15 +164,9 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
 	log.Zap().Debug("dumping table",
 		zap.String("table", tblIR.TableName()),
 		zap.Int("record counts", counter))
-	if sb.Len() > 0 {
-		err = write(w, sb.String())
-		if err != nil {
-			return err
-		}
-		sb.Reset()
-		dao.bp.Put(sb)
-	}
-	return nil
+	err = wm.flushSb()
+	dao.bp.Put(sb)
+	return err
 }
 
 func write(writer io.StringWriter, str string) error {

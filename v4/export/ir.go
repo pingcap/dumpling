@@ -2,7 +2,6 @@ package export
 
 import (
 	"database/sql"
-	"strings"
 )
 
 // TableDataIR is table data intermediate representation.
@@ -34,7 +33,7 @@ type RowReceiverStringer interface {
 
 type Stringer interface {
 	ToString() string
-	WriteToStringBuilder(sb *strings.Builder)
+	WriteToStringBuilder(wm *writeManager)
 }
 
 type RowReceiver interface {
