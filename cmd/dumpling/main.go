@@ -79,7 +79,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&statusAddr, "status-addr", ":8281", "dumpling API server and pprof addr")
 	rootCmd.PersistentFlags().Uint64VarP(&rows, "rows", "r", export.UnspecifiedSize, "Split table into chunks of this many rows, default unlimited")
 	rootCmd.PersistentFlags().StringVar(&where, "where", "", "Dump only selected records")
-	rootCmd.PersistentFlags().BoolVar(&escapeBackslash, "escape-backslash", false, "use backslash to escape quotation marks")
+	rootCmd.PersistentFlags().BoolVar(&escapeBackslash, "escape-backslash", true, "use backslash to escape quotation marks")
 }
 
 func run() {

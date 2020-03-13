@@ -1,6 +1,7 @@
 package export
 
 import (
+	"bytes"
 	"database/sql"
 	"fmt"
 	"strings"
@@ -41,7 +42,66 @@ var dataTypeBin = []string{
 	"BIT",
 }
 
-var escapeBackSlash bool
+type escapeInterface interface {
+	Escape(string) string
+}
+
+type backslashEscape struct {}
+
+func (b backslashEscape) Escape(s string) string {
+	var (
+		bf      bytes.Buffer
+		escape  byte
+		last	int = 0
+	)
+	for i := 0; i < len(s); i++ {
+		escape = 0
+
+		switch s[i] {
+		case 0: /* Must be escaped for 'mysql' */
+			escape = '0'
+			break
+		case '\n': /* Must be escaped for logs */
+			escape = 'n'
+			break
+		case '\r':
+			escape = 'r'
+			break
+		case '\\':
+			escape = '\\'
+			break
+		case '\'':
+			escape = '\''
+			break
+		case '"': /* Better safe than sorry */
+			escape = '"'
+			break
+		}
+
+		if escape != 0 {
+			if last == 0 {
+				bf.Grow(2 * len(s))
+			}
+			bf.WriteString(s[last: i])
+			bf.WriteByte('\\')
+			bf.WriteByte(escape)
+			last = i + 1
+		}
+	}
+	if last == 0 {
+		return s
+	}
+	bf.WriteString(s[last:])
+	return bf.String()
+}
+
+type noBackslashEscape struct {}
+
+func (b noBackslashEscape) Escape(s string) string {
+	return strings.ReplaceAll(s, "'", "''")
+}
+
+var globalEscape escapeInterface = backslashEscape{}
 
 func SQLTypeStringMaker() RowReceiverStringer {
 	return &SQLTypeString{}
@@ -123,18 +183,10 @@ func (s *SQLTypeString) ReportSize() uint64 {
 }
 func (s *SQLTypeString) ToString() string {
 	if s.Valid {
-		return fmt.Sprintf(`'%s'`, escape(s.String))
+		return fmt.Sprintf(`'%s'`, globalEscape.Escape(s.String))
 	} else {
 		return "NULL"
 	}
-}
-
-func escape(src string) string {
-	src = strings.ReplaceAll(src, `\`, `\\`)
-	if escapeBackSlash {
-		return strings.ReplaceAll(src, `'`, `\'`)
-	}
-	return strings.ReplaceAll(src, "'", "''")
 }
 
 type SQLTypeBytes struct {
