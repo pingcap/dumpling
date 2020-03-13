@@ -130,12 +130,11 @@ func (s *SQLTypeString) ToString() string {
 }
 
 func escape(src string) string {
+	src = strings.ReplaceAll(src, `\`, `\\`)
 	if escapeBackSlash {
-		src = strings.ReplaceAll(src, "'", "''")
-	} else {
-		src = strings.ReplaceAll(src, `'`, `\'`)
+		return strings.ReplaceAll(src, `'`, `\'`)
 	}
-	return strings.ReplaceAll(src, `\`, `\\`)
+	return strings.ReplaceAll(src, "'", "''")
 }
 
 type SQLTypeBytes struct {
