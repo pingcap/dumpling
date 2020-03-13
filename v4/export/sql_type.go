@@ -52,8 +52,9 @@ func (b backslashEscape) Escape(s string) string {
 	var (
 		bf      bytes.Buffer
 		escape  byte
-		last	int = 0
+		last	= 0
 	)
+	// reference: https://gist.github.com/siddontang/8875771
 	for i := 0; i < len(s); i++ {
 		escape = 0
 
@@ -76,6 +77,8 @@ func (b backslashEscape) Escape(s string) string {
 		case '"': /* Better safe than sorry */
 			escape = '"'
 			break
+		case '\032': /* This gives problems on Win32 */
+			escape = 'Z'
 		}
 
 		if escape != 0 {
@@ -91,7 +94,10 @@ func (b backslashEscape) Escape(s string) string {
 	if last == 0 {
 		return s
 	}
-	bf.WriteString(s[last:])
+	if last < len(s) {
+		bf.WriteString(s[last:])
+	}
+	defer bf.Reset()
 	return bf.String()
 }
 
