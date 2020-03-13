@@ -43,17 +43,9 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
 		}
 	}
 
-	escapeBackSlash := false
-	if td, ok := tblIR.(*tableData); ok {
-		escapeBackSlash = td.escapeBackSlash
-	} else if tc, ok := tblIR.(*tableDataChunks); ok {
-		if td, ok := tc.TableDataIR.(*tableData); ok {
-			escapeBackSlash = td.escapeBackSlash
-		}
-	}
 	var (
 		insertStatementPrefix = fmt.Sprintf("INSERT INTO %s VALUES\n", wrapBackTicks(tblIR.TableName()))
-		row                   = MakeRowReceiver(tblIR.ColumnTypes(), escapeBackSlash)
+		row                   = MakeRowReceiver(tblIR.ColumnTypes())
 		counter               = 0
 	)
 

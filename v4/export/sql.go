@@ -126,7 +126,6 @@ func SelectAllFromTable(conf *Config, db *sql.DB, database, table string) (Table
 		rows:          rows,
 		colTypes:      colTypes,
 		selectedField: selectedField,
-		escapeBackSlash: conf.EscapeBackSlash,
 		specCmts: []string{
 			"/*!40101 SET NAMES binary*/;",
 		},

@@ -55,9 +55,8 @@ func SQLTypeNumberMaker() RowReceiverStringer {
 	return &SQLTypeNumber{}
 }
 
-func MakeRowReceiver(colTypes []string, enableEscapeBackSlash bool) RowReceiverStringer {
+func MakeRowReceiver(colTypes []string) RowReceiverStringer {
 	rowReceiverArr := make(RowReceiverArr, len(colTypes))
-	escapeBackSlash = enableEscapeBackSlash
 	for i, colTp := range colTypes {
 		recMaker, ok := colTypeRowReceiverMap[colTp]
 		if !ok {

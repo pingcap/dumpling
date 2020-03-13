@@ -138,7 +138,6 @@ type tableData struct {
 	colTypes      []*sql.ColumnType
 	selectedField string
 	specCmts      []string
-	escapeBackSlash bool
 }
 
 func (td *tableData) ColumnTypes() []string {
@@ -311,7 +310,6 @@ LOOP:
 			chunkIndex:    chunkIndex,
 			colTypes:      colTypes,
 			selectedField: selectedField,
-			escapeBackSlash: conf.EscapeBackSlash,
 			specCmts: []string{
 				"/*!40101 SET NAMES binary*/;",
 			},

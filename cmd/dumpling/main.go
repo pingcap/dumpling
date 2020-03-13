@@ -106,7 +106,7 @@ func run() {
 	conf.StatusAddr = statusAddr
 	conf.Rows = rows
 	conf.Where = where
-	conf.EscapeBackSlash = escapeBackslash
+	conf.EscapeBackslash = escapeBackslash
 
 	err = export.Dump(conf)
 	if err != nil {
