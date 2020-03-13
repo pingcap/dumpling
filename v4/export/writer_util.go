@@ -36,14 +36,8 @@ type buffPipe struct {
 }
 
 func (b *buffPipe) Run() {
-	for {
-		select {
-		case s, ok := <-b.input:
-			if !ok {
-				return
-			}
-			b.bf.WriteString(s)
-		}
+	for s := range b.input {
+		b.bf.WriteString(s)
 	}
 }
 
@@ -56,18 +50,15 @@ type writerPipe struct {
 }
 
 func (b *writerPipe) Run() {
-	for {
-		select {
-		case s, ok := <-b.input:
-			if !ok {
-				return
-			}
-			err := write(b.w, s)
-			if b.err != nil {
-				b.Lock()
-				b.err = err
-				b.Unlock()
-			}
+	for s := range b.input {
+		if b.err != nil {
+			return
+		}
+		err := write(b.w, s)
+		if b.err != nil {
+			b.Lock()
+			b.err = err
+			b.Unlock()
 		}
 	}
 }
@@ -108,11 +99,11 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
 	bf := dao.bp.Get().(*bytes.Buffer)
 	bf.Grow(lengthLimit)
 	bfp := &buffPipe{
-		input: make(chan string, 5),
+		input: make(chan string, 1),
 		bf:    bf,
 	}
 	wp := &writerPipe{
-		input: make(chan string, 5),
+		input: make(chan string, 1),
 		w:     w,
 	}
 	defer close(bfp.input)
