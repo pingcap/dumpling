@@ -107,7 +107,7 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
 		w:     w,
 	}
 	defer close(bfp.input)
-	go bfp.Run()
+	// go bfp.Run()
 	go wp.Run()
 	specCmtIter := tblIR.SpecialComments()
 	for specCmtIter.HasNext() {
@@ -122,7 +122,7 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
 	)
 
 	for fileRowIter.HasNextSQLRowIter() {
-		bfp.input <- insertStatementPrefix
+		bfp.bf.WriteString(insertStatementPrefix)
 
 		fileRowIter = fileRowIter.NextSQLRowIter()
 		for fileRowIter.HasNext() {
@@ -140,7 +140,7 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
 			} else {
 				splitter = ";\n"
 			}
-			bfp.input <- splitter
+			bfp.bf.WriteString(splitter)
 
 			if bf.Len() >= lengthLimit {
 				wp.input <- bf.String()

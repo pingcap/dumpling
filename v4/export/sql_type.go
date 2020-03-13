@@ -93,14 +93,14 @@ func (r RowReceiverArr) ToString() string {
 }
 
 func (r RowReceiverArr) WriteToStringBuilder (bf *buffPipe) {
-	bf.input <- "("
+	bf.bf.WriteString("(")
 	for i, receiver := range r {
 		receiver.WriteToStringBuilder(bf)
 		if i != len(r)-1 {
-			bf.input <- ", "
+			bf.bf.WriteString(",")
 		}
 	}
-	bf.input <- ")"
+	bf.bf.WriteString(")")
 }
 
 
@@ -118,9 +118,9 @@ func (s SQLTypeNumber) ToString() string {
 
 func (s SQLTypeNumber) WriteToStringBuilder (bf *buffPipe) {
 	if s.Valid {
-		bf.input <- s.String
+		bf.bf.WriteString(s.String)
 	} else {
-		bf.input <- "NULL"
+		bf.bf.WriteString("NULL")
 	}
 }
 
@@ -147,9 +147,9 @@ func (s *SQLTypeString) ToString() string {
 
 func (s *SQLTypeString) WriteToStringBuilder (bf *buffPipe) {
 	if s.Valid {
-		bf.input <- escape(s.String)
+		bf.bf.WriteString(escape(s.String))
 	} else {
-		bf.input <- "NULL"
+		bf.bf.WriteString("NULL")
 	}
 }
 
@@ -173,5 +173,5 @@ func (s *SQLTypeBytes) ToString() string {
 }
 
 func (s *SQLTypeBytes) WriteToStringBuilder (bf *buffPipe) {
-	bf.input <- fmt.Sprintf("x'%x'", s.bytes)
+	bf.bf.WriteString(fmt.Sprintf("x'%x'", s.bytes))
 }
