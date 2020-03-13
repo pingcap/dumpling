@@ -32,6 +32,7 @@ type Config struct {
 	BlackWhiteList BWListConf
 	Rows           uint64
 	Where          string
+	EscapeBackSlash bool
 }
 
 func DefaultConfig() *Config {

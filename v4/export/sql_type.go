@@ -41,6 +41,8 @@ var dataTypeBin = []string{
 	"BIT",
 }
 
+var escapeBackSlash bool
+
 func SQLTypeStringMaker() RowReceiverStringer {
 	return &SQLTypeString{}
 }
@@ -53,8 +55,9 @@ func SQLTypeNumberMaker() RowReceiverStringer {
 	return &SQLTypeNumber{}
 }
 
-func MakeRowReceiver(colTypes []string) RowReceiverStringer {
+func MakeRowReceiver(colTypes []string, enableEscapeBackSlash bool) RowReceiverStringer {
 	rowReceiverArr := make(RowReceiverArr, len(colTypes))
+	escapeBackSlash = enableEscapeBackSlash
 	for i, colTp := range colTypes {
 		recMaker, ok := colTypeRowReceiverMap[colTp]
 		if !ok {
@@ -128,7 +131,11 @@ func (s *SQLTypeString) ToString() string {
 }
 
 func escape(src string) string {
-	src = strings.ReplaceAll(src, "'", "''")
+	if escapeBackSlash {
+		src = strings.ReplaceAll(src, "'", "''")
+	} else {
+		src = strings.ReplaceAll(src, `'`, `\'`)
+	}
 	return strings.ReplaceAll(src, `\`, `\\`)
 }
 
