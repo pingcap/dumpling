@@ -62,10 +62,10 @@ func (s *testUtilSuite) TestWriteInsert(c *C) {
 	expected := "/*!40101 SET NAMES binary*/;\n" +
 		"/*!40014 SET FOREIGN_KEY_CHECKS=0*/;\n" +
 		"INSERT INTO `employee` VALUES\n" +
-		"(1, 'male', 'bob@mail.com', '020-1234', NULL),\n" +
-		"(2, 'female', 'sarah@mail.com', '020-1253', 'healthy'),\n" +
-		"(3, 'male', 'john@mail.com', '020-1256', 'healthy'),\n" +
-		"(4, 'female', 'sarah@mail.com', '020-1235', 'healthy');\n"
+		"(1,'male','bob@mail.com','020-1234',NULL),\n" +
+		"(2,'female','sarah@mail.com','020-1253','healthy'),\n" +
+		"(3,'male','john@mail.com','020-1256','healthy'),\n" +
+		"(4,'female','sarah@mail.com','020-1235','healthy');\n"
 	c.Assert(strCollector.buf, Equals, expected)
 }
 

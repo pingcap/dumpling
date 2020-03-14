@@ -7,6 +7,7 @@ import (
 )
 
 var colTypeRowReceiverMap = map[string]func() RowReceiverStringer{}
+var quotationMark byte = '\''
 
 func init() {
 	for _, s := range dataTypeString {
@@ -147,7 +148,9 @@ func (s *SQLTypeString) ToString() string {
 
 func (s *SQLTypeString) WriteToStringBuilder (bf *buffPipe) {
 	if s.Valid {
+		bf.bf.WriteByte(quotationMark)
 		bf.bf.WriteString(escape(s.String))
+		bf.bf.WriteByte(quotationMark)
 	} else {
 		bf.bf.WriteString("NULL")
 	}
