@@ -53,14 +53,14 @@ type writerPipe struct {
 
 func (b *writerPipe) Run() {
 	defer close(b.closed)
-	for _ = range b.input {
+	for s := range b.input {
 		if b.err != nil {
 			return
 		}
-		// err := write(b.w, s)
+		err := write(b.w, s)
 		if b.err != nil {
 			b.Lock()
-			// b.err = err
+			b.err = err
 			b.Unlock()
 		}
 	}
