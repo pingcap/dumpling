@@ -18,13 +18,18 @@ type rowIter struct {
 	rows    *sql.Rows
 	hasNext bool
 	args    []interface{}
+
+	pending  bool
+	nextBool chan bool
 }
 
 func newRowIter(rows *sql.Rows, argLen int) *rowIter {
 	r := &rowIter{
-		rows:    rows,
-		hasNext: false,
-		args:    make([]interface{}, argLen),
+		rows:     rows,
+		hasNext:  false,
+		args:     make([]interface{}, argLen),
+		pending:  false,
+		nextBool: make(chan bool),
 	}
 	r.hasNext = r.rows.Next()
 	return r
@@ -36,11 +41,18 @@ func (iter *rowIter) Close() error {
 
 func (iter *rowIter) Next(row RowReceiver) error {
 	err := decodeFromRows(iter.rows, iter.args, row)
-	iter.hasNext = iter.rows.Next()
+	go func() {
+		iter.pending = true
+		iter.nextBool <- iter.rows.Next()
+	}()
 	return err
 }
 
 func (iter *rowIter) HasNext() bool {
+	if iter.pending {
+		iter.hasNext = <-iter.nextBool
+		iter.pending = false
+	}
 	return iter.hasNext
 }
 
