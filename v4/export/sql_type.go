@@ -1,6 +1,7 @@
 package export
 
 import (
+	"bytes"
 	"database/sql"
 	"fmt"
 	"strings"
@@ -42,6 +43,103 @@ var dataTypeBin = []string{
 	"BIT",
 }
 
+type escapeInterface interface {
+	Escape(string, bytes.Buffer)
+}
+
+type backslashEscape struct{}
+
+func (b backslashEscape) Escape(s string, bf bytes.Buffer) {
+	var (
+		escape byte
+		last   = 0
+	)
+	if bf.Len()+len(s) >= bf.Cap() {
+		bf.Grow(2 * len(s))
+	}
+	// reference: https://gist.github.com/siddontang/8875771
+	for i := 0; i < len(s); i++ {
+		escape = 0
+
+		switch s[i] {
+		case 0: /* Must be escaped for 'mysql' */
+			escape = '0'
+			break
+		case '\n': /* Must be escaped for logs */
+			escape = 'n'
+			break
+		case '\r':
+			escape = 'r'
+			break
+		case '\\':
+			escape = '\\'
+			break
+		case '\'':
+			escape = '\''
+			break
+		case '"': /* Better safe than sorry */
+			escape = '"'
+			break
+		case '\032': /* This gives problems on Win32 */
+			escape = 'Z'
+		}
+
+		if escape != 0 {
+			bf.WriteString(s[last:i])
+			bf.WriteByte('\\')
+			bf.WriteByte(escape)
+			last = i + 1
+		}
+	}
+	if last == 0 {
+		bf.WriteString(s)
+		return
+	} else if last < len(s) {
+		bf.WriteString(s[last:])
+	}
+}
+
+type noBackslashEscape struct{}
+
+func (b noBackslashEscape) Escape(s string, bf bytes.Buffer) {
+	var (
+		escape byte
+		last   = 0
+	)
+	if bf.Len()+len(s) >= bf.Cap() {
+		bf.Grow(2 * len(s))
+	}
+	for i := 0; i < len(s); i++ {
+		escape = 0
+
+		// `'` -> `''` and `\` -> `\\`
+		switch s[i] {
+		case '\\':
+			escape = '\\'
+			break
+		case '\'':
+			escape = '\''
+			break
+		}
+
+		if escape != 0 {
+			if last == 0 {
+				bf.Grow(2 * len(s))
+			}
+			bf.WriteString(s[last : i+1])
+			bf.WriteByte(escape)
+			last = i + 1
+		}
+	}
+	if last == 0 {
+		bf.WriteString(s)
+	} else if last < len(s) {
+		bf.WriteString(s[last:])
+	}
+}
+
+var globalEscape escapeInterface = backslashEscape{}
+
 func SQLTypeStringMaker() RowReceiverStringer {
 	return &SQLTypeString{}
 }
@@ -70,7 +168,7 @@ type RowReceiverArr []RowReceiverStringer
 
 func (r RowReceiverArr) BindAddress(args []interface{}) {
 	for i := range args {
-		r[i].BindAddress(args[i:i+1])
+		r[i].BindAddress(args[i : i+1])
 	}
 }
 func (r RowReceiverArr) ReportSize() uint64 {
@@ -93,7 +191,7 @@ func (r RowReceiverArr) ToString() string {
 	return sb.String()
 }
 
-func (r RowReceiverArr) WriteToStringBuilder (bf *buffPipe) {
+func (r RowReceiverArr) WriteToStringBuilder(bf *buffPipe) {
 	bf.bf.WriteString("(")
 	for i, receiver := range r {
 		receiver.WriteToStringBuilder(bf)
@@ -103,7 +201,6 @@ func (r RowReceiverArr) WriteToStringBuilder (bf *buffPipe) {
 	}
 	bf.bf.WriteString(")")
 }
-
 
 type SQLTypeNumber struct {
 	SQLTypeString
@@ -117,7 +214,7 @@ func (s SQLTypeNumber) ToString() string {
 	}
 }
 
-func (s SQLTypeNumber) WriteToStringBuilder (bf *buffPipe) {
+func (s SQLTypeNumber) WriteToStringBuilder(bf *buffPipe) {
 	if s.Valid {
 		bf.bf.WriteString(s.String)
 	} else {
@@ -146,7 +243,7 @@ func (s *SQLTypeString) ToString() string {
 	}
 }
 
-func (s *SQLTypeString) WriteToStringBuilder (bf *buffPipe) {
+func (s *SQLTypeString) WriteToStringBuilder(bf *buffPipe) {
 	if s.Valid {
 		bf.bf.WriteByte(quotationMark)
 		bf.bf.WriteString(escape(s.String))
@@ -175,6 +272,6 @@ func (s *SQLTypeBytes) ToString() string {
 	return fmt.Sprintf("x'%x'", s.bytes)
 }
 
-func (s *SQLTypeBytes) WriteToStringBuilder (bf *buffPipe) {
+func (s *SQLTypeBytes) WriteToStringBuilder(bf *buffPipe) {
 	bf.bf.WriteString(fmt.Sprintf("x'%x'", s.bytes))
 }
