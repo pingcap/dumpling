@@ -56,8 +56,8 @@ func (f *SimpleWriter) WriteTableData(ctx context.Context, ir TableDataIR) error
 
 	for {
 		filePath := path.Join(f.cfg.OutputDirPath, fileName)
-		fileWriter, tearDown := buildLazyFileWriter(filePath)
-		intWriter := &InterceptStringWriter{StringWriter: fileWriter}
+		fileWriter, tearDown := buildLazyBytesFileWriter(filePath)
+		intWriter := &InterceptBytesWriter{Writer: fileWriter}
 		err := WriteInsert(chunksIter, intWriter)
 		tearDown()
 		if err != nil {

@@ -1,6 +1,7 @@
 package export
 
 import (
+	"bytes"
 	"database/sql"
 	"database/sql/driver"
 	"fmt"
@@ -27,6 +28,19 @@ type mockStringCollector struct {
 func (m *mockStringCollector) WriteString(s string) (int, error) {
 	m.buf += s
 	return len(s), nil
+}
+
+type mockBytesCollector struct {
+	bf bytes.Buffer
+}
+
+func (m *mockBytesCollector) Write(p []byte) (int, error) {
+	m.bf.Write(p)
+	return len(p), nil
+}
+
+func (m *mockBytesCollector) String() string {
+	return m.bf.String()
 }
 
 type mockSQLRowIterator struct {

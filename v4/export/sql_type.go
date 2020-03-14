@@ -246,7 +246,7 @@ func (s *SQLTypeString) ToString() string {
 func (s *SQLTypeString) WriteToStringBuilder(bf *buffPipe) {
 	if s.Valid {
 		bf.bf.WriteByte(quotationMark)
-		globalEscape.Escape(s.String, bf)
+		globalEscape.Escape(s.String, bf.bf)
 		bf.bf.WriteByte(quotationMark)
 	} else {
 		bf.bf.WriteString("NULL")
