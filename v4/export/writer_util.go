@@ -44,12 +44,15 @@ func (b *buffPipe) Run() {
 type writerPipe struct {
 	sync.Mutex
 
-	input chan string
-	w     io.StringWriter
-	err   error
+	input  chan string
+	closed chan struct{}
+
+	w   io.StringWriter
+	err error
 }
 
 func (b *writerPipe) Run() {
+	defer close(b.closed)
 	for _ = range b.input {
 		if b.err != nil {
 			return
@@ -103,8 +106,9 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
 		bf:    bf,
 	}
 	wp := &writerPipe{
-		input: make(chan string, 8),
-		w:     w,
+		input:  make(chan string, 8),
+		closed: make(chan struct{}),
+		w:      w,
 	}
 	defer close(bfp.input)
 	// go bfp.Run()
@@ -162,14 +166,13 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
 		zap.String("table", tblIR.TableName()),
 		zap.Int("record counts", counter))
 	if bf.Len() > 0 {
-		err = write(w, bf.String())
-		if err != nil {
-			return err
-		}
+		wp.input <- bf.String()
 		bf.Reset()
 		dao.bp.Put(bf)
 	}
-	return nil
+	close(wp.input)
+	<-wp.closed
+	return wp.Error()
 }
 
 func write(writer io.StringWriter, str string) error {
