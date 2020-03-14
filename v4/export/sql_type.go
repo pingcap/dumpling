@@ -46,13 +46,13 @@ type escapeInterface interface {
 	Escape(string) string
 }
 
-type backslashEscape struct {}
+type backslashEscape struct{}
 
 func (b backslashEscape) Escape(s string) string {
 	var (
-		bf      bytes.Buffer
-		escape  byte
-		last	= 0
+		bf     bytes.Buffer
+		escape byte
+		last   = 0
 	)
 	// reference: https://gist.github.com/siddontang/8875771
 	for i := 0; i < len(s); i++ {
@@ -85,7 +85,7 @@ func (b backslashEscape) Escape(s string) string {
 			if last == 0 {
 				bf.Grow(2 * len(s))
 			}
-			bf.WriteString(s[last: i])
+			bf.WriteString(s[last:i])
 			bf.WriteByte('\\')
 			bf.WriteByte(escape)
 			last = i + 1
@@ -101,10 +101,44 @@ func (b backslashEscape) Escape(s string) string {
 	return bf.String()
 }
 
-type noBackslashEscape struct {}
+type noBackslashEscape struct{}
 
 func (b noBackslashEscape) Escape(s string) string {
-	return strings.ReplaceAll(s, "'", "''")
+	var (
+		bf     bytes.Buffer
+		escape byte
+		last   = 0
+	)
+	for i := 0; i < len(s); i++ {
+		escape = 0
+
+		// `'` -> `''` and `\` -> `\\`
+		switch s[i] {
+		case '\\':
+			escape = '\\'
+			break
+		case '\'':
+			escape = '\''
+			break
+		}
+
+		if escape != 0 {
+			if last == 0 {
+				bf.Grow(2 * len(s))
+			}
+			bf.WriteString(s[last:i])
+			bf.WriteByte(escape)
+			last = i
+		}
+	}
+	if last == 0 {
+		return s
+	}
+	if last < len(s) {
+		bf.WriteString(s[last:])
+	}
+	defer bf.Reset()
+	return bf.String()
 }
 
 var globalEscape escapeInterface = backslashEscape{}
