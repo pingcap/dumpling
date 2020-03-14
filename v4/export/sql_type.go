@@ -126,9 +126,9 @@ func (b noBackslashEscape) Escape(s string) string {
 			if last == 0 {
 				bf.Grow(2 * len(s))
 			}
-			bf.WriteString(s[last:i])
+			bf.WriteString(s[last : i+1])
 			bf.WriteByte(escape)
-			last = i
+			last = i + 1
 		}
 	}
 	if last == 0 {

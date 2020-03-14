@@ -10,7 +10,8 @@ run_sql_file "$DUMPLING_BASE_NAME/data/naughty_strings.t.sql"
 run_dumpling --escape-backslash=false
 # FIXME should compare the schemas too, but they differ too much among MySQL versions.
 diff "$DUMPLING_BASE_NAME/data/naughty_strings.t.sql" "$DUMPLING_OUTPUT_DIR/naughty_strings.t.0.sql"
+run_sql_file "$DUMPLING_BASE_NAME/data/naughty_strings.escape-schema.sql"
 run_sql_file "$DUMPLING_BASE_NAME/data/naughty_strings.escape.sql"
 run_dumpling --escape-backslash=true
 # FIXME should compare the schemas too, but they differ too much among MySQL versions.
-diff "$DUMPLING_BASE_NAME/data/naughty_strings.escape.expect.sql" "$DUMPLING_OUTPUT_DIR/naughty_strings.escape.sql"
+diff "$DUMPLING_BASE_NAME/data/naughty_strings.escape.expect.sql" "$DUMPLING_OUTPUT_DIR/naughty_strings.escape.0.sql"
