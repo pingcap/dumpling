@@ -104,11 +104,11 @@ func (s *testDumpSuite) TestDumpTable(c *C) {
 	c.Assert(specCmts.Next(), Equals, "/*!40101 SET NAMES binary*/;")
 	c.Assert(specCmts.HasNext(), IsFalse)
 	rowIter := tbDataRes.Rows()
-	c.Assert(rowIter.HasNext(), IsTrue)
+	c.Assert(rowIter.HasNext(false), IsTrue)
 	receiver := newSimpleRowReceiver(1)
-	c.Assert(rowIter.Next(receiver), IsNil)
+	c.Assert(rowIter.Next(receiver, false), IsNil)
 	c.Assert(receiver.data[0], Equals, "1")
-	c.Assert(rowIter.Next(receiver), IsNil)
+	c.Assert(rowIter.Next(receiver, false), IsNil)
 	c.Assert(receiver.data[0], Equals, "2")
 	c.Assert(mock.ExpectationsWereMet(), IsNil)
 }
@@ -149,14 +149,14 @@ func (s *testDumpSuite) TestDumpTableWhereClause(c *C) {
 	c.Assert(specCmts.Next(), Equals, "/*!40101 SET NAMES binary*/;")
 	c.Assert(specCmts.HasNext(), IsFalse)
 	rowIter := tbDataRes.Rows()
-	c.Assert(rowIter.HasNext(), IsTrue)
+	c.Assert(rowIter.HasNext(false), IsTrue)
 	receiver := newSimpleRowReceiver(1)
 
 	for i := 4; i < 9; i++ {
-		c.Assert(rowIter.HasNext(), IsTrue)
-		c.Assert(rowIter.Next(receiver), IsNil)
+		c.Assert(rowIter.HasNext(false), IsTrue)
+		c.Assert(rowIter.Next(receiver, false), IsNil)
 		c.Assert(receiver.data[0], Equals, strconv.Itoa(i))
 	}
-	c.Assert(tbDataRes.Rows().HasNext(), IsFalse)
+	c.Assert(tbDataRes.Rows().HasNext(false), IsFalse)
 	c.Assert(mock.ExpectationsWereMet(), IsNil)
 }

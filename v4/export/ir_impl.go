@@ -19,7 +19,6 @@ type rowIter struct {
 	hasNext bool
 	args    []interface{}
 
-	pending  bool
 	nextBool chan bool
 }
 
@@ -28,7 +27,6 @@ func newRowIter(rows *sql.Rows, argLen int) *rowIter {
 		rows:     rows,
 		hasNext:  false,
 		args:     make([]interface{}, argLen),
-		pending:  false,
 		nextBool: make(chan bool),
 	}
 	r.hasNext = r.rows.Next()
@@ -39,19 +37,21 @@ func (iter *rowIter) Close() error {
 	return iter.rows.Close()
 }
 
-func (iter *rowIter) Next(row RowReceiver) error {
+func (iter *rowIter) Next(row RowReceiver, async bool) error {
 	err := decodeFromRows(iter.rows, iter.args, row)
-	go func() {
-		iter.pending = true
-		iter.nextBool <- iter.rows.Next()
-	}()
+	if async {
+		go func() {
+			iter.nextBool <- iter.rows.Next()
+		}()
+	} else {
+		iter.hasNext = iter.rows.Next()
+	}
 	return err
 }
 
-func (iter *rowIter) HasNext() bool {
-	if iter.pending {
+func (iter *rowIter) HasNext(async bool) bool {
+	if async {
 		iter.hasNext = <-iter.nextBool
-		iter.pending = false
 	}
 	return iter.hasNext
 }
@@ -77,8 +77,8 @@ func (c *fileRowIter) Close() error {
 	return c.rowIter.Close()
 }
 
-func (c *fileRowIter) Next(row RowReceiver) error {
-	err := c.rowIter.Next(row)
+func (c *fileRowIter) Next(row RowReceiver, async bool) error {
+	err := c.rowIter.Next(row, async)
 	if err != nil {
 		return err
 	}
@@ -89,7 +89,10 @@ func (c *fileRowIter) Next(row RowReceiver) error {
 	return nil
 }
 
-func (c *fileRowIter) HasNext() bool {
+func (c *fileRowIter) HasNext(async bool) bool {
+	if async {
+		c.rowIter.HasNext(async)
+	}
 	if c.fileSizeLimit != UnspecifiedSize && c.currentFileSize >= c.fileSizeLimit {
 		return false
 	}
@@ -97,14 +100,14 @@ func (c *fileRowIter) HasNext() bool {
 	if c.statementSizeLimit != UnspecifiedSize && c.currentStatementSize >= c.statementSizeLimit {
 		return false
 	}
-	return c.rowIter.HasNext()
+	return c.rowIter.HasNext(false)
 }
 
 func (c *fileRowIter) HasNextSQLRowIter() bool {
 	if c.fileSizeLimit != UnspecifiedSize && c.currentFileSize >= c.fileSizeLimit {
 		return false
 	}
-	return c.rowIter.HasNext()
+	return c.rowIter.HasNext(false)
 }
 
 func (c *fileRowIter) NextSQLRowIter() SQLRowIter {

@@ -92,7 +92,7 @@ func WriteMeta(meta MetaIR, w io.StringWriter) error {
 
 func WriteInsert(tblIR TableDataIR, w io.Writer) error {
 	fileRowIter := tblIR.Rows()
-	if !fileRowIter.HasNext() {
+	if !fileRowIter.HasNext(false) {
 		return nil
 	}
 
@@ -136,8 +136,8 @@ func WriteInsert(tblIR TableDataIR, w io.Writer) error {
 		bfp.bf.WriteString(insertStatementPrefix)
 
 		fileRowIter = fileRowIter.NextSQLRowIter()
-		for fileRowIter.HasNext() {
-			if err = fileRowIter.Next(row); err != nil {
+		for fileRowIter.HasNext(false) {
+			if err = fileRowIter.Next(row, true); err != nil {
 				log.Zap().Error("scanning from sql.Row failed", zap.Error(err))
 				return err
 			}
@@ -146,7 +146,7 @@ func WriteInsert(tblIR TableDataIR, w io.Writer) error {
 			counter += 1
 
 			var splitter string
-			if fileRowIter.HasNext() {
+			if fileRowIter.HasNext(true) {
 				splitter = ",\n"
 			} else {
 				splitter = ";\n"
