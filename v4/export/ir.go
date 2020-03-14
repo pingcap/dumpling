@@ -11,6 +11,7 @@ type TableDataIR interface {
 	ChunkIndex() int
 	ColumnCount() uint
 	ColumnTypes() []string
+	SelectedField() string
 
 	SpecialComments() StringIter
 	Rows() SQLRowIter

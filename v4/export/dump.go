@@ -111,7 +111,6 @@ func dumpDatabases(ctx context.Context, conf *Config, db *sql.DB, writer Writer)
 		if err := g.Wait(); err != nil {
 			return err
 		}
-		return nil
 	}
 	return nil
 }
