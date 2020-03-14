@@ -44,12 +44,12 @@ var dataTypeBin = []string{
 }
 
 type escapeInterface interface {
-	Escape(string, bytes.Buffer)
+	Escape(string, *bytes.Buffer)
 }
 
 type backslashEscape struct{}
 
-func (b backslashEscape) Escape(s string, bf bytes.Buffer) {
+func (b backslashEscape) Escape(s string, bf *bytes.Buffer) {
 	var (
 		escape byte
 		last   = 0
@@ -101,7 +101,7 @@ func (b backslashEscape) Escape(s string, bf bytes.Buffer) {
 
 type noBackslashEscape struct{}
 
-func (b noBackslashEscape) Escape(s string, bf bytes.Buffer) {
+func (b noBackslashEscape) Escape(s string, bf *bytes.Buffer) {
 	var (
 		escape byte
 		last   = 0
@@ -246,7 +246,7 @@ func (s *SQLTypeString) ToString() string {
 func (s *SQLTypeString) WriteToStringBuilder(bf *buffPipe) {
 	if s.Valid {
 		bf.bf.WriteByte(quotationMark)
-		bf.bf.WriteString(escape(s.String))
+		globalEscape.Escape(s.String, bf)
 		bf.bf.WriteByte(quotationMark)
 	} else {
 		bf.bf.WriteString("NULL")
