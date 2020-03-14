@@ -16,7 +16,7 @@ import (
 const lengthLimit = 1048576
 
 type Dao struct {
-	bp      sync.Pool
+	bp sync.Pool
 }
 
 func NewDao() (d *Dao) {
@@ -45,19 +45,19 @@ type writerPipe struct {
 	sync.Mutex
 
 	input chan string
-	w io.StringWriter
-	err error
+	w     io.StringWriter
+	err   error
 }
 
 func (b *writerPipe) Run() {
-	for s := range b.input {
+	for _ = range b.input {
 		if b.err != nil {
 			return
 		}
-		err := write(b.w, s)
+		// err := write(b.w, s)
 		if b.err != nil {
 			b.Lock()
-			b.err = err
+			// b.err = err
 			b.Unlock()
 		}
 	}
@@ -103,7 +103,7 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
 		bf:    bf,
 	}
 	wp := &writerPipe{
-		input: make(chan string, 1),
+		input: make(chan string, 8),
 		w:     w,
 	}
 	defer close(bfp.input)
