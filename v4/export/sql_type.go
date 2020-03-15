@@ -42,13 +42,10 @@ var dataTypeBin = []string{
 	"BIT",
 }
 
-type escapeInterface interface {
-	Escape(string) string
-}
-
-type backslashEscape struct{}
-
-func (b backslashEscape) Escape(s string) string {
+func escape(s string) string {
+	if !globalConfig.EscapeBackslash {
+		return strings.ReplaceAll(s, "'", "''")
+	}
 	var (
 		bf     bytes.Buffer
 		escape byte
@@ -100,48 +97,6 @@ func (b backslashEscape) Escape(s string) string {
 	defer bf.Reset()
 	return bf.String()
 }
-
-type noBackslashEscape struct{}
-
-func (b noBackslashEscape) Escape(s string) string {
-	var (
-		bf     bytes.Buffer
-		escape byte
-		last   = 0
-	)
-	for i := 0; i < len(s); i++ {
-		escape = 0
-
-		// `'` -> `''` and `\` -> `\\`
-		switch s[i] {
-		case '\\':
-			escape = '\\'
-			break
-		case '\'':
-			escape = '\''
-			break
-		}
-
-		if escape != 0 {
-			if last == 0 {
-				bf.Grow(2 * len(s))
-			}
-			bf.WriteString(s[last : i+1])
-			bf.WriteByte(escape)
-			last = i + 1
-		}
-	}
-	if last == 0 {
-		return s
-	}
-	if last < len(s) {
-		bf.WriteString(s[last:])
-	}
-	defer bf.Reset()
-	return bf.String()
-}
-
-var globalEscape escapeInterface = backslashEscape{}
 
 func SQLTypeStringMaker() RowReceiverStringer {
 	return &SQLTypeString{}
@@ -223,7 +178,7 @@ func (s *SQLTypeString) ReportSize() uint64 {
 }
 func (s *SQLTypeString) ToString() string {
 	if s.Valid {
-		return fmt.Sprintf(`'%s'`, globalEscape.Escape(s.String))
+		return fmt.Sprintf(`'%s'`, escape(s.String))
 	} else {
 		return "NULL"
 	}

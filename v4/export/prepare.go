@@ -8,9 +8,7 @@ import (
 )
 
 func adjustConfig(conf *Config) {
-	if !conf.EscapeBackslash {
-		globalEscape = &noBackslashEscape{}
-	}
+	globalConfig.EscapeBackslash = conf.EscapeBackslash
 
 	if conf.Rows != UnspecifiedSize {
 		// Disable filesize if rows was set

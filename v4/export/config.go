@@ -62,6 +62,12 @@ func (conf *Config) getDSN(db string) string {
 	return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4", conf.User, conf.Password, conf.Host, conf.Port, db)
 }
 
+type GlobalConfig struct {
+	EscapeBackslash bool
+}
+
+var globalConfig GlobalConfig
+
 const (
 	UnspecifiedSize    = 0
 	defaultDumpThreads = 128
