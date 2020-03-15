@@ -42,8 +42,8 @@ var dataTypeBin = []string{
 	"BIT",
 }
 
-func escape(s string) string {
-	if !globalConfig.EscapeBackslash {
+func escape(s string, escapeBackslash bool) string {
+	if !escapeBackslash {
 		return strings.ReplaceAll(s, "'", "''")
 	}
 	var (
@@ -138,11 +138,11 @@ func (r RowReceiverArr) ReportSize() uint64 {
 	}
 	return sum
 }
-func (r RowReceiverArr) ToString() string {
+func (r RowReceiverArr) ToString(escapeBackslash bool) string {
 	var sb strings.Builder
 	sb.WriteString("(")
 	for i, receiver := range r {
-		sb.WriteString(receiver.ToString())
+		sb.WriteString(receiver.ToString(escapeBackslash))
 		if i != len(r)-1 {
 			sb.WriteString(", ")
 		}
@@ -155,7 +155,7 @@ type SQLTypeNumber struct {
 	SQLTypeString
 }
 
-func (s SQLTypeNumber) ToString() string {
+func (s SQLTypeNumber) ToString(bool) string {
 	if s.Valid {
 		return s.String
 	} else {
@@ -176,9 +176,9 @@ func (s *SQLTypeString) ReportSize() uint64 {
 	}
 	return uint64(len("NULL"))
 }
-func (s *SQLTypeString) ToString() string {
+func (s *SQLTypeString) ToString(escapeBackslash bool) string {
 	if s.Valid {
-		return fmt.Sprintf(`'%s'`, escape(s.String))
+		return fmt.Sprintf(`'%s'`, escape(s.String, escapeBackslash))
 	} else {
 		return "NULL"
 	}
@@ -194,6 +194,6 @@ func (s *SQLTypeBytes) BindAddress(arg []interface{}) {
 func (s *SQLTypeBytes) ReportSize() uint64 {
 	return uint64(len(s.bytes))
 }
-func (s *SQLTypeBytes) ToString() string {
+func (s *SQLTypeBytes) ToString(bool) string {
 	return fmt.Sprintf("x'%x'", s.bytes)
 }
