@@ -173,8 +173,13 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
 func write(writer io.StringWriter, str string) error {
 	_, err := writer.WriteString(str)
 	if err != nil {
+		// str might be very long, only output the first 200 chars
+		outputLength := len(str)
+		if outputLength >= 200 {
+			outputLength = 200
+		}
 		log.Zap().Error("writing failed",
-			zap.String("string", str),
+			zap.String("string", str[:outputLength]),
 			zap.Error(err))
 	}
 	return err
