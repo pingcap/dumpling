@@ -20,8 +20,8 @@ type TableDataIR interface {
 
 // SQLRowIter is the iterator on a collection of sql.Row.
 type SQLRowIter interface {
-	Next(RowReceiver, bool) error
-	HasNext(bool) bool
+	Next(RowReceiver) error
+	HasNext() bool
 	HasNextSQLRowIter() bool
 	NextSQLRowIter() SQLRowIter
 	// release SQLRowIter
