@@ -135,18 +135,19 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
 
 			row.WriteToBuffer(bf, escapeBackSlash)
 			counter += 1
-			fileRowIter.Next()
 
+			if bf.Len() >= lengthLimit {
+				wp.input <- bf.String()
+				bf.Reset()
+			}
+
+			fileRowIter.Next()
 			if fileRowIter.HasNext() {
 				bf.WriteString(",\n")
 			} else {
 				bf.WriteString(";\n")
 			}
 
-			if bf.Len() >= lengthLimit {
-				wp.input <- bf.String()
-				bf.Reset()
-			}
 			if err = wp.Error(); err != nil {
 				return err
 			}
