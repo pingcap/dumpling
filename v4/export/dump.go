@@ -13,9 +13,6 @@ import (
 )
 
 func Dump(conf *Config) (err error) {
-	if !conf.EscapeBackslash {
-		globalEscape = &noBackslashEscape{}
-	}
 	go func() {
 		err1 := startDumplingService(conf.StatusAddr)
 		if err1 != nil {

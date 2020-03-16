@@ -123,6 +123,7 @@ func WriteInsert(tblIR TableDataIR, w io.Writer) error {
 		insertStatementPrefix = fmt.Sprintf("INSERT INTO %s VALUES\n", wrapBackTicks(tblIR.TableName()))
 		row                   = MakeRowReceiver(tblIR.ColumnTypes())
 		counter               = 0
+		escapeBackSlash       = tblIR.EscapeBackSlash()
 	)
 
 	selectedField := tblIR.SelectedField()
@@ -142,7 +143,7 @@ func WriteInsert(tblIR TableDataIR, w io.Writer) error {
 				return err
 			}
 
-			row.WriteToStringBuilder(bfp)
+			row.WriteToStringBuilder(bfp, escapeBackSlash)
 			counter += 1
 
 			var splitter string

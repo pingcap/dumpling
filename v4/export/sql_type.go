@@ -43,20 +43,15 @@ var dataTypeBin = []string{
 	"BIT",
 }
 
-type escapeInterface interface {
-	Escape(string, *bytes.Buffer)
-}
-
-type backslashEscape struct{}
-
-func (b backslashEscape) Escape(s string, bf *bytes.Buffer) {
+func escape(s string, bf *bytes.Buffer, escapeBackslash bool) {
+	if !escapeBackslash {
+		bf.WriteString(strings.ReplaceAll(s, "'", "''"))
+		return
+	}
 	var (
 		escape byte
 		last   = 0
 	)
-	if bf.Len()+len(s) >= bf.Cap() {
-		bf.Grow(2 * len(s))
-	}
 	// reference: https://gist.github.com/siddontang/8875771
 	for i := 0; i < len(s); i++ {
 		escape = 0
@@ -93,52 +88,10 @@ func (b backslashEscape) Escape(s string, bf *bytes.Buffer) {
 	}
 	if last == 0 {
 		bf.WriteString(s)
-		return
 	} else if last < len(s) {
 		bf.WriteString(s[last:])
 	}
 }
-
-type noBackslashEscape struct{}
-
-func (b noBackslashEscape) Escape(s string, bf *bytes.Buffer) {
-	var (
-		escape byte
-		last   = 0
-	)
-	if bf.Len()+len(s) >= bf.Cap() {
-		bf.Grow(2 * len(s))
-	}
-	for i := 0; i < len(s); i++ {
-		escape = 0
-
-		// `'` -> `''` and `\` -> `\\`
-		switch s[i] {
-		case '\\':
-			escape = '\\'
-			break
-		case '\'':
-			escape = '\''
-			break
-		}
-
-		if escape != 0 {
-			if last == 0 {
-				bf.Grow(2 * len(s))
-			}
-			bf.WriteString(s[last : i+1])
-			bf.WriteByte(escape)
-			last = i + 1
-		}
-	}
-	if last == 0 {
-		bf.WriteString(s)
-	} else if last < len(s) {
-		bf.WriteString(s[last:])
-	}
-}
-
-var globalEscape escapeInterface = backslashEscape{}
 
 func SQLTypeStringMaker() RowReceiverStringer {
 	return &SQLTypeString{}
@@ -178,11 +131,11 @@ func (r RowReceiverArr) ReportSize() uint64 {
 	}
 	return sum
 }
-func (r RowReceiverArr) ToString() string {
+func (r RowReceiverArr) ToString(escapeBackslash bool) string {
 	var sb strings.Builder
 	sb.WriteString("(")
 	for i, receiver := range r {
-		sb.WriteString(receiver.ToString())
+		sb.WriteString(receiver.ToString(escapeBackslash))
 		if i != len(r)-1 {
 			sb.WriteString(", ")
 		}
@@ -191,10 +144,10 @@ func (r RowReceiverArr) ToString() string {
 	return sb.String()
 }
 
-func (r RowReceiverArr) WriteToStringBuilder(bf *buffPipe) {
+func (r RowReceiverArr) WriteToStringBuilder(bf *buffPipe, escapeBackslash bool) {
 	bf.bf.WriteString("(")
 	for i, receiver := range r {
-		receiver.WriteToStringBuilder(bf)
+		receiver.WriteToStringBuilder(bf, escapeBackslash)
 		if i != len(r)-1 {
 			bf.bf.WriteString(",")
 		}
@@ -206,7 +159,7 @@ type SQLTypeNumber struct {
 	SQLTypeString
 }
 
-func (s SQLTypeNumber) ToString() string {
+func (s SQLTypeNumber) ToString(bool) string {
 	if s.Valid {
 		return s.String
 	} else {
@@ -214,7 +167,7 @@ func (s SQLTypeNumber) ToString() string {
 	}
 }
 
-func (s SQLTypeNumber) WriteToStringBuilder(bf *buffPipe) {
+func (s SQLTypeNumber) WriteToStringBuilder(bf *buffPipe, _ bool) {
 	if s.Valid {
 		bf.bf.WriteString(s.String)
 	} else {
@@ -235,27 +188,27 @@ func (s *SQLTypeString) ReportSize() uint64 {
 	}
 	return uint64(len("NULL"))
 }
-func (s *SQLTypeString) ToString() string {
+func (s *SQLTypeString) ToString(escapeBackslash bool) string {
 	if s.Valid {
-		return fmt.Sprintf(`'%s'`, escape(s.String))
+		var bf bytes.Buffer
+		bf.WriteByte(quotationMark)
+		escape(s.String, &bf, escapeBackslash)
+		bf.WriteByte(quotationMark)
+		defer bf.Reset()
+		return bf.String()
 	} else {
 		return "NULL"
 	}
 }
 
-func (s *SQLTypeString) WriteToStringBuilder(bf *buffPipe) {
+func (s *SQLTypeString) WriteToStringBuilder(bf *buffPipe, escapeBackslash bool) {
 	if s.Valid {
 		bf.bf.WriteByte(quotationMark)
-		globalEscape.Escape(s.String, bf.bf)
+		escape(s.String, bf.bf, escapeBackslash)
 		bf.bf.WriteByte(quotationMark)
 	} else {
 		bf.bf.WriteString("NULL")
 	}
-}
-
-func escape(src string) string {
-	src = strings.ReplaceAll(src, "'", "''")
-	return strings.ReplaceAll(src, `\`, `\\`)
 }
 
 type SQLTypeBytes struct {
@@ -268,10 +221,10 @@ func (s *SQLTypeBytes) BindAddress(arg []interface{}) {
 func (s *SQLTypeBytes) ReportSize() uint64 {
 	return uint64(len(s.bytes))
 }
-func (s *SQLTypeBytes) ToString() string {
+func (s *SQLTypeBytes) ToString(bool) string {
 	return fmt.Sprintf("x'%x'", s.bytes)
 }
 
-func (s *SQLTypeBytes) WriteToStringBuilder(bf *buffPipe) {
+func (s *SQLTypeBytes) WriteToStringBuilder(bf *buffPipe, _ bool) {
 	bf.bf.WriteString(fmt.Sprintf("x'%x'", s.bytes))
 }
