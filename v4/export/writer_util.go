@@ -128,13 +128,14 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
 
 		fileRowIter = fileRowIter.NextSQLRowIter()
 		for fileRowIter.HasNext() {
-			if err = fileRowIter.Next(row); err != nil {
+			if err = fileRowIter.Decode(row); err != nil {
 				log.Zap().Error("scanning from sql.Row failed", zap.Error(err))
 				return err
 			}
 
 			row.WriteToBuffer(bf, escapeBackSlash)
 			counter += 1
+			fileRowIter.Next()
 
 			if fileRowIter.HasNext() {
 				bf.WriteString(",\n")
