@@ -76,11 +76,9 @@ func Dump(conf *Config) (err error) {
 	if err != nil {
 		return err
 	}
-	log.Zap().Info("cur time", zap.String("time", time.Now().String()))
 	if err = dumpDatabases(context.Background(), conf, pool, writer); err != nil {
 		return err
 	}
-	log.Zap().Info("cur time", zap.String("time", time.Now().String()))
 
 	m.recordFinishTime(time.Now())
 
