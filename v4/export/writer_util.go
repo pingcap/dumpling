@@ -44,10 +44,10 @@ func (b *buffPipe) Run() {
 type writerPipe struct {
 	sync.Mutex
 
-	input  chan []byte
+	input  chan string
 	closed chan struct{}
 
-	w   io.Writer
+	w   io.StringWriter
 	err error
 }
 
@@ -57,7 +57,7 @@ func (b *writerPipe) Run() {
 		if b.err != nil {
 			return
 		}
-		err := writeBytes(b.w, s)
+		err := write(b.w, s)
 		if b.err != nil {
 			b.Lock()
 			b.err = err
@@ -90,7 +90,7 @@ func WriteMeta(meta MetaIR, w io.StringWriter) error {
 	return nil
 }
 
-func WriteInsert(tblIR TableDataIR, w io.Writer) error {
+func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
 	fileRowIter := tblIR.Rows()
 	if !fileRowIter.HasNext() {
 		return nil
@@ -106,7 +106,7 @@ func WriteInsert(tblIR TableDataIR, w io.Writer) error {
 		bf:    bf,
 	}
 	wp := &writerPipe{
-		input:  make(chan []byte, 8),
+		input:  make(chan string, 8),
 		closed: make(chan struct{}),
 		w:      w,
 	}
@@ -155,7 +155,7 @@ func WriteInsert(tblIR TableDataIR, w io.Writer) error {
 			bfp.bf.WriteString(splitter)
 
 			if bf.Len() >= lengthLimit {
-				wp.input <- bf.Bytes()
+				wp.input <- bf.String()
 				bf.Reset()
 			}
 			if err = wp.Error(); err != nil {
@@ -167,7 +167,7 @@ func WriteInsert(tblIR TableDataIR, w io.Writer) error {
 		zap.String("table", tblIR.TableName()),
 		zap.Int("record counts", counter))
 	if bf.Len() > 0 {
-		wp.input <- bf.Bytes()
+		wp.input <- bf.String()
 		bf.Reset()
 		dao.bp.Put(bf)
 	}
@@ -181,16 +181,6 @@ func write(writer io.StringWriter, str string) error {
 	if err != nil {
 		log.Zap().Error("writing failed",
 			zap.String("string", str),
-			zap.Error(err))
-	}
-	return err
-}
-
-func writeBytes(writer io.Writer, p []byte) error {
-	_, err := writer.Write(p)
-	if err != nil {
-		log.Zap().Error("writing failed",
-			zap.ByteString("string", p),
 			zap.Error(err))
 	}
 	return err
@@ -303,61 +293,4 @@ func wrapBackTicks(identifier string) string {
 
 func wrapStringWith(str string, wrapper string) string {
 	return fmt.Sprintf("%s%s%s", wrapper, str, wrapper)
-}
-
-func buildLazyBytesFileWriter(path string) (io.Writer, func()) {
-	var file *os.File
-	var buf *bufio.Writer
-	lazyByteWriter := &LazyBytesWriter{}
-	initRoutine := func() error {
-		f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0755)
-		file = f
-		if err != nil {
-			log.Zap().Error("open file failed",
-				zap.String("path", path),
-				zap.Error(err))
-		}
-		log.Zap().Debug("opened file", zap.String("path", path))
-		buf = bufio.NewWriter(file)
-		lazyByteWriter.Writer = buf
-		return err
-	}
-	lazyByteWriter.initRoutine = initRoutine
-
-	tearDownRoutine := func() {
-		if file == nil {
-			return
-		}
-		log.Zap().Debug("tear down lazy file writer...")
-		_ = buf.Flush()
-		err := file.Close()
-		if err == nil {
-			return
-		}
-		log.Zap().Error("close file failed", zap.String("path", path))
-	}
-	return lazyByteWriter, tearDownRoutine
-}
-
-type LazyBytesWriter struct {
-	initRoutine func() error
-	sync.Once
-	io.Writer
-	err error
-}
-
-func (l *LazyBytesWriter) Write(p []byte) (int, error) {
-	l.Do(func() { l.err = l.initRoutine() })
-	if l.err != nil {
-		return 0, fmt.Errorf("open file error: %s", l.err.Error())
-	}
-	return l.Writer.Write(p)
-}
-
-func (l *LazyBytesWriter) WriteBytesBuffer(bf *bytes.Buffer) (int, error) {
-	l.Do(func() { l.err = l.initRoutine() })
-	if l.err != nil {
-		return 0, fmt.Errorf("open file error: %s", l.err.Error())
-	}
-	return l.Writer.Write(bf.Bytes())
 }

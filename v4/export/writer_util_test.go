@@ -56,9 +56,9 @@ func (s *testUtilSuite) TestWriteInsert(c *C) {
 		"/*!40014 SET FOREIGN_KEY_CHECKS=0*/;",
 	}
 	tableIR := newMockTableIR("test", "employee", data, specCmts, colTypes)
-	bytesCollector := &mockBytesCollector{}
+	strCollector := &mockStringCollector{}
 
-	err := WriteInsert(tableIR, bytesCollector)
+	err := WriteInsert(tableIR, strCollector)
 	c.Assert(err, IsNil)
 	expected := "/*!40101 SET NAMES binary*/;\n" +
 		"/*!40014 SET FOREIGN_KEY_CHECKS=0*/;\n" +
@@ -67,7 +67,7 @@ func (s *testUtilSuite) TestWriteInsert(c *C) {
 		"(2,'female','sarah@mail.com','020-1253','healthy'),\n" +
 		"(3,'male','john@mail.com','020-1256','healthy'),\n" +
 		"(4,'female','sarah@mail.com','020-1235','healthy');\n"
-	c.Assert(bytesCollector.String(), Equals, expected)
+	c.Assert(strCollector.buf, Equals, expected)
 }
 
 func (s *testUtilSuite) TestSQLDataTypes(c *C) {
@@ -83,11 +83,11 @@ func (s *testUtilSuite) TestSQLDataTypes(c *C) {
 		tableData := [][]driver.Value{{origin}}
 		colType := []string{sqlType}
 		tableIR := newMockTableIR("test", "t", tableData, nil, colType)
-		bytesCollector := &mockBytesCollector{}
+		strCollector := &mockStringCollector{}
 
-		err := WriteInsert(tableIR, bytesCollector)
+		err := WriteInsert(tableIR, strCollector)
 		c.Assert(err, IsNil)
-		lines := strings.Split(bytesCollector.String(), "\n")
+		lines := strings.Split(strCollector.buf, "\n")
 		c.Assert(len(lines), Equals, 3)
 		c.Assert(lines[1], Equals, fmt.Sprintf("(%s);", result))
 	}
