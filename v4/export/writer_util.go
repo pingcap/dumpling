@@ -16,21 +16,6 @@ import (
 
 const lengthLimit = 1048576
 
-type Dao struct {
-	bp sync.Pool
-}
-
-func NewDao() (d *Dao) {
-	d = &Dao{
-		bp: sync.Pool{
-			New: func() interface{} {
-				return &bytes.Buffer{}
-			},
-		},
-	}
-	return
-}
-
 type writerPipe struct {
 	sync.Mutex
 
@@ -94,8 +79,10 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
 		return nil
 	}
 
-	dao := NewDao()
-	bf := dao.bp.Get().(*bytes.Buffer)
+	pool := sync.Pool{New: func() interface{} {
+		return &bytes.Buffer{}
+	}}
+	bf := pool.Get().(*bytes.Buffer)
 	bf.Grow(lengthLimit)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -163,7 +150,7 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
 	if bf.Len() > 0 {
 		wp.input <- bf.String()
 		bf.Reset()
-		dao.bp.Put(bf)
+		pool.Put(bf)
 	}
 	close(wp.input)
 	<-wp.closed
