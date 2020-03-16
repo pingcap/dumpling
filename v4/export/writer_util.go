@@ -3,6 +3,7 @@ package export
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -30,17 +31,6 @@ func NewDao() (d *Dao) {
 	return
 }
 
-type buffPipe struct {
-	input chan string
-	bf    *bytes.Buffer
-}
-
-func (b *buffPipe) Run() {
-	for s := range b.input {
-		b.bf.WriteString(s)
-	}
-}
-
 type writerPipe struct {
 	sync.Mutex
 
@@ -51,17 +41,25 @@ type writerPipe struct {
 	err error
 }
 
-func (b *writerPipe) Run() {
+func (b *writerPipe) Run(ctx context.Context) {
 	defer close(b.closed)
-	for s := range b.input {
-		if b.err != nil {
+	for {
+		select {
+		case s, ok := <-b.input:
+			if !ok {
+				return
+			}
+			if b.err != nil {
+				continue
+			}
+			err := write(b.w, s)
+			if err != nil {
+				b.Lock()
+				b.err = err
+				b.Unlock()
+			}
+		case <-ctx.Done():
 			return
-		}
-		err := write(b.w, s)
-		if b.err != nil {
-			b.Lock()
-			b.err = err
-			b.Unlock()
 		}
 	}
 }
@@ -96,23 +94,18 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
 		return nil
 	}
 
-	var err error
-
 	dao := NewDao()
 	bf := dao.bp.Get().(*bytes.Buffer)
 	bf.Grow(lengthLimit)
-	bfp := &buffPipe{
-		input: make(chan string, 1),
-		bf:    bf,
-	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	wp := &writerPipe{
 		input:  make(chan string, 8),
 		closed: make(chan struct{}),
 		w:      w,
 	}
-	defer close(bfp.input)
-	// go bfp.Run()
-	go wp.Run()
+	go wp.Run(ctx)
 	specCmtIter := tblIR.SpecialComments()
 	for specCmtIter.HasNext() {
 		bf.WriteString(specCmtIter.Next())
@@ -124,6 +117,7 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
 		row                   = MakeRowReceiver(tblIR.ColumnTypes())
 		counter               = 0
 		escapeBackSlash       = tblIR.EscapeBackSlash()
+		err                   error
 	)
 
 	selectedField := tblIR.SelectedField()
@@ -134,7 +128,7 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
 	}
 
 	for fileRowIter.HasNextSQLRowIter() {
-		bfp.bf.WriteString(insertStatementPrefix)
+		bf.WriteString(insertStatementPrefix)
 
 		fileRowIter = fileRowIter.NextSQLRowIter()
 		for fileRowIter.HasNext() {
@@ -143,7 +137,7 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
 				return err
 			}
 
-			row.WriteToStringBuilder(bfp, escapeBackSlash)
+			row.WriteToBuffer(bf, escapeBackSlash)
 			counter += 1
 
 			var splitter string
@@ -152,7 +146,7 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
 			} else {
 				splitter = ";\n"
 			}
-			bfp.bf.WriteString(splitter)
+			bf.WriteString(splitter)
 
 			if bf.Len() >= lengthLimit {
 				wp.input <- bf.String()
@@ -270,18 +264,6 @@ func (w *InterceptStringWriter) WriteString(str string) (int, error) {
 		w.SomethingIsWritten = true
 	}
 	return w.StringWriter.WriteString(str)
-}
-
-type InterceptBytesWriter struct {
-	io.Writer
-	SomethingIsWritten bool
-}
-
-func (w *InterceptBytesWriter) Write(p []byte) (int, error) {
-	if len(p) > 0 {
-		w.SomethingIsWritten = true
-	}
-	return w.Writer.Write(p)
 }
 
 func wrapBackTicks(identifier string) string {

@@ -133,26 +133,26 @@ func (r RowReceiverArr) ReportSize() uint64 {
 }
 func (r RowReceiverArr) ToString(escapeBackslash bool) string {
 	var sb strings.Builder
-	sb.WriteString("(")
+	sb.WriteByte('(')
 	for i, receiver := range r {
 		sb.WriteString(receiver.ToString(escapeBackslash))
 		if i != len(r)-1 {
-			sb.WriteString(", ")
+			sb.WriteByte(',')
 		}
 	}
-	sb.WriteString(")")
+	sb.WriteByte(')')
 	return sb.String()
 }
 
-func (r RowReceiverArr) WriteToStringBuilder(bf *buffPipe, escapeBackslash bool) {
-	bf.bf.WriteString("(")
+func (r RowReceiverArr) WriteToBuffer(bf *bytes.Buffer, escapeBackslash bool) {
+	bf.WriteByte('(')
 	for i, receiver := range r {
-		receiver.WriteToStringBuilder(bf, escapeBackslash)
+		receiver.WriteToBuffer(bf, escapeBackslash)
 		if i != len(r)-1 {
-			bf.bf.WriteString(",")
+			bf.WriteString(",")
 		}
 	}
-	bf.bf.WriteString(")")
+	bf.WriteByte(')')
 }
 
 type SQLTypeNumber struct {
@@ -167,11 +167,11 @@ func (s SQLTypeNumber) ToString(bool) string {
 	}
 }
 
-func (s SQLTypeNumber) WriteToStringBuilder(bf *buffPipe, _ bool) {
+func (s SQLTypeNumber) WriteToBuffer(bf *bytes.Buffer, _ bool) {
 	if s.Valid {
-		bf.bf.WriteString(s.String)
+		bf.WriteString(s.String)
 	} else {
-		bf.bf.WriteString("NULL")
+		bf.WriteString("NULL")
 	}
 }
 
@@ -201,13 +201,13 @@ func (s *SQLTypeString) ToString(escapeBackslash bool) string {
 	}
 }
 
-func (s *SQLTypeString) WriteToStringBuilder(bf *buffPipe, escapeBackslash bool) {
+func (s *SQLTypeString) WriteToBuffer(bf *bytes.Buffer, escapeBackslash bool) {
 	if s.Valid {
-		bf.bf.WriteByte(quotationMark)
-		escape(s.String, bf.bf, escapeBackslash)
-		bf.bf.WriteByte(quotationMark)
+		bf.WriteByte(quotationMark)
+		escape(s.String, bf, escapeBackslash)
+		bf.WriteByte(quotationMark)
 	} else {
-		bf.bf.WriteString("NULL")
+		bf.WriteString("NULL")
 	}
 }
 
@@ -225,6 +225,6 @@ func (s *SQLTypeBytes) ToString(bool) string {
 	return fmt.Sprintf("x'%x'", s.bytes)
 }
 
-func (s *SQLTypeBytes) WriteToStringBuilder(bf *buffPipe, _ bool) {
-	bf.bf.WriteString(fmt.Sprintf("x'%x'", s.bytes))
+func (s *SQLTypeBytes) WriteToBuffer(bf *bytes.Buffer, _ bool) {
+	bf.WriteString(fmt.Sprintf("x'%x'", s.bytes))
 }
