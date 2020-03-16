@@ -12,7 +12,7 @@ type testSqlByteSuite struct{}
 
 func (s *testSqlByteSuite) TestEscape(c *C) {
 	var bf bytes.Buffer
-	str := `MWQeWw""'\rNmtGxzGp`
+	str := []byte(`MWQeWw""'\rNmtGxzGp`)
 	expectStrBackslash := `MWQeWw\"\"\'\\rNmtGxzGp`
 	expectStrWithoutBackslash := `MWQeWw""''\rNmtGxzGp`
 	escape(str, &bf, true)
