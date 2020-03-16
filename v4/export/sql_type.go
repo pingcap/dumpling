@@ -2,15 +2,14 @@ package export
 
 import (
 	"bytes"
-	"database/sql"
 	"fmt"
 	"strings"
 )
 
 var colTypeRowReceiverMap = map[string]func() RowReceiverStringer{}
 var quotationMark byte = '\''
-var quotationMarkNotQuote = []byte{quotationMark}
-var quotationMarkQuote = []byte{quotationMark, quotationMark}
+var quotationMarkNotQuote = []byte("'")
+var quotationMarkQuote = []byte("''")
 
 func init() {
 	for _, s := range dataTypeString {
@@ -162,39 +161,39 @@ type SQLTypeNumber struct {
 }
 
 func (s SQLTypeNumber) ToString(bool) string {
-	if s.RawBytes != nil {
-		return string(s.RawBytes)
+	if s.bytes != nil {
+		return string(s.bytes)
 	} else {
 		return "NULL"
 	}
 }
 
 func (s SQLTypeNumber) WriteToBuffer(bf *bytes.Buffer, _ bool) {
-	if s.RawBytes != nil {
-		bf.Write(s.RawBytes)
+	if s.bytes != nil {
+		bf.Write(s.bytes)
 	} else {
 		bf.WriteString("NULL")
 	}
 }
 
 type SQLTypeString struct {
-	sql.RawBytes
+	bytes []byte
 }
 
 func (s *SQLTypeString) BindAddress(arg []interface{}) {
-	arg[0] = &s.RawBytes
+	arg[0] = &s.bytes
 }
 func (s *SQLTypeString) ReportSize() uint64 {
-	if s.RawBytes != nil {
-		return uint64(len(s.RawBytes))
+	if s.bytes != nil {
+		return uint64(len(s.bytes))
 	}
 	return uint64(len("NULL"))
 }
 func (s *SQLTypeString) ToString(escapeBackslash bool) string {
-	if s.RawBytes != nil {
+	if s.bytes != nil {
 		var bf bytes.Buffer
 		bf.WriteByte(quotationMark)
-		escape(s.RawBytes, &bf, escapeBackslash)
+		escape(s.bytes, &bf, escapeBackslash)
 		bf.WriteByte(quotationMark)
 		defer bf.Reset()
 		return bf.String()
@@ -204,9 +203,9 @@ func (s *SQLTypeString) ToString(escapeBackslash bool) string {
 }
 
 func (s *SQLTypeString) WriteToBuffer(bf *bytes.Buffer, escapeBackslash bool) {
-	if s.RawBytes != nil {
+	if s.bytes != nil {
 		bf.WriteByte(quotationMark)
-		escape(s.RawBytes, bf, escapeBackslash)
+		escape(s.bytes, bf, escapeBackslash)
 		bf.WriteByte(quotationMark)
 	} else {
 		bf.WriteString("NULL")
