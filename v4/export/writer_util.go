@@ -86,13 +86,22 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
 	bf.Grow(lengthLimit)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	wp := &writerPipe{
 		input:  make(chan string, 8),
 		closed: make(chan struct{}),
 		w:      w,
 	}
-	go wp.Run(ctx)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		wp.Run(ctx)
+		wg.Done()
+	}()
+	defer func() {
+		cancel()
+		wg.Wait()
+	}()
+
 	specCmtIter := tblIR.SpecialComments()
 	for specCmtIter.HasNext() {
 		bf.WriteString(specCmtIter.Next())
@@ -127,13 +136,11 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
 			row.WriteToBuffer(bf, escapeBackSlash)
 			counter += 1
 
-			var splitter string
 			if fileRowIter.HasNext() {
-				splitter = ",\n"
+				bf.WriteString(",\n")
 			} else {
-				splitter = ";\n"
+				bf.WriteString(";\n")
 			}
-			bf.WriteString(splitter)
 
 			if bf.Len() >= lengthLimit {
 				wp.input <- bf.String()
