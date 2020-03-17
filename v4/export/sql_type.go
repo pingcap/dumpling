@@ -4,10 +4,11 @@ import (
 	"bytes"
 	"database/sql"
 	"fmt"
-	"strings"
 )
 
 var colTypeRowReceiverMap = map[string]func() RowReceiverStringer{}
+
+var nullValue = "NULL"
 var quotationMark byte = '\''
 var quotationMarkNotQuote = []byte{quotationMark}
 var quotationMarkQuote = []byte{quotationMark, quotationMark}
@@ -133,25 +134,13 @@ func (r RowReceiverArr) ReportSize() uint64 {
 	}
 	return sum
 }
-func (r RowReceiverArr) ToString(escapeBackslash bool) string {
-	var sb strings.Builder
-	sb.WriteByte('(')
-	for i, receiver := range r {
-		sb.WriteString(receiver.ToString(escapeBackslash))
-		if i != len(r)-1 {
-			sb.WriteByte(',')
-		}
-	}
-	sb.WriteByte(')')
-	return sb.String()
-}
 
 func (r RowReceiverArr) WriteToBuffer(bf *bytes.Buffer, escapeBackslash bool) {
 	bf.WriteByte('(')
 	for i, receiver := range r {
 		receiver.WriteToBuffer(bf, escapeBackslash)
 		if i != len(r)-1 {
-			bf.WriteString(",")
+			bf.WriteByte(',')
 		}
 	}
 	bf.WriteByte(')')
@@ -161,19 +150,11 @@ type SQLTypeNumber struct {
 	SQLTypeString
 }
 
-func (s SQLTypeNumber) ToString(bool) string {
-	if s.RawBytes != nil {
-		return string(s.RawBytes)
-	} else {
-		return "NULL"
-	}
-}
-
 func (s SQLTypeNumber) WriteToBuffer(bf *bytes.Buffer, _ bool) {
 	if s.RawBytes != nil {
 		bf.Write(s.RawBytes)
 	} else {
-		bf.WriteString("NULL")
+		bf.WriteString(nullValue)
 	}
 }
 
@@ -188,19 +169,7 @@ func (s *SQLTypeString) ReportSize() uint64 {
 	if s.RawBytes != nil {
 		return uint64(len(s.RawBytes))
 	}
-	return uint64(len("NULL"))
-}
-func (s *SQLTypeString) ToString(escapeBackslash bool) string {
-	if s.RawBytes != nil {
-		var bf bytes.Buffer
-		bf.WriteByte(quotationMark)
-		escape(s.RawBytes, &bf, escapeBackslash)
-		bf.WriteByte(quotationMark)
-		defer bf.Reset()
-		return bf.String()
-	} else {
-		return "NULL"
-	}
+	return uint64(len(nullValue))
 }
 
 func (s *SQLTypeString) WriteToBuffer(bf *bytes.Buffer, escapeBackslash bool) {
@@ -209,7 +178,7 @@ func (s *SQLTypeString) WriteToBuffer(bf *bytes.Buffer, escapeBackslash bool) {
 		escape(s.RawBytes, bf, escapeBackslash)
 		bf.WriteByte(quotationMark)
 	} else {
-		bf.WriteString("NULL")
+		bf.WriteString(nullValue)
 	}
 }
 
@@ -222,9 +191,6 @@ func (s *SQLTypeBytes) BindAddress(arg []interface{}) {
 }
 func (s *SQLTypeBytes) ReportSize() uint64 {
 	return uint64(len(s.RawBytes))
-}
-func (s *SQLTypeBytes) ToString(bool) string {
-	return fmt.Sprintf("x'%x'", s.RawBytes)
 }
 
 func (s *SQLTypeBytes) WriteToBuffer(bf *bytes.Buffer, _ bool) {

@@ -36,7 +36,6 @@ type RowReceiverStringer interface {
 }
 
 type Stringer interface {
-	ToString(bool) string
 	WriteToBuffer(*bytes.Buffer, bool)
 }
 

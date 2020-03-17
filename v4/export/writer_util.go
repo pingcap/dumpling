@@ -17,36 +17,43 @@ import (
 
 const lengthLimit = 1048576
 
-type writerPipe struct {
-	sync.Mutex
-
-	input  chan []byte
-	closed chan struct{}
-
-	w   io.StringWriter
-	err error
-}
-
 func bytes2str(b []byte) string {
 	return *(*string)(unsafe.Pointer(&b))
 }
 
+type writerPipe struct {
+	input  chan []byte
+	closed chan struct{}
+	errCh  chan error
+
+	w io.StringWriter
+}
+
+func newWriterPipe(w io.StringWriter) *writerPipe {
+	return &writerPipe{
+		input:  make(chan []byte, 8),
+		closed: make(chan struct{}),
+		errCh:  make(chan error, 1),
+		w:      w,
+	}
+}
+
 func (b *writerPipe) Run(ctx context.Context) {
 	defer close(b.closed)
+	var errOccurs bool
 	for {
 		select {
 		case s, ok := <-b.input:
 			if !ok {
 				return
 			}
-			if b.err != nil {
+			if errOccurs {
 				continue
 			}
 			err := write(b.w, bytes2str(s))
 			if err != nil {
-				b.Lock()
-				b.err = err
-				b.Unlock()
+				errOccurs = true
+				b.errCh <- err
 			}
 		case <-ctx.Done():
 			return
@@ -55,9 +62,12 @@ func (b *writerPipe) Run(ctx context.Context) {
 }
 
 func (b *writerPipe) Error() error {
-	b.Lock()
-	defer b.Unlock()
-	return b.err
+	select {
+	case err := <-b.errCh:
+		return err
+	default:
+		return nil
+	}
 }
 
 func WriteMeta(meta MetaIR, w io.StringWriter) error {
@@ -90,12 +100,9 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
 	bf := pool.Get().(*bytes.Buffer)
 	bf.Grow(lengthLimit)
 
+	wp := newWriterPipe(w)
+
 	ctx, cancel := context.WithCancel(context.Background())
-	wp := &writerPipe{
-		input:  make(chan []byte, 8),
-		closed: make(chan struct{}),
-		w:      w,
-	}
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
@@ -110,11 +117,11 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
 	specCmtIter := tblIR.SpecialComments()
 	for specCmtIter.HasNext() {
 		bf.WriteString(specCmtIter.Next())
-		bf.WriteString("\n")
+		bf.WriteByte('\n')
 	}
 
 	var (
-		insertStatementPrefix = fmt.Sprintf("INSERT INTO %s VALUES\n", wrapBackTicks(tblIR.TableName()))
+		insertStatementPrefix string
 		row                   = MakeRowReceiver(tblIR.ColumnTypes())
 		counter               = 0
 		escapeBackSlash       = tblIR.EscapeBackSlash()
@@ -126,6 +133,9 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
 	if selectedField != "" {
 		insertStatementPrefix = fmt.Sprintf("INSERT INTO %s %s VALUES\n",
 			wrapBackTicks(tblIR.TableName()), selectedField)
+	} else {
+		insertStatementPrefix = fmt.Sprintf("INSERT INTO %s VALUES\n",
+			wrapBackTicks(tblIR.TableName()))
 	}
 
 	for fileRowIter.HasNextSQLRowIter() {
