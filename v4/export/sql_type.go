@@ -214,19 +214,19 @@ func (s *SQLTypeString) WriteToBuffer(bf *bytes.Buffer, escapeBackslash bool) {
 }
 
 type SQLTypeBytes struct {
-	bytes []byte
+	sql.RawBytes
 }
 
 func (s *SQLTypeBytes) BindAddress(arg []interface{}) {
-	arg[0] = &s.bytes
+	arg[0] = &s.RawBytes
 }
 func (s *SQLTypeBytes) ReportSize() uint64 {
-	return uint64(len(s.bytes))
+	return uint64(len(s.RawBytes))
 }
 func (s *SQLTypeBytes) ToString(bool) string {
-	return fmt.Sprintf("x'%x'", s.bytes)
+	return fmt.Sprintf("x'%x'", s.RawBytes)
 }
 
 func (s *SQLTypeBytes) WriteToBuffer(bf *bytes.Buffer, _ bool) {
-	bf.WriteString(fmt.Sprintf("x'%x'", s.bytes))
+	bf.WriteString(fmt.Sprintf("x'%x'", s.RawBytes))
 }
