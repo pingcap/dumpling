@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"unsafe"
 
 	"github.com/pingcap/dumpling/v4/log"
 	"go.uber.org/zap"
@@ -19,11 +20,15 @@ const lengthLimit = 1048576
 type writerPipe struct {
 	sync.Mutex
 
-	input  chan string
+	input  chan []byte
 	closed chan struct{}
 
 	w   io.StringWriter
 	err error
+}
+
+func bytes2str(b []byte) string {
+	return *(*string)(unsafe.Pointer(&b))
 }
 
 func (b *writerPipe) Run(ctx context.Context) {
@@ -37,7 +42,7 @@ func (b *writerPipe) Run(ctx context.Context) {
 			if b.err != nil {
 				continue
 			}
-			err := write(b.w, s)
+			err := write(b.w, bytes2str(s))
 			if err != nil {
 				b.Lock()
 				b.err = err
@@ -87,7 +92,7 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	wp := &writerPipe{
-		input:  make(chan string, 8),
+		input:  make(chan []byte, 8),
 		closed: make(chan struct{}),
 		w:      w,
 	}
@@ -137,7 +142,7 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
 			counter += 1
 
 			if bf.Len() >= lengthLimit {
-				wp.input <- bf.String()
+				wp.input <- bf.Bytes()
 				bf.Reset()
 			}
 
@@ -157,7 +162,7 @@ func WriteInsert(tblIR TableDataIR, w io.StringWriter) error {
 		zap.String("table", tblIR.TableName()),
 		zap.Int("record counts", counter))
 	if bf.Len() > 0 {
-		wp.input <- bf.String()
+		wp.input <- bf.Bytes()
 		bf.Reset()
 		pool.Put(bf)
 	}
