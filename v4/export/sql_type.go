@@ -194,5 +194,5 @@ func (s *SQLTypeBytes) ReportSize() uint64 {
 }
 
 func (s *SQLTypeBytes) WriteToBuffer(bf *bytes.Buffer, _ bool) {
-	bf.WriteString(fmt.Sprintf("x'%x'", s.RawBytes))
+	fmt.Fprintf(bf, "x'%x'", s.RawBytes)
 }
