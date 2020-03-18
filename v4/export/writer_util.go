@@ -50,12 +50,12 @@ func (b *writerPipe) Run(ctx context.Context) {
 				continue
 			}
 			err := writeBytes(b.w, s.Bytes())
+			s.Reset()
+			pool.Put(s)
 			if err != nil {
 				errOccurs = true
 				b.errCh <- err
 			}
-			s.Reset()
-			pool.Put(s)
 		case <-ctx.Done():
 			return
 		}
@@ -171,12 +171,10 @@ func WriteInsert(tblIR TableDataIR, w io.Writer) error {
 		zap.String("table", tblIR.TableName()),
 		zap.Int("record counts", counter))
 	if bf.Len() > 0 {
-		wp.input <- bf.Bytes()
-		bf.Reset()
+		wp.input <- bf
 	}
 	close(wp.input)
 	<-wp.closed
-	pool.Put(bf)
 	return wp.Error()
 }
 
