@@ -96,8 +96,8 @@ func WriteInsert(tblIR TableDataIR, w io.Writer) error {
 	}
 
 	bf := pool.Get().(*bytes.Buffer)
-	if bf.Cap() < lengthLimit {
-		bf.Grow(lengthLimit)
+	if bfCap := bf.Cap(); bfCap < lengthLimit {
+		bf.Grow(lengthLimit - bfCap)
 	}
 
 	wp := newWriterPipe(w)
@@ -154,8 +154,8 @@ func WriteInsert(tblIR TableDataIR, w io.Writer) error {
 			if bf.Len() >= lengthLimit {
 				wp.input <- bf
 				bf = pool.Get().(*bytes.Buffer)
-				if bf.Cap() < lengthLimit {
-					bf.Grow(lengthLimit)
+				if bfCap := bf.Cap(); bfCap < lengthLimit {
+					bf.Grow(lengthLimit - bfCap)
 				}
 			}
 
