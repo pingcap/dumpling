@@ -90,3 +90,28 @@ func writeMetaToFile(target, metaSQL, path string) error {
 		metaSQL: metaSQL,
 	}, fileWriter)
 }
+
+type CsvWriter struct {
+	cfg *Config
+}
+
+func NewCsvWriter(config *Config) (Writer, error) {
+	sw := &CsvWriter{cfg: config}
+	return sw, os.MkdirAll(config.OutputDirPath, 0755)
+}
+
+func (f *CsvWriter) WriteDatabaseMeta(ctx context.Context, db, createSQL string) error {
+	fileName := fmt.Sprintf("%s-schema-create.sql", db)
+	filePath := path.Join(f.cfg.OutputDirPath, fileName)
+	return writeMetaToFile(db, createSQL, filePath)
+}
+
+func (f *CsvWriter) WriteTableMeta(ctx context.Context, db, table, createSQL string) error {
+	fileName := fmt.Sprintf("%s.%s-schema.sql", db, table)
+	filePath := path.Join(f.cfg.OutputDirPath, fileName)
+	return writeMetaToFile(db, createSQL, filePath)
+}
+
+func (f *CsvWriter) WriteTableData(ctx context.Context, ir TableDataIR) error {
+	return nil
+}

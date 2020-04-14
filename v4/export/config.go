@@ -35,6 +35,7 @@ type Config struct {
 	BlackWhiteList  BWListConf
 	Rows            uint64
 	Where           string
+	FileType        string
 	EscapeBackslash bool
 }
 
@@ -59,6 +60,7 @@ func DefaultConfig() *Config {
 		NoViews:       true,
 		Rows:          UnspecifiedSize,
 		Where:         "",
+		FileType:      "SQL",
 	}
 }
 
