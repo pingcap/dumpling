@@ -50,6 +50,7 @@ func InitAppLogger(cfg *Config) error {
 		return errors.WithStack(err)
 	}
 	appLogger = Logger{logger}
+	logger = appLogger.WithOptions(zap.AddCallerSkip(1))
 	appLevel = props.Level
 	return nil
 }
@@ -60,4 +61,28 @@ func SetAppLogger(logger *zap.Logger) {
 
 func ChangeAppLogLevel(level zapcore.Level) {
 	appLevel.SetLevel(level)
+}
+
+func Info(msg string, fields ...zap.Field) {
+	appLogger.Info(msg, fields...)
+}
+
+func Warn(msg string, fields ...zap.Field) {
+	appLogger.Warn(msg, fields...)
+}
+
+func Error(msg string, fields ...zap.Field) {
+	appLogger.Error(msg, fields...)
+}
+
+func Debug(msg string, fields ...zap.Field) {
+	appLogger.Debug(msg, fields...)
+}
+
+func Fatal(msg string, fields ...zap.Field) {
+	appLogger.Fatal(msg, fields...)
+}
+
+func Panic(msg string, fields ...zap.Field) {
+	appLogger.Panic(msg, fields...)
 }
