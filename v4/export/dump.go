@@ -3,7 +3,6 @@ package export
 import (
 	"context"
 	"database/sql"
-	"encoding/csv"
 	"strings"
 	"time"
 
