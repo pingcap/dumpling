@@ -49,8 +49,8 @@ func InitAppLogger(cfg *Config) error {
 	if err != nil {
 		return errors.WithStack(err)
 	}
-	appLogger = Logger{logger}
 	logger = appLogger.WithOptions(zap.AddCallerSkip(1))
+	appLogger = Logger{logger}
 	appLevel = props.Level
 	return nil
 }
