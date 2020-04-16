@@ -80,8 +80,8 @@ func init() {
 	rootCmd.PersistentFlags().Uint64VarP(&rows, "rows", "r", export.UnspecifiedSize, "Split table into chunks of this many rows, default unlimited")
 	rootCmd.PersistentFlags().StringVar(&where, "where", "", "Dump only selected records")
 	rootCmd.PersistentFlags().BoolVar(&escapeBackslash, "escape-backslash", true, "use backslash to escape quotation marks")
-	rootCmd.PersistentFlags().StringVar(&fileType, "filetype", "sql", "The type of export file (CSV\\SQL)")
-	rootCmd.PersistentFlags().BoolVar(&noHeader, "no-header", false, "whether dump table head when dump file to csv")
+	rootCmd.PersistentFlags().StringVar(&fileType, "filetype", "sql", "The type of export file (sql/csv)")
+	rootCmd.PersistentFlags().BoolVar(&noHeader, "no-header", false, "whether to dump CSV table header")
 }
 
 func run() {
