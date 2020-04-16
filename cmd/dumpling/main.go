@@ -81,7 +81,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&where, "where", "", "Dump only selected records")
 	rootCmd.PersistentFlags().BoolVar(&escapeBackslash, "escape-backslash", true, "use backslash to escape quotation marks")
 	rootCmd.PersistentFlags().StringVar(&fileType, "filetype", "sql", "The type of export file (sql/csv)")
-	rootCmd.PersistentFlags().BoolVar(&noHeader, "no-header", false, "whether to dump CSV table header")
+	rootCmd.PersistentFlags().BoolVar(&noHeader, "no-header", false, "whether not to dump CSV table header")
 }
 
 func run() {
