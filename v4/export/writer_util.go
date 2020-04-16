@@ -208,14 +208,13 @@ func WriteInsertInCsv(tblIR TableDataIR, w io.Writer, noHeader bool) error {
 	}()
 
 	var (
-		csvHeader       bytes.Buffer
 		row             = MakeRowReceiver(tblIR.ColumnTypes())
 		counter         = 0
 		escapeBackSlash = tblIR.EscapeBackSlash()
 		err             error
 	)
 
-	if !noHeader || len(tblIR.ColumnNames()) == 0 {
+	if !noHeader && len(tblIR.ColumnNames()) != 0 {
 		for i, col := range tblIR.ColumnNames() {
 			bf.WriteByte(doubleQuotationMark)
 			escape([]byte(col), bf, escapeBackSlash)
@@ -227,7 +226,6 @@ func WriteInsertInCsv(tblIR TableDataIR, w io.Writer, noHeader bool) error {
 		bf.WriteByte('\n')
 	}
 
-	bf.WriteString(csvHeader.String())
 	for fileRowIter.HasNextSQLRowIter() {
 		fileRowIter = fileRowIter.NextSQLRowIter()
 		for fileRowIter.HasNext() {
@@ -254,6 +252,7 @@ func WriteInsertInCsv(tblIR TableDataIR, w io.Writer, noHeader bool) error {
 			}
 		}
 	}
+
 	log.Debug("dumping table",
 		zap.String("table", tblIR.TableName()),
 		zap.Int("record counts", counter))
