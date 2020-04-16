@@ -227,5 +227,11 @@ func (s *SQLTypeBytes) WriteToBuffer(bf *bytes.Buffer, _ bool) {
 }
 
 func (s *SQLTypeBytes) WriteToBufferInCsv(bf *bytes.Buffer, _ bool) {
-	fmt.Fprintf(bf, "x'%x'", s.RawBytes)
+	if s.RawBytes != nil {
+		bf.WriteByte(doubleQuotationMark)
+		bf.Write(s.RawBytes)
+		bf.WriteByte(doubleQuotationMark)
+	} else {
+		bf.WriteString(csvNullValue)
+	}
 }
