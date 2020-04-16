@@ -408,7 +408,7 @@ func estimateCount(dbName, tableName string, db *sql.DB, field string, conf *Con
 		| └─tablefullscan_4     | 10000.00 | cop[tikv] | table:a       | table:a, keep order:false, stats:pseudo |
 		+-----------------------+----------+-----------+----------------------------------------------------------
 		*/
-		estRows = detectEstimateRows(db, query, "tidb", 1)
+		estRows = detectEstimateRows(db, query, "tidb", "estrows")
 	} else if conf.ServerInfo.ServerType == ServerTypeMariaDB {
 		/* mariadb result field name is rows
 		+------+-------------+---------+-------+---------------+------+---------+------+----------+-------------+
@@ -417,7 +417,7 @@ func estimateCount(dbName, tableName string, db *sql.DB, field string, conf *Con
 		|    1 | SIMPLE      | sbtest1 | index | NULL          | k_1  | 4       | NULL | 15000049 | Using index |
 		+------+-------------+---------+-------+---------------+------+---------+------+----------+-------------+
 		*/
-		estRows = detectEstimateRows(db, query, "mariadb", 8)
+		estRows = detectEstimateRows(db, query, "mariadb", "rows")
 	} else if conf.ServerInfo.ServerType == ServerTypeMySQL {
 		/* mysql result field name is rows
 		+----+-------------+-------+------------+-------+---------------+-----------+---------+------+------+----------+-------------+
@@ -426,7 +426,7 @@ func estimateCount(dbName, tableName string, db *sql.DB, field string, conf *Con
 		|  1 | SIMPLE      | t1    | NULL       | index | NULL          | multi_col | 10      | NULL |    5 |   100.00 | Using index |
 		+----+-------------+-------+------------+-------+---------------+-----------+---------+------+------+----------+-------------+
 		*/
-		estRows = detectEstimateRows(db, query, "mysql", 9)
+		estRows = detectEstimateRows(db, query, "mysql", "rows")
 	}
 	if estRows > 0 {
 		return uint64(estRows)
@@ -434,7 +434,7 @@ func estimateCount(dbName, tableName string, db *sql.DB, field string, conf *Con
 	return 0
 }
 
-func detectEstimateRows(db *sql.DB, query string, dbType string, fieldIndex int) int {
+func detectEstimateRows(db *sql.DB, query string, dbType string, fieldName string) int {
 	row, err := db.Query(query)
 	if err != nil {
 		log.Warn("can't execute query from db",
@@ -445,16 +445,21 @@ func detectEstimateRows(db *sql.DB, query string, dbType string, fieldIndex int)
 	columns, _ := row.Columns()
 	addr := make([]interface{}, len(columns))
 	oneRow := make([]sql.NullString, len(columns))
+	var fieldIndex = -1
 	for i := range oneRow {
 		addr[i] = &oneRow[i]
+		if strings.ToLower(columns[i]) == fieldName {
+			fieldIndex = i
+		}
 	}
 	err = row.Scan(addr...)
-	if err != nil {
+	if err != nil || fieldIndex < 0 {
 		log.Warn("can't get estimate count from db",
 			zap.String("db", dbType),
 			zap.String("query", query), zap.Error(err))
 		return 0
 	}
+
 	estRows, err := strconv.ParseFloat(oneRow[fieldIndex].String, 64)
 	if err != nil {
 		log.Warn("can't get parse rows from db",
