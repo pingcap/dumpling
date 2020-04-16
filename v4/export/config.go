@@ -31,6 +31,7 @@ type Config struct {
 	Snapshot      string
 	Consistency   string
 	NoViews       bool
+	NoHeader      bool
 
 	BlackWhiteList  BWListConf
 	Rows            uint64
@@ -61,6 +62,7 @@ func DefaultConfig() *Config {
 		Rows:          UnspecifiedSize,
 		Where:         "",
 		FileType:      "SQL",
+		NoHeader:      false,
 	}
 }
 

@@ -182,6 +182,86 @@ func WriteInsert(tblIR TableDataIR, w io.Writer) error {
 	return wp.Error()
 }
 
+func WriteInsertInCsv(tblIR TableDataIR, w io.Writer, noHeader bool) error {
+	fileRowIter := tblIR.Rows()
+	if !fileRowIter.HasNext() {
+		return nil
+	}
+
+	bf := pool.Get().(*bytes.Buffer)
+	if bfCap := bf.Cap(); bfCap < lengthLimit {
+		bf.Grow(lengthLimit - bfCap)
+	}
+
+	wp := newWriterPipe(w)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		wp.Run(ctx)
+		wg.Done()
+	}()
+	defer func() {
+		cancel()
+		wg.Wait()
+	}()
+
+	var (
+		csvHeader bytes.Buffer
+		row       = MakeRowReceiver(tblIR.ColumnTypes())
+		counter   = 0
+		err       error
+	)
+
+	if !noHeader || len(tblIR.ColumnNames()) == 0 {
+		for i, col := range tblIR.ColumnNames() {
+			csvHeader.WriteString(col)
+			if i != len(tblIR.ColumnTypes())-1 {
+				csvHeader.WriteString(",")
+			}
+		}
+		csvHeader.WriteString("\n")
+	}
+
+	bf.WriteString(csvHeader.String())
+	for fileRowIter.HasNextSQLRowIter() {
+		fileRowIter = fileRowIter.NextSQLRowIter()
+		for fileRowIter.HasNext() {
+			if err = fileRowIter.Decode(row); err != nil {
+				log.Error("scanning from sql.Row failed", zap.Error(err))
+				return err
+			}
+
+			row.WriteToBufferInCsv(bf, false)
+			counter += 1
+
+			if bf.Len() >= lengthLimit {
+				wp.input <- bf
+				bf = pool.Get().(*bytes.Buffer)
+				if bfCap := bf.Cap(); bfCap < lengthLimit {
+					bf.Grow(lengthLimit - bfCap)
+				}
+			}
+
+			fileRowIter.Next()
+			bf.WriteString("\n")
+			if err = wp.Error(); err != nil {
+				return err
+			}
+		}
+	}
+	log.Debug("dumping table",
+		zap.String("table", tblIR.TableName()),
+		zap.Int("record counts", counter))
+	if bf.Len() > 0 {
+		wp.input <- bf
+	}
+	close(wp.input)
+	<-wp.closed
+	return wp.Error()
+}
+
 func write(writer io.StringWriter, str string) error {
 	_, err := writer.WriteString(str)
 	if err != nil {
