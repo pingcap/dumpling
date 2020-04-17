@@ -53,9 +53,9 @@ func (s *testConsistencySuite) TestConsistencyController(c *C) {
 	rows := sqlmock.NewRows([]string{"File", "Position", "Binlog_Do_DB", "Binlog_Ignore_DB", "Executed_Gtid_Set"})
 	rows.AddRow("tidb-binlog", "413802961528946688", "", "", "")
 	tidbRows := sqlmock.NewRows([]string{"c"})
-	tidbRows.AddRow(0)
+	tidbRows.AddRow(1)
 	mock.ExpectQuery("SHOW MASTER STATUS").WillReturnRows(rows)
-	mock.ExpectQuery("SELECT COUNT(1) as c FROM MYSQL.TiDB WHERE VARIABLE_NAME='tikv_gc_enable'").
+	mock.ExpectQuery("SELECT COUNT\\(1\\) as c FROM MYSQL.TiDB WHERE VARIABLE_NAME='tikv_gc_enable'").
 		WillReturnRows(tidbRows)
 	mock.ExpectExec("SET SESSION tidb_snapshot").
 		WillReturnResult(sqlmock.NewResult(0, 1))
