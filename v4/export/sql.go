@@ -293,10 +293,7 @@ func CheckTiDBWithTiKV(db *sql.DB) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	if count > 0 {
-		return true, nil
-	}
-	return false, nil
+	return count > 0, nil
 }
 
 func buildSelectField(db *sql.DB, dbName, tableName string) (string, error) {
