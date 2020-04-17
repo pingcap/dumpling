@@ -55,7 +55,7 @@ func (s *testConsistencySuite) TestConsistencyController(c *C) {
 	tidbRows := sqlmock.NewRows([]string{"c"})
 	tidbRows.AddRow(1)
 	mock.ExpectQuery("SHOW MASTER STATUS").WillReturnRows(rows)
-	mock.ExpectQuery("SELECT COUNT\\(1\\) as c FROM MYSQL.TiDB WHERE VARIABLE_NAME='tikv_gc_enable'").
+	mock.ExpectQuery("SELECT COUNT\\(1\\) as c FROM MYSQL.TiDB WHERE VARIABLE_NAME='tikv_gc_safe_point'").
 		WillReturnRows(tidbRows)
 	mock.ExpectExec("SET SESSION tidb_snapshot").
 		WillReturnResult(sqlmock.NewResult(0, 1))
