@@ -125,7 +125,7 @@ func dumpDatabases(ctx context.Context, conf *Config, db *sql.DB, writer Writer)
 }
 
 func dumpTable(ctx context.Context, conf *Config, db *sql.DB, dbName string, table *TableInfo, writer Writer) error {
-	if conf.NoSchemas {
+	if !conf.NoSchemas {
 		if table.Type == TableTypeView {
 			viewName := table.Name
 			createViewSQL, err := ShowCreateView(db, dbName, viewName)
@@ -134,8 +134,9 @@ func dumpTable(ctx context.Context, conf *Config, db *sql.DB, dbName string, tab
 			}
 			return writer.WriteTableMeta(ctx, dbName, viewName, createViewSQL)
 		}
-
-		tableName := table.Name
+	}
+	tableName := table.Name
+	if !conf.NoSchemas {
 		createTableSQL, err := ShowCreateTable(db, dbName, tableName)
 		if err != nil {
 			return err
@@ -143,9 +144,7 @@ func dumpTable(ctx context.Context, conf *Config, db *sql.DB, dbName string, tab
 		if err := writer.WriteTableMeta(ctx, dbName, tableName, createTableSQL); err != nil {
 			return err
 		}
-
 	}
-
 	// Do not dump table data and return nil
 	if conf.NoData {
 		return nil
