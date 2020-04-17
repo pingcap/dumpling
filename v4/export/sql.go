@@ -294,7 +294,7 @@ func CheckTiDBWithTiKV(db *sql.DB) (bool, error) {
 		return false, err
 	}
 	if count > 0 {
-		return true, err
+		return true, nil
 	}
 	return false, nil
 }
