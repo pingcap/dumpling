@@ -84,6 +84,7 @@ func filterTables(conf *Config) error {
 	}
 
 	for dbName, tables := range conf.Tables {
+		dbTables[dbName] = make([]*TableInfo, 0, len(tables))
 		for _, table := range tables {
 			if bwList.Apply(dbName, table.Name) {
 				dbTables.AppendTable(dbName, table)
