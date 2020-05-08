@@ -127,6 +127,7 @@ func (f *CsvWriter) WriteTableData(ctx context.Context, ir TableDataIR) error {
 		fileName = fmt.Sprintf("%s.%s.%d.csv", ir.DatabaseName(), ir.TableName(), ir.ChunkIndex())
 	} else {
 		fileName = fmt.Sprintf("%d.csv", time.Now().Unix())
+		log.Debug("dump sql to file ", zap.String("sql", f.cfg.Sql), zap.String("OutputDirPath", f.cfg.OutputDirPath), zap.String("filename", fileName))
 	}
 	chunksIter := buildChunksIter(ir, f.cfg.FileSize, f.cfg.StatementSize)
 	defer chunksIter.Rows().Close()

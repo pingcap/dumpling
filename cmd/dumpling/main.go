@@ -89,7 +89,7 @@ func init() {
 	rootCmd.PersistentFlags().BoolVarP(&noSchemas, "no-schemas", "m", false, "Do not dump table schemas with the data")
 	rootCmd.PersistentFlags().BoolVarP(&noData, "no-data", "d", false, "Do not dump table data")
 	rootCmd.PersistentFlags().StringVar(&csvNullValue, "csv-null-value", "\\N", "The null value used when export to csv")
-	rootCmd.PersistentFlags().StringVarP(&sql, "sql", "s", "", "Dump data with given sql")
+	rootCmd.PersistentFlags().StringVar(&sql, "sql", "", "Dump data with given sql")
 }
 
 func run() {
