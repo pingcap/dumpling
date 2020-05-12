@@ -15,7 +15,7 @@ The following table lists main parameters of dumpling.
 | -r or --rows | Split table into chunks of this many rows. (default unlimited) |
 | --loglevel | Log level. (debug, info, warn, error, dpanic, panic, fatal, default "info") |
 | -d or --no-data | Don't dump data, for schema-only case. |
-| --no-header | DUmp table csv without header. |
+| --no-header | Dump table CSV without header. |
 | -W or --no-views | Don't dump views. (default true) |
 | -m or --no-schemas | Don't dump schemas, dump data only. |
 | -s or --statement-size | Control the size of Insert Statement, unit is byte. |
