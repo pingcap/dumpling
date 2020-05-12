@@ -35,7 +35,7 @@ More detailed usage can be find by the flag `-h` or `--help`.
 
 [Mydumper usage](https://github.com/maxbube/mydumper/blob/master/docs/mydumper_usage.rst)
 
-[TiDB Mydumper Manual (Chinese)](https://pingcap.com/docs-cn/stable/reference/tools/mydumper/)
+[TiDB Mydumper Manual](https://pingcap.com/docs/stable/reference/tools/mydumper/)
 
 ## Dumpling Downloading
 
