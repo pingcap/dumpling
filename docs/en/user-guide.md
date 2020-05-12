@@ -39,4 +39,4 @@ To see more detailed usage, run the flag `-h` or `--help`.
 
 ## Download
 
-[nightly](https://download.pingcap.org/dumpling-nightly-linux-amd64.tar.gz)
+Download the nightly version of Dumpling [here](https://download.pingcap.org/dumpling-nightly-linux-amd64.tar.gz).
