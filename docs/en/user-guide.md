@@ -1,8 +1,8 @@
 # Dumpling manual
 
-[Dumpling](https://github.com/pingcap/dumpling) is a tool that supports exporting data from MySQL/TiDB as SQL or CSV files.
+**Dumpling** is a tool and a Go library for creating SQL dump (CSV/SQL format) from a MySQL-compatible database.
 
-It's designed to replace [Mydumper](https://github.com/pingcap/mydumper), so you can learn its basic usage from Mydumper. Of course, we didn't make a replica of Mydumper, so there are difference between them.
+It is intended to replace `mysqldump` and `mydumper` when targeting TiDB, as a result, its basic usage is similar to Mydumper. Of course, we didn't make a replica of Mydumper, so there are difference between them.
 
 The following table lists main parameters of dumpling.
 
