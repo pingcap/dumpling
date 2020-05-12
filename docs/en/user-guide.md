@@ -12,7 +12,7 @@ The following table lists the major parameters of Dumpling.
 | -B or --database | Dump the specified database. |
 | -H or --host | Host to connect to. (default: `127.0.0.1`) |
 | -t or --threads | Number of threads for concurrent backup. |
-| -r or --rows | Split table into chunks of this many rows. (default unlimited) |
+| -r or --rows | Split table into multiple files by number of rows. This allows Dumpling to generate multiple files concurrently. (default: unlimited) |
 | --loglevel | Log level. {debug, info, warn, error, dpanic, panic, fatal}. (default: `info`) |
 | -d or --no-data | Don't dump data, for schema-only case. |
 | --no-header | Dump table CSV without header. |
