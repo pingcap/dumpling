@@ -2,7 +2,8 @@
 
 **Dumpling** is a tool and a Go library for creating SQL dump (CSV/SQL format) from a MySQL-compatible database.
 
-It is intended to replace `mysqldump` and `mydumper` when targeting TiDB, as a result, its basic usage is similar to Mydumper. We didn't make a replica of Mydumper, so there are difference between them.
+It is intended to replace `mysqldump` and `mydumper` when targeting TiDB, as a result, its basic usage is similar to Mydumper. 
+See detail at the following table.
 
 The following table lists main parameters of dumpling.
 
