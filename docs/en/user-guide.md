@@ -1,6 +1,6 @@
 # Dumpling manual
 
-[Dumpling](https://github.com/pingcap/dumpling) is a tool that supports export MySQL/TiDB data as SQL text or CSV file.
+[Dumpling](https://github.com/pingcap/dumpling) is a tool that supports exporting data from MySQL/TiDB as SQL or CSV files.
 
 It's designed to replace [Mydumper](https://github.com/pingcap/mydumper), so you can learn its basic usage from Mydumper. Of course, we didn't make a replica of Mydumper, so there are difference between them.
 
@@ -9,10 +9,10 @@ The following table lists main parameters of dumpling.
 
 | Parameter |     |
 | --------| --- |
-| -B or --database | Export to specifcated database. |
-| -H or --host | Address of node to connect. (default 127.0.0.1) |
-| -t or --threads | Thread number for concurrence backup. |
-| -r or --rows | Split table to rows of data. When working with big tables, normally we generate many files concurrencly. |
+| -B or --database | Export the specified database. |
+| -H or --host | Host to connect to. (default 127.0.0.1) |
+| -t or --threads | Number of threads for concurrent backup. |
+| -r or --rows | Split table into multiple files by number of rows. This allows Dumpling to generate multiple files concurrently. |
 | --loglevel | Log level. (debug, info, warn, error, dpanic, panic, fatal, default "info") |
 | -d or --no-data | Don't export data, for schema-only case. |
 | --no-header | Export table csv without header. |
@@ -22,7 +22,7 @@ The following table lists main parameters of dumpling.
 | -F or --filesize | The approximate size of output file, unit is byte. |
 | --filetype| The type of export file. (sql/csv, default "sql")           |
 | -o or --output | Output directory. (We have a default value based on time.) |
-| --consistency | Consistency level during dumping: (deault `auto`)<br>`flush`: FTWRL before dump <br>`snapshot`: specify dump timestamp by tso <br>`lock`: execute lock tables read for all tables need to be locked <br>`none`: dump without locking, cannot guarantee consistency <br>`auto`: flush on MySQL, snapshot on TiDB |
+| --consistency | Which consistency control to use (default `auto`):<br>`flush`: Use FTWRL (flush tables with read lock)<br>`snapshot`: use a snapshot at given timestamp<br>`lock`: execute lock tables read for all tables need to be locked <br>`none`: dump without locking, cannot guarantee consistency <br>`auto`: `flush` on MySQL, `snapshot` on TiDB |
 | --snapshot | Snapshot tso, only effective when consistency=snapshot. |
 | --where | Specify the dump range by where condition. |
 | -p or --password | User password. |
@@ -37,6 +37,6 @@ More detailed usage can be find by the flag `-h` or `--help`.
 
 [TiDB Mydumper Manual](https://pingcap.com/docs/stable/reference/tools/mydumper/)
 
-## Dumpling Downloading
+## Download
 
 [nightly](https://download.pingcap.org/dumpling-nightly-linux-amd64.tar.gz)
