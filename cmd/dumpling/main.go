@@ -36,6 +36,8 @@ var (
 	fileSize      uint64
 	statementSize uint64
 	logLevel      string
+	logFile       string
+	logFormat     string
 	consistency   string
 	snapshot      string
 	noViews       bool
@@ -75,6 +77,8 @@ func main() {
 	pflag.Uint64VarP(&statementSize, "statement-size", "S", export.UnspecifiedSize, "Attempted size of INSERT statement in bytes")
 	pflag.StringVarP(&outputDir, "output", "o", defaultOutputDir, "Output directory")
 	pflag.StringVar(&logLevel, "loglevel", "info", "Log level: {debug|info|warn|error|dpanic|panic|fatal}")
+	pflag.StringVarP(&logFile, "logfile", "L", "", "Log file `path`, leave empty to write to console")
+	pflag.StringVar(&logFormat, "logfmt", "text", "Log `format`: {text|json}")
 	pflag.StringVar(&consistency, "consistency", "auto", "Consistency level during dumping: {auto|none|flush|lock|snapshot}")
 	pflag.StringVar(&snapshot, "snapshot", "", "Snapshot position. Valid only when consistency=snapshot")
 	pflag.BoolVarP(&noViews, "no-views", "W", true, "Do not dump views")
@@ -116,6 +120,8 @@ func main() {
 	conf.Where = where
 	conf.EscapeBackslash = escapeBackslash
 	conf.LogLevel = logLevel
+	conf.LogFile = logFile
+	conf.LogFormat = logFormat
 	conf.FileType = fileType
 	conf.NoHeader = noHeader
 	conf.NoSchemas = noSchemas
