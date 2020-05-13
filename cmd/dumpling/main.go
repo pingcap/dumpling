@@ -89,9 +89,15 @@ func main() {
 	pflag.StringVar(&csvNullValue, "csv-null-value", "\\N", "The null value used when export to csv")
 	pflag.StringVarP(&sql, "sql", "s", "", "Dump data with given sql")
 
+	printVersion := pflag.BoolP("version", "V", false, "Print Dumpling version")
+
 	pflag.Parse()
 
 	println(cli.LongVersion())
+
+	if *printVersion {
+		return
+	}
 
 	conf := export.DefaultConfig()
 	conf.Database = database
