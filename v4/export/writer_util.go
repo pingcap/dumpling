@@ -264,6 +264,9 @@ func WriteInsertInCsv(tblIR TableDataIR, w io.Writer, noHeader bool, csvNullValu
 	}
 	close(wp.input)
 	<-wp.closed
+	if err = fileRowIter.Error(); err != nil {
+		return err
+	}
 	return wp.Error()
 }
 
