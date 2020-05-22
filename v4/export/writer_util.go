@@ -179,6 +179,9 @@ func WriteInsert(tblIR TableDataIR, w io.Writer) error {
 	}
 	close(wp.input)
 	<-wp.closed
+	if err = fileRowIter.Error(); err != nil {
+		return err
+	}
 	return wp.Error()
 }
 
