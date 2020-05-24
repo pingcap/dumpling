@@ -38,6 +38,7 @@ type Config struct {
 	NoData        bool
 	CsvNullValue  string
 	Sql           string
+	TablesList    string
 
 	BlackWhiteList  BWListConf
 	Rows            uint64
@@ -73,6 +74,7 @@ func DefaultConfig() *Config {
 		NoData:        false,
 		CsvNullValue:  "\\N",
 		Sql:           "",
+		TablesList:    "",
 	}
 }
 

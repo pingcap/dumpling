@@ -50,6 +50,7 @@ var (
 	noData        bool
 	csvNullValue  string
 	sql           string
+	tablesList    string
 
 	escapeBackslash bool
 )
@@ -92,6 +93,7 @@ func main() {
 	pflag.BoolVarP(&noData, "no-data", "d", false, "Do not dump table data")
 	pflag.StringVar(&csvNullValue, "csv-null-value", "\\N", "The null value used when export to csv")
 	pflag.StringVarP(&sql, "sql", "s", "", "Dump data with given sql")
+	pflag.StringVarP(&tablesList,"tables-list","T","","Comma delimited table list to dump")
 
 	printVersion := pflag.BoolP("version", "V", false, "Print Dumpling version")
 
@@ -128,6 +130,8 @@ func main() {
 	conf.NoData = noData
 	conf.CsvNullValue = csvNullValue
 	conf.Sql = sql
+	conf.TablesList = tablesList
+
 
 	err := export.Dump(conf)
 	if err != nil {

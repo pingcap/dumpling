@@ -73,6 +73,23 @@ func listAllViews(db *sql.DB, databaseNames []string) (DatabaseTables, error) {
 	return dbTables, nil
 }
 
+func parseTablesList(conf *Config) (DatabaseTables, error) {
+	log.Debug("get dumping tables from tables-list")
+	dbTables := DatabaseTables{}
+	for _, name := range strings.Split(conf.TablesList, ",") {
+		var dbName, tableName string
+		if len(strings.Split(name, ".")) == 1 {
+			dbName = conf.Database
+			tableName = strings.Split(name, ".")[0]
+		} else {
+			dbName = strings.Split(name, ".")[0]
+			tableName = strings.Split(name, ".")[1]
+		}
+		dbTables = dbTables.AppendTable(dbName, &TableInfo{tableName, TableTypeBase})
+	}
+	return dbTables, nil
+}
+
 type databaseName = string
 
 type TableType int8

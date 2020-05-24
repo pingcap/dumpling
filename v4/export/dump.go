@@ -37,22 +37,29 @@ func Dump(conf *Config) (err error) {
 		return err
 	}
 
-	databases, err := prepareDumpingDatabases(conf, pool)
-	if err != nil {
-		return err
-	}
-
-	conf.Tables, err = listAllTables(pool, databases)
-	if err != nil {
-		return err
-	}
-
-	if !conf.NoViews {
-		views, err := listAllViews(pool, databases)
+	if conf.TablesList == "" {
+		databases, err := prepareDumpingDatabases(conf, pool)
 		if err != nil {
 			return err
 		}
-		conf.Tables.Merge(views)
+
+		conf.Tables, err = listAllTables(pool, databases)
+		if err != nil {
+			return err
+		}
+
+		if !conf.NoViews {
+			views, err := listAllViews(pool, databases)
+			if err != nil {
+				return err
+			}
+			conf.Tables.Merge(views)
+		}
+	} else {
+		conf.Tables, err = parseTablesList(conf)
+		if err != nil {
+			return err
+		}
 	}
 
 	err = filterTables(conf)
@@ -106,12 +113,14 @@ func Dump(conf *Config) (err error) {
 func dumpDatabases(ctx context.Context, conf *Config, db *sql.DB, writer Writer) error {
 	allTables := conf.Tables
 	for dbName, tables := range allTables {
-		createDatabaseSQL, err := ShowCreateDatabase(db, dbName)
-		if err != nil {
-			return err
-		}
-		if err := writer.WriteDatabaseMeta(ctx, dbName, createDatabaseSQL); err != nil {
-			return err
+		if conf.Database != "" {
+			createDatabaseSQL, err := ShowCreateDatabase(db, dbName)
+			if err != nil {
+				return err
+			}
+			if err := writer.WriteDatabaseMeta(ctx, dbName, createDatabaseSQL); err != nil {
+				return err
+			}
 		}
 
 		if len(tables) == 0 {
