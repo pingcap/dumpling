@@ -7,6 +7,7 @@ import (
 
 	"github.com/coreos/go-semver/semver"
 	"github.com/pingcap/dumpling/v4/log"
+	filter "github.com/pingcap/tidb-tools/pkg/table-filter"
 	"go.uber.org/zap"
 )
 
@@ -39,7 +40,7 @@ type Config struct {
 	CsvNullValue  string
 	Sql           string
 
-	BlackWhiteList  BWListConf
+	TableFilter     filter.Filter
 	Rows            uint64
 	Where           string
 	FileType        string
@@ -47,6 +48,7 @@ type Config struct {
 }
 
 func DefaultConfig() *Config {
+	allFilter, _ := filter.Parse([]string{"*.*"})
 	return &Config{
 		Database:      "",
 		Host:          "127.0.0.1",
@@ -73,6 +75,7 @@ func DefaultConfig() *Config {
 		NoData:        false,
 		CsvNullValue:  "\\N",
 		Sql:           "",
+		TableFilter:   allFilter,
 	}
 }
 
