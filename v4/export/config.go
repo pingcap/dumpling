@@ -12,12 +12,12 @@ import (
 )
 
 type Config struct {
-	Database string
-	Host     string
-	User     string
-	Port     int
-	Password string
-	Threads  int
+	Databases []string
+	Host      string
+	User      string
+	Port      int
+	Password  string
+	Threads   int
 
 	LogLevel  string
 	LogFile   string
@@ -50,7 +50,7 @@ type Config struct {
 func DefaultConfig() *Config {
 	allFilter, _ := filter.Parse([]string{"*.*"})
 	return &Config{
-		Database:      "",
+		Databases:     nil,
 		Host:          "127.0.0.1",
 		User:          "root",
 		Port:          3306,
