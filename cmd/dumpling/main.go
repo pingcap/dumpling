@@ -19,6 +19,7 @@ import (
 	_ "net/http/pprof"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/docker/go-units"
@@ -30,6 +31,7 @@ import (
 
 var (
 	databases     []string
+	tablesList    []string
 	host          string
 	user          string
 	port          int
@@ -73,6 +75,7 @@ func main() {
 	pflag.ErrHelp = errors.New("")
 
 	pflag.StringSliceVarP(&databases, "database", "B", nil, "Databases to dump")
+	pflag.StringSliceVarP(&tablesList, "tables-list", "T", nil, "Comma delimited table list to dump; must be qualified table names")
 	pflag.StringVarP(&host, "host", "h", "127.0.0.1", "The host to connect to")
 	pflag.StringVarP(&user, "user", "u", "root", "Username with privileges to run the dump")
 	pflag.IntVarP(&port, "port", "P", 4000, "TCP/IP port to connect to")
@@ -110,7 +113,7 @@ func main() {
 		return
 	}
 
-	tableFilter, err := filter.Parse(filters)
+	tableFilter, err := parseTableFilter()
 	if err != nil {
 		fmt.Printf("failed to parse filter: %s\n", err)
 		os.Exit(2)
@@ -164,4 +167,26 @@ func main() {
 		fmt.Printf("dump failed: %s\n", err.Error())
 		os.Exit(1)
 	}
+}
+
+func parseTableFilter() (filter.Filter, error) {
+	if len(tablesList) == 0 {
+		return filter.Parse(filters)
+	}
+
+	// only parse -T when -f is default value. otherwise bail out.
+	if len(filters) != 1 || filters[0] != "*.*" {
+		return nil, errors.New("cannot pass --tables-list and --filter together")
+	}
+
+	tableNames := make([]filter.Table, 0, len(tablesList))
+	for _, table := range tablesList {
+		parts := strings.SplitN(table, ".", 2)
+		if len(parts) < 2 {
+			return nil, fmt.Errorf("--tables-list only accepts qualified table names, but `%s` lacks a dot", table)
+		}
+		tableNames = append(tableNames, filter.Table{Schema: parts[0], Name: parts[1]})
+	}
+
+	return filter.NewTablesFilter(tableNames...), nil
 }
