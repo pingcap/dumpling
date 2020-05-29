@@ -229,7 +229,7 @@ func GetColumnTypes(db *sql.DB, fields, database, table string) ([]*sql.ColumnTy
 }
 
 func GetPrimaryKeyName(db *sql.DB, database, table string) (string, error) {
-	priKeyQuery := "SELECT column_name FROM information_schema.columns" +
+	priKeyQuery := "SELECT column_name FROM information_schema.columns " +
 		"WHERE table_schema = ? AND table_name = ? AND column_key = 'PRI';"
 	var colName string
 	row := db.QueryRow(priKeyQuery, database, table)
