@@ -3,8 +3,7 @@
 set -eu
 
 db="quo\`te-database"
-run_sql "drop database if exists $db"
-run_sql "create database $db"
+run_sql "drop database if exists \`quo\`\`te-database\`"
 export DUMPLING_TEST_DATABASE=$db
 
 for data in "$DUMPLING_BASE_NAME"/data/*; do
