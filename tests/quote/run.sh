@@ -6,9 +6,9 @@ db="quo\`te-database"
 run_sql "drop database if exists \`quo\`\`te-database\`"
 export DUMPLING_TEST_DATABASE=$db
 
-run_sql_file "quo\`te-database-schema-create.sql"
-run_sql_file "quo\`te-database.quo\`te-table-schema.sql"
-run_sql_file "quo\`te-database.quo\`te-table.0.sql"
+run_sql_file "$DUMPLING_BASE_NAME/data/quo\`te-database-schema-create.sql"
+run_sql_file "$DUMPLING_BASE_NAME/data/quo\`te-database.quo\`te-table-schema.sql"
+run_sql_file "$DUMPLING_BASE_NAME/data/quo\`te-database.quo\`te-table.0.sql"
 
 run_dumpling
 
