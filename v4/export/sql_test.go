@@ -181,10 +181,10 @@ func (s *testDumpSuite) TestBuildSelectField(c *C) {
 	mock.ExpectQuery("SELECT COLUMN_NAME").
 		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg()).
 		WillReturnRows(sqlmock.NewRows([]string{"column_name", "extra"}).
-			AddRow("id", "").AddRow("name", "").AddRow("generated", "VIRTUAL GENERATED"))
+			AddRow("id", "").AddRow("name", "").AddRow("quo`te", "").AddRow("generated", "VIRTUAL GENERATED"))
 
 	selectedField, err = buildSelectField(db, "test", "t")
-	c.Assert(selectedField, Equals, "`id`,`name`")
+	c.Assert(selectedField, Equals, "`id`,`name`,`quo``te`")
 	c.Assert(err, IsNil)
 	c.Assert(mock.ExpectationsWereMet(), IsNil)
 
