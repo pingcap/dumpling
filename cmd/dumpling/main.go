@@ -136,6 +136,10 @@ func main() {
 		fmt.Printf("failed to parse filesize (-F '%s')\n", fileSizeStr)
 		os.Exit(2)
 	}
+	if threads <= 0 {
+		fmt.Println("Warning: number of goroutines to use can be <= 0, will be reset to default threads 4")
+		threads = 4
+	}
 
 	conf := export.DefaultConfig()
 	conf.Databases = databases
@@ -169,6 +173,8 @@ func main() {
 		log.Error("dump failed error stack info", zap.Error(err))
 		fmt.Printf("\ndump failed: %s\n", err.Error())
 		os.Exit(1)
+	} else {
+		log.Info("dump data successfully, dumpling will exit now")
 	}
 }
 
