@@ -136,9 +136,10 @@ func main() {
 		fmt.Printf("failed to parse filesize (-F '%s')\n", fileSizeStr)
 		os.Exit(2)
 	}
+
 	if threads <= 0 {
-		fmt.Println("Warning: --threads should be greater than 0. It will be reset to default threads 4")
-		threads = 4
+		fmt.Printf("--threads is set to %d. It should be greater than 0\n", threads)
+		os.Exit(2)
 	}
 
 	conf := export.DefaultConfig()

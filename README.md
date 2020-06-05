@@ -29,7 +29,7 @@ Building
 2. Run `make build` to compile. The output is in `bin/dumpling`.
 3. Run `make test` to run the unit tests.
 4. Run `make integration_test` to run integration tests. For integration test:
-  - The following executables must be copied or generated or linked into these locations, `sync_diff_inspector` can be downloaded from [tidb-enterprise-tools-latest-linux-amd64](http://download.pingcap.org/tidb-enterprise-tools-latest-linux-amd64.tar.gz), `tidb-server` can be downloaded from [tidb-master-linux-amd64](https://download.pingcap.org/tidb-master-linux-amd64.tar.gz)，`tidb-lightning` can be downloaded from [tidb-toolkit-latest-linux-amd64](https://download.pingcap.org/tidb-toolkit-latest-linux-amd64.tar.gz):
+  - The following executables must be copied or generated or linked into these locations, `sync_diff_inspector` can be downloaded from [tidb-enterprise-tools-latest-linux-amd64](http://download.pingcap.org/tidb-enterprise-tools-latest-linux-amd64.tar.gz), `tidb-server` can be downloaded from [tidb-master-linux-amd64](https://download.pingcap.org/tidb-master-linux-amd64.tar.gz), and `tidb-lightning` can be downloaded from [tidb-toolkit-latest-linux-amd64](https://download.pingcap.org/tidb-toolkit-latest-linux-amd64.tar.gz):
     * `bin/sync_diff_inspector`
     * `bin/tidb-server`
     * `bin/tidb-lightning`
