@@ -35,6 +35,7 @@ Building
     * `bin/tidb-lightning`
   - The following programs must be installed:
     * `mysql` (the CLI client)
+
 License
 -------
 
