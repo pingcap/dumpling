@@ -137,7 +137,7 @@ func main() {
 		os.Exit(2)
 	}
 	if threads <= 0 {
-		fmt.Println("Warning: number of goroutines to use can be <= 0, will be reset to default threads 4")
+		fmt.Println("Warning: --threads should be greater than 0. It will be reset to default threads 4")
 		threads = 4
 	}
 
