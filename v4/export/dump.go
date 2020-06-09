@@ -15,7 +15,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func Dump(conf *Config) (err error) {
+func Dump(pCtx context.Context, conf *Config) (err error) {
 	if err = adjustConfig(conf); err != nil {
 		return withStack(err)
 	}
@@ -59,7 +59,7 @@ func Dump(conf *Config) (err error) {
 
 	filterTables(conf)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(pCtx)
 	defer cancel()
 
 	var doPdGC bool
