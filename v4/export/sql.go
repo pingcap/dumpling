@@ -294,6 +294,39 @@ func ShowMasterStatus(db *sql.DB, fieldNum int) ([]string, error) {
 	return oneRow, nil
 }
 
+func GetPdAddrs(db *sql.DB) ([]string, error) {
+	var pdAddrs []string
+	query := "SELECT * FROM information_schema.cluster_info where type = \"pd\";"
+	rows, err := db.Query(query)
+	if err != nil {
+		log.Warn("can't execute query from db",
+			zap.String("query", query), zap.Error(err))
+		return pdAddrs, err
+	}
+	defer rows.Close()
+	columns, _ := rows.Columns()
+	addr := make([]interface{}, len(columns))
+	oneRow := make([]sql.NullString, len(columns))
+	var fieldIndex = -1
+	for i, col := range columns {
+		if strings.ToUpper(col) == "STATUS_ADDRESS" {
+			fieldIndex = i
+		}
+		addr[i] = &oneRow[i]
+	}
+	if fieldIndex == -1 {
+		return pdAddrs, nil
+	}
+	for rows.Next() {
+		err = rows.Scan(addr)
+		if err != nil {
+			return pdAddrs, err
+		}
+		pdAddrs = append(pdAddrs, oneRow[fieldIndex].String)
+	}
+	return pdAddrs, nil
+}
+
 func SetTiDBSnapshot(db *sql.DB, snapshot string) error {
 	_, err := db.Exec("SET SESSION tidb_snapshot = ?", snapshot)
 	return withStack(err)

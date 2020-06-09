@@ -84,9 +84,13 @@ func (conf *Config) getDSN(db string) string {
 }
 
 const (
-	UnspecifiedSize    = 0
-	defaultDumpThreads = 128
+	UnspecifiedSize            = 0
+	defaultDumpThreads         = 128
+	defaultDumpGCSafePointTTL  = 5 * 60
+	dumplingServiceSafePointID = "dumpling"
 )
+
+var gcSafePointVersion, _ = semver.NewVersion("4.0.0")
 
 type ServerInfo struct {
 	ServerType    ServerType
