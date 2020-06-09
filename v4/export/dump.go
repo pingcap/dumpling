@@ -277,7 +277,7 @@ func updateServiceSafePoint(ctx context.Context, pdClient pd.Client, ttl int64, 
 				if err == nil {
 					break
 				}
-				log.Warn("update PD safePoint failed", zap.Error(err))
+				log.Debug("update PD safePoint failed", zap.Error(err))
 				select {
 				case <-ctx.Done():
 					return
