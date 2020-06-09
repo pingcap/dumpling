@@ -37,7 +37,7 @@ func filterTables(conf *Config) {
 		}
 		// 1. this dbName doesn't match black white list, don't add
 		// 2. this dbName matches black white list, but there is no table in this database, add
-		if _, ok := dbTables[dbName]; !ok && conf.TableFilter.MatchTable(dbName, "") {
+		if _, ok := dbTables[dbName]; !ok && conf.TableFilter.MatchSchema(dbName) {
 			dbTables[dbName] = make([]*TableInfo, 0)
 		}
 	}
