@@ -11,8 +11,6 @@ var colTypeRowReceiverMap = map[string]func() RowReceiverStringer{}
 var nullValue = "NULL"
 var quotationMark byte = '\''
 var doubleQuotationMark byte = '"'
-var quotationMarkNotQuote = []byte{quotationMark}
-var quotationMarkQuote = []byte{quotationMark, quotationMark}
 
 func init() {
 	for _, s := range dataTypeString {
@@ -47,11 +45,23 @@ var dataTypeBin = []string{
 	"BIT",
 }
 
-func escape(s []byte, bf *bytes.Buffer, escapeBackslash bool) {
-	if !escapeBackslash {
-		bf.Write(bytes.ReplaceAll(s, quotationMarkNotQuote, quotationMarkQuote))
+func getEscapeQuotation(escapeBackSlash, isCsv bool) byte {
+	if escapeBackSlash {
+		return 0
+	}
+	if isCsv {
+		return doubleQuotationMark
+	}
+	return quotationMark
+}
+
+func escape(s []byte, bf *bytes.Buffer, escapeQuotation byte) {
+	switch escapeQuotation {
+	case quotationMark, doubleQuotationMark:
+		bf.Write(bytes.ReplaceAll(s, []byte{escapeQuotation}, []byte{escapeQuotation, escapeQuotation}))
 		return
 	}
+
 	var (
 		escape byte
 		last   = 0
@@ -193,7 +203,7 @@ func (s *SQLTypeString) ReportSize() uint64 {
 func (s *SQLTypeString) WriteToBuffer(bf *bytes.Buffer, escapeBackslash bool) {
 	if s.RawBytes != nil {
 		bf.WriteByte(quotationMark)
-		escape(s.RawBytes, bf, escapeBackslash)
+		escape(s.RawBytes, bf, getEscapeQuotation(escapeBackslash, false))
 		bf.WriteByte(quotationMark)
 	} else {
 		bf.WriteString(nullValue)
@@ -203,7 +213,7 @@ func (s *SQLTypeString) WriteToBuffer(bf *bytes.Buffer, escapeBackslash bool) {
 func (s *SQLTypeString) WriteToBufferInCsv(bf *bytes.Buffer, escapeBackslash bool, csvNullValue string) {
 	if s.RawBytes != nil {
 		bf.WriteByte(doubleQuotationMark)
-		escape(s.RawBytes, bf, escapeBackslash)
+		escape(s.RawBytes, bf, getEscapeQuotation(escapeBackslash, true))
 		bf.WriteByte(doubleQuotationMark)
 	} else {
 		bf.WriteString(csvNullValue)

@@ -90,7 +90,7 @@ func main() {
 	pflag.StringVarP(&logFile, "logfile", "L", "", "Log file `path`, leave empty to write to console")
 	pflag.StringVar(&logFormat, "logfmt", "text", "Log `format`: {text|json}")
 	pflag.StringVar(&consistency, "consistency", "auto", "Consistency level during dumping: {auto|none|flush|lock|snapshot}")
-	pflag.StringVar(&snapshot, "snapshot", "", "Snapshot position. Valid only when consistency=snapshot")
+	pflag.StringVar(&snapshot, "snapshot", "", "Snapshot position (uint64 from pd timestamp for TiDB). Valid only when consistency=snapshot")
 	pflag.BoolVarP(&noViews, "no-views", "W", true, "Do not dump views")
 	pflag.StringVar(&statusAddr, "status-addr", ":8281", "dumpling API server and pprof addr")
 	pflag.Uint64VarP(&rows, "rows", "r", export.UnspecifiedSize, "Split table into chunks of this many rows, default unlimited")
@@ -165,6 +165,7 @@ func main() {
 	conf.NoHeader = noHeader
 	conf.NoSchemas = noSchemas
 	conf.NoData = noData
+	conf.Snapshot = snapshot
 	conf.CsvNullValue = csvNullValue
 	conf.Sql = sql
 	conf.TableFilter = tableFilter
