@@ -266,25 +266,25 @@ func updateServiceSafePoint(ctx context.Context, pdClient pd.Client, ttl int64, 
 	tick := time.NewTicker(updateInterval)
 
 	for {
+		log.Debug("update PD safePoint limit with ttl",
+			zap.Uint64("safePoint", snapshotTS),
+			zap.Int64("ttl", ttl))
+		for retryCnt := 0; retryCnt <= 10; retryCnt++ {
+			_, err := pdClient.UpdateServiceGCSafePoint(ctx, dumplingServiceSafePointID, ttl, snapshotTS)
+			if err == nil {
+				break
+			}
+			log.Debug("update PD safePoint failed", zap.Error(err), zap.Int("retryTime", retryCnt))
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(time.Second):
+			}
+		}
 		select {
 		case <-ctx.Done():
 			return
 		case <-tick.C:
-			log.Debug("update PD safePoint limit with ttl",
-				zap.Uint64("safePoint", snapshotTS),
-				zap.Int64("ttl", ttl))
-			for {
-				_, err := pdClient.UpdateServiceGCSafePoint(ctx, dumplingServiceSafePointID, ttl, snapshotTS)
-				if err == nil {
-					break
-				}
-				log.Debug("update PD safePoint failed", zap.Error(err))
-				select {
-				case <-ctx.Done():
-					return
-				case <-time.After(time.Second):
-				}
-			}
 		}
 	}
 }
