@@ -318,7 +318,7 @@ func GetPdAddrs(db *sql.DB) ([]string, error) {
 		return pdAddrs, nil
 	}
 	for rows.Next() {
-		err = rows.Scan(addr)
+		err = rows.Scan(addr...)
 		if err != nil {
 			return pdAddrs, err
 		}

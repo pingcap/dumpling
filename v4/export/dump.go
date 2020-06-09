@@ -94,6 +94,11 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 			return err
 		}
 		go func() { updateServiceSafePoint(ctx, pdClient, defaultDumpGCSafePointTTL, snapshotTS) }()
+	} else if conf.ServerInfo.ServerType == ServerTypeTiDB {
+		log.Warn("If the amount of data to dump is large, criteria: (data more than 60GB or dumped time more than 10 minutes)\n" +
+			"you'd better adjust the tikv_gc_life_time to avoid export failure due to TiDB GC during the dump process.\n" +
+			"Before dumping: run sql `update mysql.tidb set VARIABLE_VALUE = '720h' where VARIABLE_NAME = 'tikv_gc_life_time';` in tidb.\n" +
+			"After dumping: run sql `update mysql.tidb set VARIABLE_VALUE = '10m' where VARIABLE_NAME = 'tikv_gc_life_time';` in tidb.\n")
 	}
 
 	conCtrl, err := NewConsistencyController(conf, pool)
