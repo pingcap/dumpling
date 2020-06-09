@@ -296,7 +296,7 @@ func ShowMasterStatus(db *sql.DB, fieldNum int) ([]string, error) {
 
 func GetPdAddrs(db *sql.DB) ([]string, error) {
 	var pdAddrs []string
-	query := "SELECT * FROM information_schema.cluster_info where type = \"pd\";"
+	query := "SELECT * FROM information_schema.cluster_info where type = 'pd';"
 	rows, err := db.Query(query)
 	if err != nil {
 		log.Warn("can't execute query from db",
