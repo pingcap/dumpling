@@ -72,9 +72,10 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 		if len(pdAddrs) > 0 {
 			pdClient, err = pd.NewClientWithContext(ctx, pdAddrs, pd.SecurityOption{})
 			if err != nil {
-				return err
+				log.Warn("create pd client to control GC failed", zap.Error(err), zap.Strings("pdAddrs", pdAddrs))
+			} else {
+				doPdGC = true
 			}
-			doPdGC = true
 		}
 	}
 
