@@ -16,6 +16,7 @@ require (
 	github.com/soheilhy/cmux v0.1.4
 	github.com/spf13/pflag v1.0.3
 	github.com/stretchr/testify v1.5.1 // indirect
+	go.etcd.io/etcd v0.5.0-alpha.5.0.20191023171146-3cf2f69b5738
 	go.uber.org/zap v1.14.0
 	golang.org/x/mod v0.3.0 // indirect
 	golang.org/x/net v0.0.0-20200602114024-627f9648deb9 // indirect

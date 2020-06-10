@@ -70,11 +70,15 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 			return err
 		}
 		if len(pdAddrs) > 0 {
-			pdClient, err = pd.NewClientWithContext(ctx, pdAddrs, pd.SecurityOption{})
+			doPdGC, err = checkSameCluster(ctx, pool, pdAddrs)
 			if err != nil {
-				log.Warn("create pd client to control GC failed", zap.Error(err), zap.Strings("pdAddrs", pdAddrs))
-			} else {
-				doPdGC = true
+				log.Warn("meet error while check whether fetched pd addr and TiDB belongs to one cluster", zap.Error(err), zap.Strings("pdAddrs", pdAddrs))
+			} else if doPdGC {
+				pdClient, err = pd.NewClientWithContext(ctx, pdAddrs, pd.SecurityOption{})
+				if err != nil {
+					log.Warn("create pd client to control GC failed", zap.Error(err), zap.Strings("pdAddrs", pdAddrs))
+					doPdGC = false
+				}
 			}
 		}
 	}
