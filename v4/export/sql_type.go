@@ -45,19 +45,15 @@ var dataTypeBin = []string{
 	"BIT",
 }
 
-func getEscapeQuotation(escapeBackSlash, isCsv bool) byte {
+func getEscapeQuotation(escapeBackSlash bool, escapeQuotation byte) byte {
 	if escapeBackSlash {
 		return 0
 	}
-	if isCsv {
-		return doubleQuotationMark
-	}
-	return quotationMark
+	return escapeQuotation
 }
 
 func escape(s []byte, bf *bytes.Buffer, escapeQuotation byte) {
-	switch escapeQuotation {
-	case quotationMark, doubleQuotationMark:
+	if escapeQuotation != 0 {
 		bf.Write(bytes.ReplaceAll(s, []byte{escapeQuotation}, []byte{escapeQuotation, escapeQuotation}))
 		return
 	}
@@ -203,7 +199,7 @@ func (s *SQLTypeString) ReportSize() uint64 {
 func (s *SQLTypeString) WriteToBuffer(bf *bytes.Buffer, escapeBackslash bool) {
 	if s.RawBytes != nil {
 		bf.WriteByte(quotationMark)
-		escape(s.RawBytes, bf, getEscapeQuotation(escapeBackslash, false))
+		escape(s.RawBytes, bf, getEscapeQuotation(escapeBackslash, quotationMark))
 		bf.WriteByte(quotationMark)
 	} else {
 		bf.WriteString(nullValue)
@@ -213,7 +209,7 @@ func (s *SQLTypeString) WriteToBuffer(bf *bytes.Buffer, escapeBackslash bool) {
 func (s *SQLTypeString) WriteToBufferInCsv(bf *bytes.Buffer, escapeBackslash bool, csvNullValue string) {
 	if s.RawBytes != nil {
 		bf.WriteByte(doubleQuotationMark)
-		escape(s.RawBytes, bf, getEscapeQuotation(escapeBackslash, true))
+		escape(s.RawBytes, bf, getEscapeQuotation(escapeBackslash, doubleQuotationMark))
 		bf.WriteByte(doubleQuotationMark)
 	} else {
 		bf.WriteString(csvNullValue)

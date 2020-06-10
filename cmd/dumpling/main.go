@@ -95,7 +95,7 @@ func main() {
 	pflag.StringVar(&statusAddr, "status-addr", ":8281", "dumpling API server and pprof addr")
 	pflag.Uint64VarP(&rows, "rows", "r", export.UnspecifiedSize, "Split table into chunks of this many rows, default unlimited")
 	pflag.StringVar(&where, "where", "", "Dump only selected records")
-	pflag.BoolVar(&escapeBackslash, "escape-backslash", true, "use backslash to escape special marks")
+	pflag.BoolVar(&escapeBackslash, "escape-backslash", true, "use backslash to escape special characters")
 	pflag.StringVar(&fileType, "filetype", "sql", "The type of export file (sql/csv)")
 	pflag.BoolVar(&noHeader, "no-header", false, "whether not to dump CSV table header")
 	pflag.BoolVarP(&noSchemas, "no-schemas", "m", false, "Do not dump table schemas with the data")
