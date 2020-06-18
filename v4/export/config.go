@@ -40,11 +40,12 @@ type Config struct {
 	CsvNullValue  string
 	Sql           string
 
-	TableFilter     filter.Filter
-	Rows            uint64
-	Where           string
-	FileType        string
-	EscapeBackslash bool
+	TableFilter       filter.Filter
+	Rows              uint64
+	Where             string
+	FileType          string
+	EscapeBackslash   bool
+	DumpEmptyDatabase bool
 }
 
 func DefaultConfig() *Config {
