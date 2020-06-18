@@ -142,12 +142,19 @@ func SelectFromSql(conf *Config, db *sql.DB) (TableDataIR, error) {
 	if err != nil {
 		return nil, withStack(errors.WithMessage(err, conf.Sql))
 	}
+	cols, err := rows.Columns()
+	if err != nil {
+		return nil, withStack(errors.WithMessage(err, conf.Sql))
+	}
+	for i := range cols {
+		cols[i] = wrapBackTicks(cols[i])
+	}
 	return &tableData{
-		database:        "",
-		table:           "",
+		database:        "test",
+		table:           "sql_result",
 		rows:            rows,
 		colTypes:        colTypes,
-		selectedField:   "",
+		selectedField:   strings.Join(cols, ","),
 		escapeBackslash: conf.EscapeBackslash,
 		specCmts: []string{
 			"/*!40101 SET NAMES binary*/;",
