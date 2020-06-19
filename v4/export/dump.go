@@ -28,20 +28,25 @@ func Dump(conf *Config) (err error) {
 	}()
 	pool, err := sql.Open("mysql", conf.getDSN(""))
 	if err != nil {
-		if strings.Contains(err.Error(), "tidb_mem_quota_query") {
-			conf.TiDBMemQuotaQuery = UnspecifiedSize
-			pool, err = sql.Open("mysql", conf.getDSN(""))
-			if err != nil {
-				return withStack(err)
-			}
-		}
 		return withStack(err)
 	}
 	defer pool.Close()
 
 	conf.ServerInfo, err = detectServerInfo(pool)
 	if err != nil {
-		return err
+		if strings.Contains(err.Error(), "tidb_mem_quota_query") {
+			conf.TiDBMemQuotaQuery = UnspecifiedSize
+			pool, err = sql.Open("mysql", conf.getDSN(""))
+			if err != nil {
+				return withStack(err)
+			}
+			conf.ServerInfo, err = detectServerInfo(pool)
+			if err != nil {
+				return withStack(err)
+			}
+		} else {
+			return withStack(err)
+		}
 	}
 
 	databases, err := prepareDumpingDatabases(conf, pool)
