@@ -20,7 +20,7 @@ Features
 - [x] Export multiple tables in parallel to speed up execution.
 - [ ] Multiple output formats: SQL, CSV, ...
 - [ ] Write to cloud storage (S3, GCS) natively
-- [x] Advanced table filtering via block-/allow-lists
+- [x] Advanced table filtering
 
 Building
 --------
