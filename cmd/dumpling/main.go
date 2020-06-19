@@ -107,7 +107,7 @@ func main() {
 	pflag.StringArrayVarP(&filters, "filter", "f", []string{"*.*"}, "filter to select which tables to dump")
 	pflag.BoolVar(&caseSensitive, "case-sensitive", false, "whether the filter should be case-sensitive")
 	pflag.BoolVar(&dumpEmptyDatabase, "dump-empty-database", true, "whether to dump empty database")
-	pflag.Uint64Var(&tidbMemQuotaQuery, "tidb-mem-quota-query", export.DefaultTiDBMemQuotaQuery, "The maximum memory available for a single SQL statement. Default: 32GB")
+	pflag.Uint64Var(&tidbMemQuotaQuery, "tidb-mem-quota-query", export.DefaultTiDBMemQuotaQuery, "The maximum memory limit for a single SQL statement, in bytes. Default: 32GB")
 
 	printVersion := pflag.BoolP("version", "V", false, "Print Dumpling version")
 
