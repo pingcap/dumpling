@@ -150,8 +150,8 @@ func SelectFromSql(conf *Config, db *sql.DB) (TableDataIR, error) {
 		cols[i] = wrapBackTicks(cols[i])
 	}
 	return &tableData{
-		database:        "test",
-		table:           "sql_result",
+		database:        "",
+		table:           "",
 		rows:            rows,
 		colTypes:        colTypes,
 		selectedField:   strings.Join(cols, ","),
