@@ -79,11 +79,16 @@ func DefaultConfig() *Config {
 		Sql:               "",
 		TableFilter:       allFilter,
 		DumpEmptyDatabase: true,
+		TiDBMemQuotaQuery: UnspecifiedSize,
 	}
 }
 
 func (conf *Config) getDSN(db string) string {
-	return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4", conf.User, conf.Password, conf.Host, conf.Port, db)
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4", conf.User, conf.Password, conf.Host, conf.Port, db)
+	if conf.TiDBMemQuotaQuery != UnspecifiedSize {
+		dsn += fmt.Sprintf("&tidb_mem_quota_query=%v", conf.TiDBMemQuotaQuery)
+	}
+	return dsn
 }
 
 const (

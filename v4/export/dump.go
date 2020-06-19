@@ -28,6 +28,13 @@ func Dump(conf *Config) (err error) {
 	}()
 	pool, err := sql.Open("mysql", conf.getDSN(""))
 	if err != nil {
+		if strings.Contains(err.Error(), "tidb_mem_quota_query") {
+			conf.TiDBMemQuotaQuery = UnspecifiedSize
+			pool, err = sql.Open("mysql", conf.getDSN(""))
+			if err != nil {
+				return withStack(err)
+			}
+		}
 		return withStack(err)
 	}
 	defer pool.Close()
@@ -35,13 +42,6 @@ func Dump(conf *Config) (err error) {
 	conf.ServerInfo, err = detectServerInfo(pool)
 	if err != nil {
 		return err
-	}
-	if conf.ServerInfo.ServerType == ServerTypeTiDB && conf.ServerInfo.ServerVersion.Compare(*tidbV312) >= 0 {
-		log.Info("set tidb_mem_quota_query", zap.Uint64("tidb_mem_quota_query", conf.TiDBMemQuotaQuery))
-		_, err = pool.Exec("set tidb_mem_quota_query = ?", conf.TiDBMemQuotaQuery)
-		if err != nil {
-			return err
-		}
 	}
 
 	databases, err := prepareDumpingDatabases(conf, pool)
