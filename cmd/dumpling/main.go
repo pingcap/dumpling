@@ -62,6 +62,7 @@ var (
 
 	dumpEmptyDatabase bool
 	escapeBackslash   bool
+	tidbMemQuotaQuery uint64
 )
 
 var defaultOutputDir = timestampDirName()
@@ -106,6 +107,7 @@ func main() {
 	pflag.StringArrayVarP(&filters, "filter", "f", []string{"*.*"}, "filter to select which tables to dump")
 	pflag.BoolVar(&caseSensitive, "case-sensitive", false, "whether the filter should be case-sensitive")
 	pflag.BoolVar(&dumpEmptyDatabase, "dump-empty-database", true, "whether to dump empty database")
+	pflag.Uint64Var(&tidbMemQuotaQuery, "tidb-mem-quota-query", export.DefaultTiDBMemQuotaQuery, "The maximum memory available for a single SQL statement. Default: 32GB")
 
 	printVersion := pflag.BoolP("version", "V", false, "Print Dumpling version")
 
@@ -172,6 +174,7 @@ func main() {
 	conf.CsvNullValue = csvNullValue
 	conf.Sql = sql
 	conf.TableFilter = tableFilter
+	conf.TiDBMemQuotaQuery = tidbMemQuotaQuery
 
 	err = export.Dump(conf)
 	if err != nil {

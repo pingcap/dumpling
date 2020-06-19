@@ -46,6 +46,7 @@ type Config struct {
 	FileType          string
 	EscapeBackslash   bool
 	DumpEmptyDatabase bool
+	TiDBMemQuotaQuery uint64
 }
 
 func DefaultConfig() *Config {
@@ -86,9 +87,12 @@ func (conf *Config) getDSN(db string) string {
 }
 
 const (
-	UnspecifiedSize    = 0
-	defaultDumpThreads = 128
+	UnspecifiedSize          = 0
+	DefaultTiDBMemQuotaQuery = 32 * (1 << 30)
+	defaultDumpThreads       = 128
 )
+
+var tidbV312, _ = semver.NewVersion("3.0.12")
 
 type ServerInfo struct {
 	ServerType    ServerType

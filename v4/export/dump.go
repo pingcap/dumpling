@@ -36,6 +36,13 @@ func Dump(conf *Config) (err error) {
 	if err != nil {
 		return err
 	}
+	if conf.ServerInfo.ServerType == ServerTypeTiDB && conf.ServerInfo.ServerVersion.Compare(*tidbV312) >= 0 {
+		log.Info("set tidb_mem_quota_query", zap.Uint64("tidb_mem_quota_query", conf.TiDBMemQuotaQuery))
+		_, err = pool.Exec("set tidb_mem_quota_query = ?", conf.TiDBMemQuotaQuery)
+		if err != nil {
+			return err
+		}
+	}
 
 	databases, err := prepareDumpingDatabases(conf, pool)
 	if err != nil {
