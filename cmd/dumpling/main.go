@@ -14,6 +14,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	_ "net/http/pprof"
@@ -176,7 +177,7 @@ func main() {
 	conf.TableFilter = tableFilter
 	conf.TiDBMemQuotaQuery = tidbMemQuotaQuery
 
-	err = export.Dump(conf)
+	err = export.Dump(context.Background(), conf)
 	if err != nil {
 		log.Error("dump failed error stack info", zap.Error(err))
 		fmt.Printf("\ndump failed: %s\n", err.Error())
