@@ -460,12 +460,12 @@ func estimateCount(dbName, tableName string, db *sql.DB, field string, conf *Con
 		+----+-------------+-------+------------+-------+---------------+-----------+---------+------+------+----------+-------------+
 	*/
 	if estRows > 0 {
-		return uint64(estRows)
+		return estRows
 	}
 	return 0
 }
 
-func detectEstimateRows(db *sql.DB, query string, fieldNames []string) int {
+func detectEstimateRows(db *sql.DB, query string, fieldNames []string) uint64 {
 	row, err := db.Query(query)
 	if err != nil {
 		log.Warn("can't execute query from db",
@@ -502,7 +502,7 @@ found:
 			zap.String("query", query), zap.Error(err))
 		return 0
 	}
-	return int(estRows)
+	return uint64(estRows)
 }
 
 func buildWhereCondition(conf *Config, where string) string {

@@ -97,8 +97,6 @@ const (
 	defaultDumpThreads       = 128
 )
 
-var tidbV312, _ = semver.NewVersion("3.0.12")
-
 type ServerInfo struct {
 	ServerType    ServerType
 	ServerVersion *semver.Version
