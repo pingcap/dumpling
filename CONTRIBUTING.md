@@ -44,7 +44,7 @@ This is a rough outline of what a contributor's workflow looks like:
 - Make sure your commit messages are in the proper format (see below).
 - Push your changes to a topic branch in your fork of the repository.
 - Submit a pull request.
-- Your PR must receive LGTMs from two maintainers.
+- Your PR must receive LGTMs from one maintainer.
 
 Thanks for your contributions!
 
