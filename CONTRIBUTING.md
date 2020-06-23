@@ -32,7 +32,7 @@ Dumpling manages dependencies using [Go 1.13 module](https://github.com/golang/g
 To add or update a dependency, either
 
 * Use the `go mod edit` command to change the dependency, or
-* Edit `go.mod` and then run `make update` to update the checksum.
+* Edit `go.mod` and then run `go mod tidy` to update the checksum.
 
 ## Contribution flow
 
@@ -44,7 +44,7 @@ This is a rough outline of what a contributor's workflow looks like:
 - Make sure your commit messages are in the proper format (see below).
 - Push your changes to a topic branch in your fork of the repository.
 - Submit a pull request.
-- Your PR must receive LGTMs from one maintainer.
+- Your PR must receive an LGTM from one maintainer.
 
 Thanks for your contributions!
 
