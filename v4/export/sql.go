@@ -77,7 +77,7 @@ func ListAllTables(db *sql.DB, database string) ([]string, error) {
 	return tables.data, nil
 }
 
-func ListAllDatabasesTables(db *sql.DB, allowMap map[string]interface{}, tableType TableType) (DatabaseTables, error) {
+func ListAllDatabasesTables(db *sql.DB, databaseNames []string, tableType TableType) (DatabaseTables, error) {
 	var tableTypeStr string
 	switch tableType {
 	case TableTypeBase:
@@ -90,19 +90,20 @@ func ListAllDatabasesTables(db *sql.DB, allowMap map[string]interface{}, tableTy
 
 	query := fmt.Sprintf("SELECT table_schema,table_name FROM information_schema.tables WHERE table_type = '%s'", tableTypeStr)
 	dbTables := DatabaseTables{}
+	for _, schema := range databaseNames {
+		dbTables[schema] = make([]*TableInfo, 0)
+	}
+
 	if err := simpleQueryWithArgs(db, func(rows *sql.Rows) error {
 		var schema, table string
 		if err := rows.Scan(&schema, &table); err != nil {
 			return withStack(err)
 		}
-		// not in allowMap, skip
-		if _, ok := allowMap[schema]; !ok {
-			return nil
+
+		// only append tables to schemas in databaseNames
+		if _, ok := dbTables[schema]; ok {
+			dbTables[schema] = append(dbTables[schema], &TableInfo{table, tableType})
 		}
-		if _, ok := dbTables[schema]; !ok {
-			dbTables[schema] = make([]*TableInfo, 0)
-		}
-		dbTables[schema] = append(dbTables[schema], &TableInfo{table, tableType})
 		return nil
 	}, query); err != nil {
 		return nil, errors.WithMessage(err, query)
