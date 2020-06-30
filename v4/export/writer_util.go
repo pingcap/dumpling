@@ -407,6 +407,13 @@ func wrapBackTicks(identifier string) string {
 	return identifier
 }
 
+func wrapQuotes(identifier string) string {
+	if !strings.HasPrefix(identifier, `"`) && !strings.HasSuffix(identifier, `"`) {
+		return wrapStringWith(identifier, `"`)
+	}
+	return identifier
+}
+
 func wrapStringWith(str string, wrapper string) string {
 	return fmt.Sprintf("%s%s%s", wrapper, str, wrapper)
 }

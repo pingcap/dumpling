@@ -3,6 +3,7 @@ package export
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"strconv"
 	"strings"
 	"time"
@@ -28,7 +29,8 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 			}
 		}
 	}()
-	pool, err := sql.Open("mysql", conf.getDSN("", ""))
+
+	pool, err := sql.Open("mysql", conf.getDSN(""))
 	if err != nil {
 		return withStack(err)
 	}
@@ -36,19 +38,7 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 
 	conf.ServerInfo, err = detectServerInfo(pool)
 	if err != nil {
-		if strings.Contains(err.Error(), "tidb_mem_quota_query") {
-			conf.TiDBMemQuotaQuery = UnspecifiedSize
-			pool, err = sql.Open("mysql", conf.getDSN("", ""))
-			if err != nil {
-				return withStack(err)
-			}
-			conf.ServerInfo, err = detectServerInfo(pool)
-			if err != nil {
-				return withStack(err)
-			}
-		} else {
-			return withStack(err)
-		}
+		return withStack(err)
 	}
 
 	ctx, cancel := context.WithCancel(pCtx)
@@ -76,12 +66,22 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 	}
 
 	if conf.Snapshot == "" && (doPdGC || conf.Consistency == "snapshot") {
-		if conf.Snapshot == "" {
-			str, err := ShowMasterStatus(pool, showMasterStatusFieldNum)
-			if err != nil {
-				return err
-			}
-			conf.Snapshot = str[snapshotFieldIndex]
+		conf.Snapshot, err = getSnapshot(pool)
+		if err != nil {
+			return err
+		}
+	}
+
+	if conf.Snapshot != "" {
+		if conf.ServerInfo.ServerType != ServerTypeTiDB {
+			return errors.New("snapshot consistency is not supported for this server")
+		}
+		hasTiKV, err := CheckTiDBWithTiKV(pool)
+		if err != nil {
+			return err
+		}
+		if hasTiKV {
+			conf.SessionParams["tidb_snapshot"] = conf.Snapshot
 		}
 	}
 
@@ -98,15 +98,9 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 			"After dumping: run sql `update mysql.tidb set VARIABLE_VALUE = '10m' where VARIABLE_NAME = 'tikv_gc_life_time';` in tidb.\n")
 	}
 
-	conCtrl, err := NewConsistencyController(conf, pool)
+	pool, err = resetDBWithSessionParams(pool, conf.getDSN(""), conf.SessionParams)
 	if err != nil {
 		return err
-	}
-	if err = conCtrl.Setup(); err != nil {
-		return err
-	}
-	if ctl, ok := conCtrl.(*ConsistencySnapshot); ok {
-		pool = ctl.db
 	}
 
 	databases, err := prepareDumpingDatabases(conf, pool)
@@ -128,6 +122,14 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 	}
 
 	filterTables(conf)
+
+	conCtrl, err := NewConsistencyController(conf, pool)
+	if err != nil {
+		return err
+	}
+	if err = conCtrl.Setup(); err != nil {
+		return err
+	}
 
 	m := newGlobalMetadata(conf.OutputDirPath)
 	// write metadata even if dump failed

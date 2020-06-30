@@ -3,6 +3,7 @@ package export
 import (
 	"database/sql"
 	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -360,6 +361,49 @@ func CheckTiDBWithTiKV(db *sql.DB) (bool, error) {
 		return false, err
 	}
 	return count > 0, nil
+}
+
+func getSnapshot(db *sql.DB) (string, error) {
+	str, err := ShowMasterStatus(db, showMasterStatusFieldNum)
+	if err != nil {
+		return "", err
+	}
+	return str[snapshotFieldIndex], nil
+}
+
+func isUnknownSystemVariableErr(err error) bool {
+	return strings.Contains(err.Error(), "Unknown system variable")
+}
+
+func resetDBWithSessionParams(db *sql.DB, dsn string, params map[string]string) (*sql.DB, error) {
+	support := make(map[string]string)
+	for k, v := range params {
+		v = wrapQuotes(v)
+		s := fmt.Sprintf("SET SESSION %s = %s", k, v)
+		_, err := db.Exec(s)
+		if err != nil {
+			if isUnknownSystemVariableErr(err) {
+				log.Info("session variable is not supported by db", zap.String("variable", k), zap.String("value", v))
+				continue
+			}
+			return nil, withStack(err)
+		}
+
+		support[k] = v
+	}
+
+	for k, v := range support {
+		dsn += fmt.Sprintf("&%s=%s", k, url.QueryEscape(v))
+	}
+
+	newDB, err := sql.Open("mysql", dsn)
+	if err != nil {
+		return nil, withStack(err)
+	}
+
+	db.Close()
+
+	return newDB, nil
 }
 
 func buildSelectField(db *sql.DB, dbName, tableName string) (string, error) {
