@@ -428,7 +428,7 @@ func resetDBWithSessionParams(db *sql.DB, dsn string, params map[string]interfac
 	for k, v := range support {
 		var s string
 		if str, ok := v.(string); ok {
-			s = wrapQuotation(str)
+			s = wrapStringWith(str, "'")
 		} else {
 			s = fmt.Sprintf("%v", v)
 		}
