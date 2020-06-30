@@ -51,26 +51,6 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 		}
 	}
 
-	databases, err := prepareDumpingDatabases(conf, pool)
-	if err != nil {
-		return err
-	}
-
-	conf.Tables, err = listAllTables(pool, databases)
-	if err != nil {
-		return err
-	}
-
-	if !conf.NoViews {
-		views, err := listAllViews(pool, databases)
-		if err != nil {
-			return err
-		}
-		conf.Tables.Merge(views)
-	}
-
-	filterTables(conf)
-
 	ctx, cancel := context.WithCancel(pCtx)
 	defer cancel()
 
@@ -95,7 +75,7 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 		}
 	}
 
-	if conf.Snapshot == "" && (doPdGC || conf.Consistency == "flush") {
+	if conf.Snapshot == "" && (doPdGC || conf.Consistency == "snapshot") {
 		if conf.Snapshot == "" {
 			str, err := ShowMasterStatus(pool, showMasterStatusFieldNum)
 			if err != nil {
@@ -128,6 +108,26 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 	if ctl, ok := conCtrl.(*ConsistencySnapshot); ok {
 		pool = ctl.db
 	}
+
+	databases, err := prepareDumpingDatabases(conf, pool)
+	if err != nil {
+		return err
+	}
+
+	conf.Tables, err = listAllTables(pool, databases)
+	if err != nil {
+		return err
+	}
+
+	if !conf.NoViews {
+		views, err := listAllViews(pool, databases)
+		if err != nil {
+			return err
+		}
+		conf.Tables.Merge(views)
+	}
+
+	filterTables(conf)
 
 	m := newGlobalMetadata(conf.OutputDirPath)
 	// write metadata even if dump failed
