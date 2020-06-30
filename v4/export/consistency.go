@@ -121,8 +121,13 @@ func (c *ConsistencySnapshot) Setup() error {
 	if !hasTiKV {
 		return nil
 	}
-	dsn := c.getDSN("", c.snapshot)
-	return SetTiDBSnapshot(c.db, dsn)
+	c.db.Close()
+	db, err := sql.Open("mysql", c.getDSN("mysql", c.snapshot))
+	if err != nil {
+		return err
+	}
+	c.db = db
+	return nil
 }
 
 func (c *ConsistencySnapshot) TearDown() error {

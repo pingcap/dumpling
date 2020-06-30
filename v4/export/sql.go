@@ -350,16 +350,6 @@ func GetTiDBDDLIDs(db *sql.DB) ([]string, error) {
 	return GetSpecifiedColumnValue(rows, "DDL_ID")
 }
 
-func SetTiDBSnapshot(db *sql.DB, dsn string) error {
-	db2, err := sql.Open("mysql", dsn)
-	if err != nil {
-		return withStack(err)
-	}
-	db.Close()
-	*db = *db2
-	return nil
-}
-
 func CheckTiDBWithTiKV(db *sql.DB) (bool, error) {
 	var count int
 	handleOneRow := func(rows *sql.Rows) error {

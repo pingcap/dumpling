@@ -125,6 +125,9 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 	if err = conCtrl.Setup(); err != nil {
 		return err
 	}
+	if ctl, ok := conCtrl.(*ConsistencySnapshot); ok {
+		pool = ctl.db
+	}
 
 	m := newGlobalMetadata(conf.OutputDirPath)
 	// write metadata even if dump failed

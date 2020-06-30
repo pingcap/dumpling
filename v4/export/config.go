@@ -96,7 +96,7 @@ func (conf *Config) getDSN(db, snapshot string) string {
 		dsn += fmt.Sprintf("&tidb_mem_quota_query=%v", conf.TiDBMemQuotaQuery)
 	}
 	if snapshot != "" {
-		dsn += fmt.Sprintf("&snapshot=%s", snapshot)
+		dsn += fmt.Sprintf("&tidb_snapshot=%s", snapshot)
 	}
 	if len(conf.Security.CAPath) > 0 {
 		dsn += "&tls=dumpling-tls-target"
