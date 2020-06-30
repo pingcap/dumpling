@@ -24,6 +24,7 @@ func NewConsistencyController(conf *Config, session *sql.DB) (ConsistencyControl
 			serverType: conf.ServerInfo.ServerType,
 			snapshot:   conf.Snapshot,
 			db:         session,
+			getDSN:     conf.getDSN,
 		}, nil
 	case "none":
 		return &ConsistencyNone{}, nil
@@ -96,6 +97,7 @@ type ConsistencySnapshot struct {
 	serverType ServerType
 	snapshot   string
 	db         *sql.DB
+	getDSN     func(db, snapshot string) string
 }
 
 const showMasterStatusFieldNum = 5
@@ -119,7 +121,8 @@ func (c *ConsistencySnapshot) Setup() error {
 	if !hasTiKV {
 		return nil
 	}
-	return SetTiDBSnapshot(c.db, c.snapshot)
+	dsn := c.getDSN("", c.snapshot)
+	return SetTiDBSnapshot(c.db, dsn)
 }
 
 func (c *ConsistencySnapshot) TearDown() error {

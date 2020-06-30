@@ -28,7 +28,7 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 			}
 		}
 	}()
-	pool, err := sql.Open("mysql", conf.getDSN(""))
+	pool, err := sql.Open("mysql", conf.getDSN("", ""))
 	if err != nil {
 		return withStack(err)
 	}
@@ -38,7 +38,7 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 	if err != nil {
 		if strings.Contains(err.Error(), "tidb_mem_quota_query") {
 			conf.TiDBMemQuotaQuery = UnspecifiedSize
-			pool, err = sql.Open("mysql", conf.getDSN(""))
+			pool, err = sql.Open("mysql", conf.getDSN("", ""))
 			if err != nil {
 				return withStack(err)
 			}

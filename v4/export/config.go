@@ -90,10 +90,13 @@ func DefaultConfig() *Config {
 	}
 }
 
-func (conf *Config) getDSN(db string) string {
+func (conf *Config) getDSN(db, snapshot string) string {
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4", conf.User, conf.Password, conf.Host, conf.Port, db)
 	if conf.TiDBMemQuotaQuery != UnspecifiedSize {
 		dsn += fmt.Sprintf("&tidb_mem_quota_query=%v", conf.TiDBMemQuotaQuery)
+	}
+	if snapshot != "" {
+		dsn += fmt.Sprintf("&snapshot=%s", snapshot)
 	}
 	if len(conf.Security.CAPath) > 0 {
 		dsn += "&tls=dumpling-tls-target"
