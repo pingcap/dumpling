@@ -407,9 +407,9 @@ func wrapBackTicks(identifier string) string {
 	return identifier
 }
 
-func wrapQuotes(identifier string) string {
-	if !strings.HasPrefix(identifier, `"`) && !strings.HasSuffix(identifier, `"`) {
-		return wrapStringWith(identifier, `"`)
+func wrapQuotation(identifier string) string {
+	if !strings.HasPrefix(identifier, "'") && !strings.HasSuffix(identifier, "'") {
+		return wrapStringWith(identifier, "'")
 	}
 	return identifier
 }

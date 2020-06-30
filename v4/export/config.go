@@ -53,7 +53,7 @@ type Config struct {
 	FileType          string
 	EscapeBackslash   bool
 	DumpEmptyDatabase bool
-	SessionParams     map[string]string
+	SessionParams     map[string]interface{}
 }
 
 func DefaultConfig() *Config {
@@ -86,7 +86,7 @@ func DefaultConfig() *Config {
 		Sql:               "",
 		TableFilter:       allFilter,
 		DumpEmptyDatabase: true,
-		SessionParams:     make(map[string]string),
+		SessionParams:     make(map[string]interface{}),
 	}
 }
 

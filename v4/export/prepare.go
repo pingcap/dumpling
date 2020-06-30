@@ -42,7 +42,7 @@ func adjustConfig(conf *Config) error {
 		conf.FileSize = UnspecifiedSize
 	}
 	if conf.SessionParams == nil {
-		conf.SessionParams = make(map[string]string)
+		conf.SessionParams = make(map[string]interface{})
 	}
 	resolveAutoConsistency(conf)
 

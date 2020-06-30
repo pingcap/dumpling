@@ -375,15 +375,14 @@ func isUnknownSystemVariableErr(err error) bool {
 	return strings.Contains(err.Error(), "Unknown system variable")
 }
 
-func resetDBWithSessionParams(db *sql.DB, dsn string, params map[string]string) (*sql.DB, error) {
-	support := make(map[string]string)
+func resetDBWithSessionParams(db *sql.DB, dsn string, params map[string]interface{}) (*sql.DB, error) {
+	support := make(map[string]interface{})
 	for k, v := range params {
-		v = wrapQuotes(v)
-		s := fmt.Sprintf("SET SESSION %s = %s", k, v)
-		_, err := db.Exec(s)
+		s := fmt.Sprintf("SET SESSION %s = ?", k)
+		_, err := db.Exec(s, v)
 		if err != nil {
 			if isUnknownSystemVariableErr(err) {
-				log.Info("session variable is not supported by db", zap.String("variable", k), zap.String("value", v))
+				log.Info("session variable is not supported by db", zap.String("variable", k), zap.Reflect("value", v))
 				continue
 			}
 			return nil, withStack(err)
@@ -393,7 +392,13 @@ func resetDBWithSessionParams(db *sql.DB, dsn string, params map[string]string) 
 	}
 
 	for k, v := range support {
-		dsn += fmt.Sprintf("&%s=%s", k, url.QueryEscape(v))
+		var s string
+		if str, ok := v.(string); ok {
+			s = wrapQuotation(str)
+		} else {
+			s = fmt.Sprintf("%v", v)
+		}
+		dsn += fmt.Sprintf("&%s=%s", k, url.QueryEscape(s))
 	}
 
 	newDB, err := sql.Open("mysql", dsn)
