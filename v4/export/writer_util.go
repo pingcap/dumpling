@@ -189,7 +189,7 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w io.Writer) error {
 	return wp.Error()
 }
 
-func WriteInsertInCsv(pCtx context.Context, tblIR TableDataIR, w io.Writer, noHeader bool, csvNullValue string) error {
+func WriteInsertInCsv(pCtx context.Context, tblIR TableDataIR, w io.Writer, noHeader bool, opt csvOption) error {
 	fileRowIter := tblIR.Rows()
 	if !fileRowIter.HasNext() {
 		return nil
@@ -223,9 +223,9 @@ func WriteInsertInCsv(pCtx context.Context, tblIR TableDataIR, w io.Writer, noHe
 
 	if !noHeader && len(tblIR.ColumnNames()) != 0 {
 		for i, col := range tblIR.ColumnNames() {
-			bf.WriteByte(doubleQuotationMark)
-			escape([]byte(col), bf, getEscapeQuotation(escapeBackSlash, doubleQuotationMark))
-			bf.WriteByte(doubleQuotationMark)
+			bf.Write(opt.separator)
+			escape([]byte(col), bf, getEscapeQuotation(escapeBackSlash, opt.separator))
+			bf.Write(opt.separator)
 			if i != len(tblIR.ColumnTypes())-1 {
 				bf.WriteByte(',')
 			}
@@ -241,7 +241,7 @@ func WriteInsertInCsv(pCtx context.Context, tblIR TableDataIR, w io.Writer, noHe
 				return err
 			}
 
-			row.WriteToBufferInCsv(bf, escapeBackSlash, csvNullValue)
+			row.WriteToBufferInCsv(bf, escapeBackSlash, opt)
 			counter += 1
 
 			if bf.Len() >= lengthLimit {

@@ -112,12 +112,33 @@ func (s *testUtilSuite) TestWriteInsertInCsv(c *C) {
 	tableIR := newMockTableIR("test", "employee", data, nil, colTypes)
 	bf := &bytes.Buffer{}
 
-	err := WriteInsertInCsv(context.Background(), tableIR, bf, true, "\\N")
+	opt := csvOption{separator: []byte(","), delimiter: doubleQuotationMark, nullValue: "\\N"}
+	err := WriteInsertInCsv(context.Background(), tableIR, bf, true, opt)
 	c.Assert(err, IsNil)
 	expected := "1,\"male\",\"bob@mail.com\",\"020-1234\",\\N\n" +
 		"2,\"female\",\"sarah@mail.com\",\"020-1253\",\"healthy\"\n" +
 		"3,\"male\",\"john@mail.com\",\"020-1256\",\"healthy\"\n" +
 		"4,\"female\",\"sarah@mail.com\",\"020-1235\",\"healthy\"\n"
+	c.Assert(bf.String(), Equals, expected)
+
+	bf.Reset()
+	opt.delimiter = quotationMark
+	err = WriteInsertInCsv(context.Background(), tableIR, bf, true, opt)
+	c.Assert(err, IsNil)
+	expected = "1,'male','bob@mail.com','020-1234',\\N\n" +
+		"2,'female','sarah@mail.com','020-1253','healthy'\n" +
+		"3,'male','john@mail.com','020-1256','healthy'\n" +
+		"4,'female','sarah@mail.com','020-1235','healthy'\n"
+	c.Assert(bf.String(), Equals, expected)
+
+	bf.Reset()
+	opt.separator = []byte(";")
+	err = WriteInsertInCsv(context.Background(), tableIR, bf, true, opt)
+	c.Assert(err, IsNil)
+	expected = "1;'male';'bob@mail.com';'020-1234';\\N\n" +
+		"2;'female';'sarah@mail.com';'020-1253';'healthy'\n" +
+		"3;'male';'john@mail.com';'020-1256';'healthy'\n" +
+		"4;'female';'sarah@mail.com';'020-1235';'healthy'\n"
 	c.Assert(bf.String(), Equals, expected)
 }
 
