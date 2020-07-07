@@ -39,7 +39,7 @@ type RowReceiverStringer interface {
 
 type Stringer interface {
 	WriteToBuffer(*bytes.Buffer, bool)
-	WriteToBufferInCsv(*bytes.Buffer, bool, csvOption)
+	WriteToBufferInCsv(*bytes.Buffer, bool, *csvOption)
 }
 
 type RowReceiver interface {

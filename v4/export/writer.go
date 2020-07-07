@@ -148,7 +148,7 @@ func (f *CsvWriter) WriteTableData(ctx context.Context, ir TableDataIR) error {
 	chunksIter := buildChunksIter(ir, f.cfg.FileSize, f.cfg.StatementSize)
 	defer chunksIter.Rows().Close()
 
-	opt := csvOption{
+	opt := &csvOption{
 		nullValue: f.cfg.CsvNullValue,
 		separator: []byte(f.cfg.CsvSeparator),
 		delimiter: []byte(f.cfg.CsvDelimiter),

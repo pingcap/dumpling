@@ -153,7 +153,7 @@ func (r RowReceiverArr) WriteToBuffer(bf *bytes.Buffer, escapeBackslash bool) {
 	bf.WriteByte(')')
 }
 
-func (r RowReceiverArr) WriteToBufferInCsv(bf *bytes.Buffer, escapeBackslash bool, opt csvOption) {
+func (r RowReceiverArr) WriteToBufferInCsv(bf *bytes.Buffer, escapeBackslash bool, opt *csvOption) {
 	for i, receiver := range r {
 		receiver.WriteToBufferInCsv(bf, escapeBackslash, opt)
 		if i != len(r)-1 {
@@ -174,7 +174,7 @@ func (s SQLTypeNumber) WriteToBuffer(bf *bytes.Buffer, _ bool) {
 	}
 }
 
-func (s SQLTypeNumber) WriteToBufferInCsv(bf *bytes.Buffer, _ bool, opt csvOption) {
+func (s SQLTypeNumber) WriteToBufferInCsv(bf *bytes.Buffer, _ bool, opt *csvOption) {
 	if s.RawBytes != nil {
 		bf.Write(s.RawBytes)
 	} else {
@@ -206,10 +206,10 @@ func (s *SQLTypeString) WriteToBuffer(bf *bytes.Buffer, escapeBackslash bool) {
 	}
 }
 
-func (s *SQLTypeString) WriteToBufferInCsv(bf *bytes.Buffer, escapeBackslash bool, opt csvOption) {
+func (s *SQLTypeString) WriteToBufferInCsv(bf *bytes.Buffer, escapeBackslash bool, opt *csvOption) {
 	if s.RawBytes != nil {
 		bf.Write(opt.delimiter)
-		escape(s.RawBytes, bf, getEscapeQuotation(escapeBackslash, opt.separator))
+		escape(s.RawBytes, bf, getEscapeQuotation(escapeBackslash, opt.delimiter))
 		bf.Write(opt.delimiter)
 	} else {
 		bf.WriteString(opt.nullValue)
@@ -231,7 +231,7 @@ func (s *SQLTypeBytes) WriteToBuffer(bf *bytes.Buffer, _ bool) {
 	fmt.Fprintf(bf, "x'%x'", s.RawBytes)
 }
 
-func (s *SQLTypeBytes) WriteToBufferInCsv(bf *bytes.Buffer, _ bool, opt csvOption) {
+func (s *SQLTypeBytes) WriteToBufferInCsv(bf *bytes.Buffer, _ bool, opt *csvOption) {
 	if s.RawBytes != nil {
 		bf.Write(opt.delimiter)
 		bf.Write(s.RawBytes)
