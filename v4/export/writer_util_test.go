@@ -147,16 +147,16 @@ func (s *testUtilSuite) TestWriteInsertInCsv(c *C) {
 
 	// test delimiter that included in values
 	bf.Reset()
-	opt.separator = []byte(",")
+	opt.separator = []byte("&;,?")
 	opt.delimiter = []byte("ma")
 	tableIR.colNames = []string{"id", "gender", "email", "phone_number", "status"}
 	err = WriteInsertInCsv(context.Background(), tableIR, bf, false, opt)
 	c.Assert(err, IsNil)
-	expected = "maidma,magenderma,maemamailma,maphone_numberma,mastatusma\n" +
-		"1,mamamalema,mabob@mamail.comma,ma020-1234ma,\\N\n" +
-		"2,mafemamalema,masarah@mamail.comma,ma020-1253ma,mahealthyma\n" +
-		"3,mamamalema,majohn@mamail.comma,ma020-1256ma,mahealthyma\n" +
-		"4,mafemamalema,masarah@mamail.comma,ma020-1235ma,mahealthyma\n"
+	expected = "maidma&;,?magenderma&;,?maemamailma&;,?maphone_numberma&;,?mastatusma\n" +
+		"1&;,?mamamalema&;,?mabob@mamail.comma&;,?ma020-1234ma&;,?\\N\n" +
+		"2&;,?mafemamalema&;,?masarah@mamail.comma&;,?ma020-1253ma&;,?mahealthyma\n" +
+		"3&;,?mamamalema&;,?majohn@mamail.comma&;,?ma020-1256ma&;,?mahealthyma\n" +
+		"4&;,?mafemamalema&;,?masarah@mamail.comma&;,?ma020-1235ma&;,?mahealthyma\n"
 	c.Assert(bf.String(), Equals, expected)
 }
 
