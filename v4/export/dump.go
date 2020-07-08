@@ -103,25 +103,12 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 		return err
 	}
 
-	databases, err := prepareDumpingDatabases(conf, pool)
-	if err != nil {
-		return err
-	}
-
-	conf.Tables, err = listAllTables(pool, databases)
-	if err != nil {
-		return err
-	}
-
-	if !conf.NoViews {
-		views, err := listAllViews(pool, databases)
-		if err != nil {
+	// for consistency lock, we should lock tables at first to get the tables we want to lock & dump
+	if conf.Consistency == "lock" {
+		if err = prepareTableListToDump(conf, pool); err != nil {
 			return err
 		}
-		conf.Tables.Merge(views)
 	}
-
-	filterTables(conf)
 
 	conCtrl, err := NewConsistencyController(conf, pool)
 	if err != nil {
@@ -138,6 +125,13 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 	err = m.getGlobalMetaData(pool, conf.ServerInfo.ServerType)
 	if err != nil {
 		log.Info("get global metadata failed", zap.Error(err))
+	}
+
+	// for other consistencies, we should get table list after consistency is set up and GlobalMetaData is cached
+	if conf.Consistency != "lock" {
+		if err = prepareTableListToDump(conf, pool); err != nil {
+			return err
+		}
 	}
 
 	var writer Writer
@@ -194,6 +188,29 @@ func dumpDatabases(ctx context.Context, conf *Config, db *sql.DB, writer Writer)
 			return err
 		}
 	}
+	return nil
+}
+
+func prepareTableListToDump(conf *Config, pool *sql.DB) error {
+	databases, err := prepareDumpingDatabases(conf, pool)
+	if err != nil {
+		return err
+	}
+
+	conf.Tables, err = listAllTables(pool, databases)
+	if err != nil {
+		return err
+	}
+
+	if !conf.NoViews {
+		views, err := listAllViews(pool, databases)
+		if err != nil {
+			return err
+		}
+		conf.Tables.Merge(views)
+	}
+
+	filterTables(conf)
 	return nil
 }
 
