@@ -46,7 +46,7 @@ func (m *globalMetadata) recordFinishTime(t time.Time) {
 	m.buffer.WriteString("Finished dump at: " + t.Format(metadataTimeLayout) + "\n")
 }
 
-func (m *globalMetadata) getGlobalMetaData(db *sql.DB, serverType ServerType) error {
+func (m *globalMetadata) recordGlobalMetaData(db *sql.DB, serverType ServerType) error {
 	// get master status info
 	m.buffer.WriteString("SHOW MASTER STATUS:\n")
 	switch serverType {
@@ -115,7 +115,7 @@ func (m *globalMetadata) getGlobalMetaData(db *sql.DB, serverType ServerType) er
 			m.buffer.WriteString("\tGTID:" + gtidSet + "\n")
 		}
 	default:
-		return errors.New("unsupported serverType" + serverType.String() + "for getGlobalMetaData")
+		return errors.New("unsupported serverType" + serverType.String() + "for recordGlobalMetaData")
 	}
 	m.buffer.WriteString("\n")
 	if serverType == ServerTypeTiDB {

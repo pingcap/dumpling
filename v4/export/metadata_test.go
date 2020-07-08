@@ -29,7 +29,7 @@ func (s *testMetaDataSuite) TestMysqlMetaData(c *C) {
 
 	testFilePath := "/test"
 	m := newGlobalMetadata(testFilePath)
-	c.Assert(m.getGlobalMetaData(db, ServerTypeMySQL), IsNil)
+	c.Assert(m.recordGlobalMetaData(db, ServerTypeMySQL), IsNil)
 	c.Assert(m.filePath, Equals, path.Join(testFilePath, metadataPath))
 
 	c.Assert(m.buffer.String(), Equals, "SHOW MASTER STATUS:\n"+
@@ -57,7 +57,7 @@ func (s *testMetaDataSuite) TestMysqlWithFollowersMetaData(c *C) {
 
 	testFilePath := "/test"
 	m := newGlobalMetadata(testFilePath)
-	c.Assert(m.getGlobalMetaData(db, ServerTypeMySQL), IsNil)
+	c.Assert(m.recordGlobalMetaData(db, ServerTypeMySQL), IsNil)
 	c.Assert(m.filePath, Equals, path.Join(testFilePath, metadataPath))
 
 	c.Assert(m.buffer.String(), Equals, "SHOW MASTER STATUS:\n"+
@@ -89,7 +89,7 @@ func (s *testMetaDataSuite) TestMariaDBMetaData(c *C) {
 	mock.ExpectQuery("SHOW SLAVE STATUS").WillReturnRows(rows)
 	testFilePath := "/test"
 	m := newGlobalMetadata(testFilePath)
-	c.Assert(m.getGlobalMetaData(db, ServerTypeMariaDB), IsNil)
+	c.Assert(m.recordGlobalMetaData(db, ServerTypeMariaDB), IsNil)
 	c.Assert(m.filePath, Equals, path.Join(testFilePath, metadataPath))
 
 	c.Assert(mock.ExpectationsWereMet(), IsNil)
@@ -116,7 +116,7 @@ func (s *testMetaDataSuite) TestMariaDBWithFollowersMetaData(c *C) {
 
 	testFilePath := "/test"
 	m := newGlobalMetadata(testFilePath)
-	c.Assert(m.getGlobalMetaData(db, ServerTypeMySQL), IsNil)
+	c.Assert(m.recordGlobalMetaData(db, ServerTypeMySQL), IsNil)
 	c.Assert(m.filePath, Equals, path.Join(testFilePath, metadataPath))
 
 	c.Assert(m.buffer.String(), Equals, "SHOW MASTER STATUS:\n"+
