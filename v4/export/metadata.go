@@ -171,7 +171,7 @@ func (m *globalMetadata) recordGlobalMetaData(db *sql.DB, serverType ServerType)
 			if isms {
 				m.buffer.WriteString("\tConnection name: " + connName + "\n")
 			}
-			m.buffer.WriteString(fmt.Sprintf("\tHost: %s\n\tLog: %s\n\tPos: %s\n\tGTID:%s\n\n", host, logFile, pos, gtidSet))
+			fmt.Fprintf(&m.buffer, "\tHost: %s\n\tLog: %s\n\tPos: %s\n\tGTID:%s\n\n", host, logFile, pos, gtidSet)
 		}
 		return nil
 	})
