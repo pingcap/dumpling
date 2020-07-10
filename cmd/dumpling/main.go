@@ -120,7 +120,7 @@ func main() {
 	pflag.StringVar(&keyPath, "key", "", "The path name to the client private key file for TLS connection")
 	pflag.StringVar(&csvSeparator, "csv-separator", ",", "The separator for csv files, default ','")
 	pflag.StringVar(&csvDelimiter, "csv-delimiter", "\"", "The delimiter for values in csv files, default '\"'")
-	pflag.StringVar(&outputFilenameFormat, "output-filename-format", "{{.Db}}.{{.Tb}}.{{.Id}}", "The output filename format, default '{{.Db}}.{{.Tb}}.{{.Id}}'")
+	pflag.StringVar(&outputFilenameFormat, "output-filename-format", "{{.DB}}.{{.Table}}.{{.Index}}", "The output filename format, default '{{.DB}}.{{.Table}}.{{.Index}}'")
 
 	printVersion := pflag.BoolP("version", "V", false, "Print Dumpling version")
 

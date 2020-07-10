@@ -90,7 +90,7 @@ func DefaultConfig() *Config {
 		TableFilter:          allFilter,
 		DumpEmptyDatabase:    true,
 		SessionParams:        make(map[string]interface{}),
-		OutputFilenameFormat: "{{.Db}}.{{.Tb}}.{{.Id}}",
+		OutputFilenameFormat: "{{.DB}}.{{.Table}}.{{.Index}}",
 	}
 }
 

@@ -126,9 +126,9 @@ func (f *CsvWriter) WriteTableMeta(ctx context.Context, db, table, createSQL str
 }
 
 type outputFileNamer struct {
-	Id int
-	Db string
-	Tb string
+	Index int
+	DB    string
+	Table string
 }
 
 type csvOption struct {
@@ -139,16 +139,16 @@ type csvOption struct {
 
 func newOutputFileNamer(ir TableDataIR) *outputFileNamer {
 	return &outputFileNamer{
-		Id: ir.ChunkIndex(),
-		Db: ir.DatabaseName(),
-		Tb: ir.TableName(),
+		Index: ir.ChunkIndex(),
+		DB:    ir.DatabaseName(),
+		Table: ir.TableName(),
 	}
 }
 
 func (namer *outputFileNamer) NextName(tmpl *template.Template) (string, error) {
-	defer func() { namer.Id++ }()
-	if namer.Db == "" || namer.Tb == "" {
-		return fmt.Sprintf("result.%d", namer.Id), nil
+	defer func() { namer.Index++ }()
+	if namer.DB == "" || namer.Table == "" {
+		return fmt.Sprintf("result.%d", namer.Index), nil
 	}
 	bf := bytes.NewBufferString("")
 	err := tmpl.Execute(bf, namer)

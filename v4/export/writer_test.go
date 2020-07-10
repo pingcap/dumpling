@@ -205,7 +205,7 @@ func (s *testDumpSuite) TestWriteTableDataWithStatementSize(c *C) {
 	config.FileSize = 90
 	config.StatementSize = 30
 	// test specifying filename format
-	config.OutputFilenameFormat = "{{.Id}}-{{.Tb}}-{{.Db}}"
+	config.OutputFilenameFormat = "{{.Index}}-{{.Table}}-{{.DB}}"
 	os.RemoveAll(config.OutputDirPath)
 	config.OutputDirPath, err = ioutil.TempDir("", "dumpling")
 	fmt.Println(config.OutputDirPath)
