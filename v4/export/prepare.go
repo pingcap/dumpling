@@ -44,6 +44,9 @@ func adjustConfig(conf *Config) error {
 	if conf.SessionParams == nil {
 		conf.SessionParams = make(map[string]interface{})
 	}
+	if conf.OutputFilenameFormat == "" {
+		conf.OutputFilenameFormat = "{{.Db}}.{{.Tb}}.{{.Id}}"
+	}
 	resolveAutoConsistency(conf)
 
 	return nil

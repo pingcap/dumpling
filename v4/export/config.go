@@ -49,46 +49,48 @@ type Config struct {
 	CsvSeparator  string
 	CsvDelimiter  string
 
-	TableFilter       filter.Filter
-	Rows              uint64
-	Where             string
-	FileType          string
-	EscapeBackslash   bool
-	DumpEmptyDatabase bool
-	SessionParams     map[string]interface{}
+	TableFilter          filter.Filter
+	Rows                 uint64
+	Where                string
+	FileType             string
+	EscapeBackslash      bool
+	DumpEmptyDatabase    bool
+	OutputFilenameFormat string
+	SessionParams        map[string]interface{}
 }
 
 func DefaultConfig() *Config {
 	allFilter, _ := filter.Parse([]string{"*.*"})
 	return &Config{
-		Databases:         nil,
-		Host:              "127.0.0.1",
-		User:              "root",
-		Port:              3306,
-		Password:          "",
-		Threads:           4,
-		Logger:            nil,
-		StatusAddr:        ":8281",
-		FileSize:          UnspecifiedSize,
-		StatementSize:     UnspecifiedSize,
-		OutputDirPath:     ".",
-		ServerInfo:        ServerInfoUnknown,
-		SortByPk:          true,
-		Tables:            nil,
-		Snapshot:          "",
-		Consistency:       "auto",
-		NoViews:           true,
-		Rows:              UnspecifiedSize,
-		Where:             "",
-		FileType:          "SQL",
-		NoHeader:          false,
-		NoSchemas:         false,
-		NoData:            false,
-		CsvNullValue:      "\\N",
-		Sql:               "",
-		TableFilter:       allFilter,
-		DumpEmptyDatabase: true,
-		SessionParams:     make(map[string]interface{}),
+		Databases:            nil,
+		Host:                 "127.0.0.1",
+		User:                 "root",
+		Port:                 3306,
+		Password:             "",
+		Threads:              4,
+		Logger:               nil,
+		StatusAddr:           ":8281",
+		FileSize:             UnspecifiedSize,
+		StatementSize:        UnspecifiedSize,
+		OutputDirPath:        ".",
+		ServerInfo:           ServerInfoUnknown,
+		SortByPk:             true,
+		Tables:               nil,
+		Snapshot:             "",
+		Consistency:          "auto",
+		NoViews:              true,
+		Rows:                 UnspecifiedSize,
+		Where:                "",
+		FileType:             "SQL",
+		NoHeader:             false,
+		NoSchemas:            false,
+		NoData:               false,
+		CsvNullValue:         "\\N",
+		Sql:                  "",
+		TableFilter:          allFilter,
+		DumpEmptyDatabase:    true,
+		SessionParams:        make(map[string]interface{}),
+		OutputFilenameFormat: "{{.Db}}.{{.Tb}}.{{.Id}}",
 	}
 }
 
