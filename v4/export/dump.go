@@ -66,7 +66,11 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 	}
 
 	if conf.Snapshot == "" && (doPdGC || conf.Consistency == "snapshot") {
-		conf.Snapshot, err = getSnapshot(pool)
+		conn, err := pool.Conn(ctx)
+		if err != nil {
+			return withStack(err)
+		}
+		conf.Snapshot, err = getSnapshot(conn)
 		if err != nil {
 			return err
 		}
@@ -112,14 +116,19 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 	// for consistency lock, we should lock tables at first to get the tables we want to lock & dump
 	// for consistency lock, record meta pos before lock tables because other tables may still be modified while locking tables
 	if conf.Consistency == "lock" {
+		conn, err := pool.Conn(ctx)
+		if err != nil {
+			return err
+		}
 		m.recordStartTime(time.Now())
-		err = m.recordGlobalMetaData(pool, conf.ServerInfo.ServerType)
+		err = m.recordGlobalMetaData(conn, conf.ServerInfo.ServerType)
 		if err != nil {
 			log.Info("get global metadata failed", zap.Error(err))
 		}
-		if err = prepareTableListToDump(conf, pool); err != nil {
+		if err = prepareTableListToDump(conf, conn); err != nil {
 			return err
 		}
+		conn.Close()
 	}
 
 	conCtrl, err := NewConsistencyController(conf, pool)
@@ -130,17 +139,29 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 		return err
 	}
 
+	rateLimiter, err := newRateLimit(ctx, conf.Threads, pool)
+	if err != nil {
+		return err
+	}
+	defer rateLimiter.Close()
+
+	if err = conCtrl.TearDown(); err != nil {
+		return err
+	}
+
 	// for other consistencies, we should get table list after consistency is set up and GlobalMetaData is cached
 	// for other consistencies, record snapshot after whole tables are locked. The recorded meta info is exactly the locked snapshot.
 	if conf.Consistency != "lock" {
 		m.recordStartTime(time.Now())
-		err = m.recordGlobalMetaData(pool, conf.ServerInfo.ServerType)
+		conn := rateLimiter.getToken()
+		err = m.recordGlobalMetaData(conn, conf.ServerInfo.ServerType)
 		if err != nil {
 			log.Info("get global metadata failed", zap.Error(err))
 		}
-		if err = prepareTableListToDump(conf, pool); err != nil {
+		if err = prepareTableListToDump(conf, conn); err != nil {
 			return err
 		}
+		rateLimiter.putToken(conn)
 	}
 
 	var writer Writer
@@ -155,24 +176,26 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 	}
 
 	if conf.Sql == "" {
-		if err = dumpDatabases(ctx, conf, pool, writer); err != nil {
+		if err = dumpDatabases(ctx, conf, rateLimiter, writer); err != nil {
 			return err
 		}
 	} else {
-		if err = dumpSql(ctx, conf, pool, writer); err != nil {
+		if err = dumpSql(ctx, conf, rateLimiter, writer); err != nil {
 			return err
 		}
 	}
 
 	m.recordFinishTime(time.Now())
-
-	return conCtrl.TearDown()
+	return nil
 }
 
-func dumpDatabases(ctx context.Context, conf *Config, db *sql.DB, writer Writer) error {
+func dumpDatabases(ctx context.Context, conf *Config, rateLimiter *rateLimit, writer Writer) error {
 	allTables := conf.Tables
+	var g errgroup.Group
 	for dbName, tables := range allTables {
-		createDatabaseSQL, err := ShowCreateDatabase(db, dbName)
+		conn := rateLimiter.getToken()
+		createDatabaseSQL, err := ShowCreateDatabase(conn, dbName)
+		rateLimiter.putToken(conn)
 		if err != nil {
 			return err
 		}
@@ -183,24 +206,35 @@ func dumpDatabases(ctx context.Context, conf *Config, db *sql.DB, writer Writer)
 		if len(tables) == 0 {
 			continue
 		}
-		rateLimit := newRateLimit(conf.Threads)
-		var g errgroup.Group
 		for _, table := range tables {
 			table := table
-			g.Go(func() error {
-				rateLimit.getToken()
-				defer rateLimit.putToken()
-				return dumpTable(ctx, conf, db, dbName, table, writer)
-			})
+			conn := rateLimiter.getToken()
+			tableDataIRArray, err := dumpTable(ctx, conf, conn, dbName, table, writer)
+			if err != nil {
+				return err
+			}
+			rateLimiter.putToken(conn)
+			for _, tableIR := range tableDataIRArray {
+				tableIR := tableIR
+				g.Go(func() error {
+					conn := rateLimiter.getToken()
+					defer rateLimiter.putToken(conn)
+					err := tableIR.Start(ctx, conn)
+					if err != nil {
+						return err
+					}
+					return writer.WriteTableData(ctx, tableIR)
+				})
+			}
 		}
-		if err := g.Wait(); err != nil {
-			return err
-		}
+	}
+	if err := g.Wait(); err != nil {
+		return err
 	}
 	return nil
 }
 
-func prepareTableListToDump(conf *Config, pool *sql.DB) error {
+func prepareTableListToDump(conf *Config, pool *sql.Conn) error {
 	databases, err := prepareDumpingDatabases(conf, pool)
 	if err != nil {
 		return err
@@ -223,54 +257,56 @@ func prepareTableListToDump(conf *Config, pool *sql.DB) error {
 	return nil
 }
 
-func dumpSql(ctx context.Context, conf *Config, db *sql.DB, writer Writer) error {
-	tableIR, err := SelectFromSql(conf, db)
+func dumpSql(ctx context.Context, conf *Config, rateLimiter *rateLimit, writer Writer) error {
+	conn := rateLimiter.getToken()
+	tableIR, err := SelectFromSql(conf, conn)
 	if err != nil {
 		return err
 	}
+	rateLimiter.putToken(conn)
 
 	return writer.WriteTableData(ctx, tableIR)
 }
 
-func dumpTable(ctx context.Context, conf *Config, db *sql.DB, dbName string, table *TableInfo, writer Writer) error {
+func dumpTable(ctx context.Context, conf *Config, db *sql.Conn, dbName string, table *TableInfo, writer Writer) ([]TableDataIR, error) {
 	tableName := table.Name
 	if !conf.NoSchemas {
 		if table.Type == TableTypeView {
 			viewName := table.Name
 			createViewSQL, err := ShowCreateView(db, dbName, viewName)
 			if err != nil {
-				return err
+				return nil, err
 			}
-			return writer.WriteTableMeta(ctx, dbName, viewName, createViewSQL)
+			return nil, writer.WriteTableMeta(ctx, dbName, viewName, createViewSQL)
 		}
 		createTableSQL, err := ShowCreateTable(db, dbName, tableName)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if err := writer.WriteTableMeta(ctx, dbName, tableName, createTableSQL); err != nil {
-			return err
+			return nil, err
 		}
 	}
 	// Do not dump table data and return nil
 	if conf.NoData {
-		return nil
+		return nil, nil
 	}
 
 	if conf.Rows != UnspecifiedSize {
-		finished, err := concurrentDumpTable(ctx, writer, conf, db, dbName, tableName)
+		finished, chunksIterArray, err := concurrentDumpTable(ctx, conf, db, dbName, tableName)
 		if err != nil || finished {
-			return err
+			return chunksIterArray, err
 		}
 	}
 	tableIR, err := SelectAllFromTable(conf, db, dbName, tableName)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	return writer.WriteTableData(ctx, tableIR)
+	return []TableDataIR{tableIR}, nil
 }
 
-func concurrentDumpTable(ctx context.Context, writer Writer, conf *Config, db *sql.DB, dbName string, tableName string) (bool, error) {
+func concurrentDumpTable(ctx context.Context, conf *Config, db *sql.Conn, dbName string, tableName string) (bool, []TableDataIR, error) {
 	// try dump table concurrently by split table to chunks
 	chunksIterCh := make(chan TableDataIR, defaultDumpThreads)
 	errCh := make(chan error, defaultDumpThreads)
@@ -279,6 +315,7 @@ func concurrentDumpTable(ctx context.Context, writer Writer, conf *Config, db *s
 	ctx1, cancel1 := context.WithCancel(ctx)
 	defer cancel1()
 	var g errgroup.Group
+	chunksIterArray := make([]TableDataIR, 0)
 	g.Go(func() error {
 		splitTableDataIntoChunks(ctx1, chunksIterCh, errCh, linear, dbName, tableName, db, conf)
 		return nil
@@ -288,24 +325,22 @@ Loop:
 	for {
 		select {
 		case <-ctx.Done():
-			return true, nil
+			return true, chunksIterArray, nil
 		case <-linear:
-			return false, nil
+			return false, chunksIterArray, nil
 		case chunksIter, ok := <-chunksIterCh:
 			if !ok {
 				break Loop
 			}
-			g.Go(func() error {
-				return writer.WriteTableData(ctx, chunksIter)
-			})
+			chunksIterArray = append(chunksIterArray, chunksIter)
 		case err := <-errCh:
-			return false, err
+			return false, chunksIterArray, err
 		}
 	}
 	if err := g.Wait(); err != nil {
-		return true, err
+		return true, chunksIterArray, err
 	}
-	return true, nil
+	return true, chunksIterArray, nil
 }
 
 func updateServiceSafePoint(ctx context.Context, pdClient pd.Client, ttl int64, snapshotTS uint64) {
