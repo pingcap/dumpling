@@ -62,7 +62,7 @@ type Config struct {
 
 func DefaultConfig() *Config {
 	allFilter, _ := filter.Parse([]string{"*.*"})
-	tmpl, _ := template.New("filename").Parse("{{.DB}}.{{.Table}}.{{.Index}}")
+	tmpl := template.Must(template.New("filename").Parse("{{.DB}}.{{.Table}}.{{.Index}}"))
 	return &Config{
 		Databases:          nil,
 		Host:               "127.0.0.1",
