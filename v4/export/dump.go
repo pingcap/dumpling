@@ -40,6 +40,7 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 	if err != nil {
 		return withStack(err)
 	}
+	resolveAutoConsistency(conf)
 
 	ctx, cancel := context.WithCancel(pCtx)
 	defer cancel()
@@ -74,6 +75,7 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 		if err != nil {
 			return err
 		}
+		conn.Close()
 	}
 
 	if conf.Snapshot != "" {
@@ -116,7 +118,7 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 	// for consistency lock, we should lock tables at first to get the tables we want to lock & dump
 	// for consistency lock, record meta pos before lock tables because other tables may still be modified while locking tables
 	if conf.Consistency == "lock" {
-		conn, err := pool.Conn(ctx)
+		conn, err := createConnWithConsistency(ctx, pool)
 		if err != nil {
 			return err
 		}
@@ -139,11 +141,10 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 		return err
 	}
 
-	rateLimiter, err := newRateLimit(ctx, conf.Threads, pool)
+	connectPool, err := newConnectionsPool(ctx, conf.Threads, pool)
 	if err != nil {
 		return err
 	}
-	defer rateLimiter.Close()
 
 	if err = conCtrl.TearDown(); err != nil {
 		return err
@@ -153,7 +154,7 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 	// for other consistencies, record snapshot after whole tables are locked. The recorded meta info is exactly the locked snapshot.
 	if conf.Consistency != "lock" {
 		m.recordStartTime(time.Now())
-		conn := rateLimiter.getToken()
+		conn := connectPool.getConn()
 		err = m.recordGlobalMetaData(conn, conf.ServerInfo.ServerType)
 		if err != nil {
 			log.Info("get global metadata failed", zap.Error(err))
@@ -161,7 +162,7 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 		if err = prepareTableListToDump(conf, conn); err != nil {
 			return err
 		}
-		rateLimiter.putToken(conn)
+		connectPool.releaseConn(conn)
 	}
 
 	var writer Writer
@@ -176,11 +177,11 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 	}
 
 	if conf.Sql == "" {
-		if err = dumpDatabases(ctx, conf, rateLimiter, writer); err != nil {
+		if err = dumpDatabases(ctx, conf, connectPool, writer); err != nil {
 			return err
 		}
 	} else {
-		if err = dumpSql(ctx, conf, rateLimiter, writer); err != nil {
+		if err = dumpSql(ctx, conf, connectPool, writer); err != nil {
 			return err
 		}
 	}
@@ -189,13 +190,13 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 	return nil
 }
 
-func dumpDatabases(ctx context.Context, conf *Config, rateLimiter *rateLimit, writer Writer) error {
+func dumpDatabases(ctx context.Context, conf *Config, connectPool *connectionsPool, writer Writer) error {
 	allTables := conf.Tables
 	var g errgroup.Group
 	for dbName, tables := range allTables {
-		conn := rateLimiter.getToken()
+		conn := connectPool.getConn()
 		createDatabaseSQL, err := ShowCreateDatabase(conn, dbName)
-		rateLimiter.putToken(conn)
+		connectPool.releaseConn(conn)
 		if err != nil {
 			return err
 		}
@@ -208,17 +209,17 @@ func dumpDatabases(ctx context.Context, conf *Config, rateLimiter *rateLimit, wr
 		}
 		for _, table := range tables {
 			table := table
-			conn := rateLimiter.getToken()
+			conn := connectPool.getConn()
 			tableDataIRArray, err := dumpTable(ctx, conf, conn, dbName, table, writer)
 			if err != nil {
 				return err
 			}
-			rateLimiter.putToken(conn)
+			connectPool.releaseConn(conn)
 			for _, tableIR := range tableDataIRArray {
 				tableIR := tableIR
 				g.Go(func() error {
-					conn := rateLimiter.getToken()
-					defer rateLimiter.putToken(conn)
+					conn := connectPool.getConn()
+					defer connectPool.releaseConn(conn)
 					err := tableIR.Start(ctx, conn)
 					if err != nil {
 						return err
@@ -257,13 +258,13 @@ func prepareTableListToDump(conf *Config, pool *sql.Conn) error {
 	return nil
 }
 
-func dumpSql(ctx context.Context, conf *Config, rateLimiter *rateLimit, writer Writer) error {
-	conn := rateLimiter.getToken()
+func dumpSql(ctx context.Context, conf *Config, connectPool *connectionsPool, writer Writer) error {
+	conn := connectPool.getConn()
 	tableIR, err := SelectFromSql(conf, conn)
+	connectPool.releaseConn(conn)
 	if err != nil {
 		return err
 	}
-	rateLimiter.putToken(conn)
 
 	return writer.WriteTableData(ctx, tableIR)
 }

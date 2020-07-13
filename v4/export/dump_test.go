@@ -28,12 +28,12 @@ func newMockWriter() *mockWriter {
 	}
 }
 
-func newMockRateLimiter(c *C, db *sql.DB) *rateLimit {
+func newMockConnectPool(c *C, db *sql.DB) *connectionsPool {
 	conn, err := db.Conn(context.Background())
 	c.Assert(err, IsNil)
-	rateLimit := &rateLimit{token: make(chan *sql.Conn, 1)}
-	rateLimit.putToken(conn)
-	return rateLimit
+	connectPool := &connectionsPool{conns: make(chan *sql.Conn, 1)}
+	connectPool.releaseConn(conn)
+	return connectPool
 }
 
 func (m *mockWriter) WriteDatabaseMeta(ctx context.Context, db, createSQL string) error {
@@ -73,8 +73,8 @@ func (s *testDumpSuite) TestDumpDatabase(c *C) {
 	mock.ExpectQuery("SELECT (.) FROM `test`.`t`").WillReturnRows(rows)
 
 	mockWriter := newMockWriter()
-	rateLimit := newMockRateLimiter(c, db)
-	err = dumpDatabases(context.Background(), mockConfig, rateLimit, mockWriter)
+	connectPool := newMockConnectPool(c, db)
+	err = dumpDatabases(context.Background(), mockConfig, connectPool, mockWriter)
 	c.Assert(err, IsNil)
 
 	c.Assert(len(mockWriter.databaseMeta), Equals, 1)

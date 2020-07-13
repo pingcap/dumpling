@@ -44,7 +44,6 @@ func adjustConfig(conf *Config) error {
 	if conf.SessionParams == nil {
 		conf.SessionParams = make(map[string]interface{})
 	}
-	resolveAutoConsistency(conf)
 
 	return nil
 }
