@@ -143,9 +143,6 @@ func newOutputFileNamer(ir TableDataIR) *outputFileNamer {
 
 func (namer *outputFileNamer) NextName(tmpl *template.Template) (string, error) {
 	defer func() { namer.Index++ }()
-	if namer.DB == "" || namer.Table == "" {
-		return fmt.Sprintf("result.%d", namer.Index), nil
-	}
 	bf := bytes.NewBufferString("")
 	err := tmpl.Execute(bf, namer)
 	if err != nil {
