@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
+	"text/template"
 
 	. "github.com/pingcap/check"
 )
@@ -158,7 +159,8 @@ func (s *testDumpSuite) TestWriteTableDataWithStatementSize(c *C) {
 	config := DefaultConfig()
 	config.OutputDirPath = dir
 	config.StatementSize = 50
-	config.OutputFilenameFormat = "specified-name"
+	config.OutputFileTemplate, err = template.New("filename").Parse("specified-name")
+	c.Assert(err, IsNil)
 	ctx := context.Background()
 	defer os.RemoveAll(config.OutputDirPath)
 
@@ -205,7 +207,8 @@ func (s *testDumpSuite) TestWriteTableDataWithStatementSize(c *C) {
 	config.FileSize = 90
 	config.StatementSize = 30
 	// test specifying filename format
-	config.OutputFilenameFormat = "{{.Index}}-{{.Table}}-{{.DB}}"
+	config.OutputFileTemplate, err = template.New("filename").Parse("{{.Index}}-{{.Table}}-{{.DB}}")
+	c.Assert(err, IsNil)
 	os.RemoveAll(config.OutputDirPath)
 	config.OutputDirPath, err = ioutil.TempDir("", "dumpling")
 	fmt.Println(config.OutputDirPath)

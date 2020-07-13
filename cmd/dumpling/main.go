@@ -21,6 +21,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"text/template"
 	"time"
 
 	"github.com/docker/go-units"
@@ -120,7 +121,7 @@ func main() {
 	pflag.StringVar(&keyPath, "key", "", "The path name to the client private key file for TLS connection")
 	pflag.StringVar(&csvSeparator, "csv-separator", ",", "The separator for csv files, default ','")
 	pflag.StringVar(&csvDelimiter, "csv-delimiter", "\"", "The delimiter for values in csv files, default '\"'")
-	pflag.StringVar(&outputFilenameFormat, "output-filename-format", "{{.DB}}.{{.Table}}.{{.Index}}", "The output filename format, default '{{.DB}}.{{.Table}}.{{.Index}}'")
+	pflag.StringVar(&outputFilenameFormat, "output-filename-template", "{{.DB}}.{{.Table}}.{{.Index}}", "The output filename template (without file extension), default '{{.DB}}.{{.Table}}.{{.Index}}'")
 
 	printVersion := pflag.BoolP("version", "V", false, "Print Dumpling version")
 
@@ -151,6 +152,12 @@ func main() {
 		fileSize = uint64(size)
 	} else {
 		fmt.Printf("failed to parse filesize (-F '%s')\n", fileSizeStr)
+		os.Exit(2)
+	}
+
+	tmpl, err := template.New("filename").Parse(outputFilenameFormat)
+	if err != nil {
+		fmt.Printf("failed to parse output filename template (--output-filename-template '%s')\n", outputFilenameFormat)
 		os.Exit(2)
 	}
 
@@ -193,7 +200,7 @@ func main() {
 	conf.SessionParams["tidb_mem_quota_query"] = tidbMemQuotaQuery
 	conf.CsvSeparator = csvSeparator
 	conf.CsvDelimiter = csvDelimiter
-	conf.OutputFilenameFormat = outputFilenameFormat
+	conf.OutputFileTemplate = tmpl
 
 	err = export.Dump(context.Background(), conf)
 	if err != nil {

@@ -3,6 +3,7 @@ package export
 import (
 	"database/sql"
 	"strings"
+	"text/template"
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/dumpling/v4/log"
@@ -44,8 +45,12 @@ func adjustConfig(conf *Config) error {
 	if conf.SessionParams == nil {
 		conf.SessionParams = make(map[string]interface{})
 	}
-	if conf.OutputFilenameFormat == "" {
-		conf.OutputFilenameFormat = "{{.DB}}.{{.Table}}.{{.Index}}"
+	if conf.OutputFileTemplate == nil {
+		var err error
+		conf.OutputFileTemplate, err = template.New("filename").Parse("{{.DB}}.{{.Table}}.{{.Index}}")
+		if err != nil {
+			return err
+		}
 	}
 	resolveAutoConsistency(conf)
 

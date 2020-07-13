@@ -51,12 +51,8 @@ func (f *SimpleWriter) WriteTableData(ctx context.Context, ir TableDataIR) error
 			fileName = fmt.Sprintf("%s.%s.%d.sql", ir.DatabaseName(), ir.TableName(), 0)
 		}
 	}*/
-	tmpl, err := template.New("filename").Parse(f.cfg.OutputFilenameFormat)
-	if err != nil {
-		return err
-	}
 	namer := newOutputFileNamer(ir)
-	fileName, err := namer.NextName(tmpl)
+	fileName, err := namer.NextName(f.cfg.OutputFileTemplate)
 	if err != nil {
 		return err
 	}
@@ -80,7 +76,7 @@ func (f *SimpleWriter) WriteTableData(ctx context.Context, ir TableDataIR) error
 		if f.cfg.FileSize == UnspecifiedSize {
 			break
 		}
-		fileName, err = namer.NextName(tmpl)
+		fileName, err = namer.NextName(f.cfg.OutputFileTemplate)
 		if err != nil {
 			return err
 		}
@@ -161,12 +157,8 @@ func (namer *outputFileNamer) NextName(tmpl *template.Template) (string, error) 
 func (f *CsvWriter) WriteTableData(ctx context.Context, ir TableDataIR) error {
 	log.Debug("start dumping table in csv format...", zap.String("table", ir.TableName()))
 
-	tmpl, err := template.New("filename").Parse(f.cfg.OutputFilenameFormat)
-	if err != nil {
-		return err
-	}
 	namer := newOutputFileNamer(ir)
-	fileName, err := namer.NextName(tmpl)
+	fileName, err := namer.NextName(f.cfg.OutputFileTemplate)
 	if err != nil {
 		return err
 	}
@@ -196,7 +188,7 @@ func (f *CsvWriter) WriteTableData(ctx context.Context, ir TableDataIR) error {
 		if f.cfg.FileSize == UnspecifiedSize {
 			break
 		}
-		fileName, err = namer.NextName(tmpl)
+		fileName, err = namer.NextName(f.cfg.OutputFileTemplate)
 		if err != nil {
 			return err
 		}
