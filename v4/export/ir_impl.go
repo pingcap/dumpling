@@ -333,11 +333,15 @@ func splitTableDataIntoChunks(
 	}
 
 	chunkIndex := 0
+	nullValueCondition := fmt.Sprintf("`%s` IS NULL OR ", escapeString(field))
 LOOP:
 	for cutoff <= max {
 		chunkIndex += 1
-		where := fmt.Sprintf("(`%s` >= %d AND `%s` < %d)", escapeString(field), cutoff, escapeString(field), cutoff+estimatedStep)
+		where := fmt.Sprintf("%s(`%s` >= %d AND `%s` < %d)", nullValueCondition, escapeString(field), cutoff, escapeString(field), cutoff+estimatedStep)
 		query = buildSelectQuery(dbName, tableName, selectedField, buildWhereCondition(conf, where), orderByClause)
+		if len(nullValueCondition) > 0 {
+			nullValueCondition = ""
+		}
 
 		td := &tableData{
 			database:      dbName,
