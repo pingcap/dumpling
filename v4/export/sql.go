@@ -555,6 +555,22 @@ func pickupPossibleField(dbName, tableName string, db *sql.DB, conf *Config) (st
 	return "", nil
 }
 
+func pickupTiDBPKHandle(dbName, tableName string, db *sql.DB) (string, error) {
+	ok, err := SelectTiDBRowID(db, dbName, tableName)
+	if err != nil {
+		return "", nil
+	}
+	if ok {
+		return "_tidb_rowid", nil
+	}
+	// try to use pk
+	fieldName, err := GetPrimaryKeyName(db, dbName, tableName)
+	if err != nil {
+		return "", err
+	}
+	return fieldName, nil
+}
+
 func estimateCount(dbName, tableName string, db *sql.DB, field string, conf *Config) uint64 {
 	query := fmt.Sprintf("EXPLAIN SELECT `%s` FROM `%s`.`%s`", field, escapeString(dbName), escapeString(tableName))
 
@@ -653,4 +669,65 @@ func buildWhereCondition(conf *Config, where string) string {
 
 func escapeString(s string) string {
 	return strings.ReplaceAll(s, "`", "``")
+}
+
+func getRowId(s string) string {
+	keys := strings.Split(s, "_")
+	for i, key := range keys {
+		if key == "r" {
+			if i+1 < len(keys) {
+				return keys[i+1]
+			} else {
+				break
+			}
+		}
+	}
+	return ""
+}
+
+func getTableRegionInfo(db *sql.DB, schema, table string) (startKeys []string, endKeys []string, counts []uint64, err error) {
+	startKeys = make([]string, 0)
+	endKeys = make([]string, 0)
+	counts = make([]uint64, 0)
+	rows, err := db.Query(fmt.Sprintf("SHOW TABLE `%s`.`%s` REGIONS", escapeString(schema), escapeString(table)))
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+	columns, err := rows.Columns()
+	if err != nil {
+		return
+	}
+	colVals := make([]sql.NullString, len(columns))
+	args := make([]interface{}, len(columns))
+	for i := range columns {
+		args[i] = &colVals[i]
+	}
+	for rows.Next() {
+		err = rows.Scan(args...)
+		if err != nil {
+			return
+		}
+		startKey := ""
+		endKey := ""
+		var count uint64
+		for i, colName := range columns {
+			colName = strings.ToUpper(colName)
+			switch colName {
+			case "START_KEY":
+				startKey = getRowId(colVals[i].String)
+			case "END_KEY":
+				endKey = getRowId(colVals[i].String)
+			case "APPROXIMATE_KEYS":
+				count, err = strconv.ParseUint(colVals[i].String, 10, 64)
+				if err != nil {
+					return
+				}
+			}
+		}
+		startKeys = append(startKeys, startKey)
+		endKeys = append(endKeys, endKey)
+		counts = append(counts, count)
+	}
+	return
 }

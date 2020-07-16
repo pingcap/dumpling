@@ -49,6 +49,7 @@ type Config struct {
 	Sql           string
 	CsvSeparator  string
 	CsvDelimiter  string
+	ChunkByRegion bool
 
 	TableFilter        filter.Filter
 	Rows               uint64

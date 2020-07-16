@@ -71,6 +71,7 @@ var (
 	escapeBackslash      bool
 	tidbMemQuotaQuery    uint64
 	outputFilenameFormat string
+	chunkByRegion        bool
 )
 
 var defaultOutputDir = timestampDirName()
@@ -122,6 +123,7 @@ func main() {
 	pflag.StringVar(&csvSeparator, "csv-separator", ",", "The separator for csv files, default ','")
 	pflag.StringVar(&csvDelimiter, "csv-delimiter", "\"", "The delimiter for values in csv files, default '\"'")
 	pflag.StringVar(&outputFilenameFormat, "output-filename-template", "", "The output filename template (without file extension), default '{{.DB}}.{{.Table}}.{{.Index}}'")
+	pflag.BoolVar(&chunkByRegion, "chunk-by-region", false, "whether to use region info to split table chunks")
 
 	printVersion := pflag.BoolP("version", "V", false, "Print Dumpling version")
 
@@ -208,6 +210,7 @@ func main() {
 	conf.CsvSeparator = csvSeparator
 	conf.CsvDelimiter = csvDelimiter
 	conf.OutputFileTemplate = tmpl
+	conf.ChunkByRegion = chunkByRegion
 
 	err = export.Dump(context.Background(), conf)
 	if err != nil {

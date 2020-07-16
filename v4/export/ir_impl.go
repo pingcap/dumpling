@@ -242,6 +242,15 @@ func splitTableDataIntoChunks(
 	errCh chan error,
 	linear chan struct{},
 	dbName, tableName string, db *sql.DB, conf *Config) {
+	if conf.ChunkByRegion {
+		splitTableDataIntoChunksByRegion(
+			ctx,
+			tableDataIRCh,
+			errCh,
+			linear,
+			dbName, tableName, db, conf)
+		return
+	}
 	field, err := pickupPossibleField(dbName, tableName, db, conf)
 	if err != nil {
 		errCh <- withStack(err)
@@ -357,6 +366,123 @@ LOOP:
 		}
 	}
 	close(tableDataIRCh)
+}
+
+func splitTableDataIntoChunksByRegion(
+	ctx context.Context,
+	tableDataIRCh chan TableDataIR,
+	errCh chan error,
+	linear chan struct{},
+	dbName, tableName string, db *sql.DB, conf *Config) {
+	if conf.ServerInfo.ServerType != ServerTypeTiDB {
+		errCh <- errors.Errorf("can't split chunks by region info for database %s except TiDB", serverTypeString[conf.ServerInfo.ServerType])
+		return
+	}
+	field, err := pickupTiDBPKHandle(dbName, tableName, db)
+	if err != nil {
+		errCh <- errors.WithMessage(err, "fail to pick TiDB pk handle")
+		return
+	}
+	if field == "" {
+		log.Debug("skip concurrent dump due to no proper pk handle", zap.String("field", field))
+		linear <- struct{}{}
+		return
+	}
+
+	startKeys, endKeys, estimatedCounts, err := getTableRegionInfo(db, dbName, tableName)
+	if err != nil {
+		errCh <- errors.WithMessage(err, "fail to get TiDB table regions info")
+		return
+	}
+
+	whereConditions := getWhereConditions(startKeys, endKeys, estimatedCounts, field, conf.Rows)
+	if len(whereConditions) == 0 {
+		linear <- struct{}{}
+		return
+	}
+
+	selectedField, err := buildSelectField(db, dbName, tableName)
+	if err != nil {
+		errCh <- withStack(err)
+		return
+	}
+
+	colTypes, err := GetColumnTypes(db, selectedField, dbName, tableName)
+	if err != nil {
+		errCh <- withStack(err)
+		return
+	}
+	orderByClause, err := buildOrderByClause(conf, db, dbName, tableName)
+	if err != nil {
+		errCh <- withStack(err)
+		return
+	}
+
+	chunkIndex := 0
+	nullValueCondition := fmt.Sprintf("`%s` IS NULL OR ", escapeString(field))
+LOOP:
+	for _, whereCondition := range whereConditions {
+		chunkIndex += 1
+		where := fmt.Sprintf("%s(%s)", nullValueCondition, whereCondition)
+		query := buildSelectQuery(dbName, tableName, selectedField, buildWhereCondition(conf, where), orderByClause)
+		rows, err := db.Query(query)
+		if err != nil {
+			errCh <- errors.WithMessage(err, query)
+			return
+		}
+		if len(nullValueCondition) > 0 {
+			nullValueCondition = ""
+		}
+
+		td := &tableData{
+			database:      dbName,
+			table:         tableName,
+			rows:          rows,
+			chunkIndex:    chunkIndex,
+			colTypes:      colTypes,
+			selectedField: selectedField,
+			specCmts: []string{
+				"/*!40101 SET NAMES binary*/;",
+			},
+		}
+		select {
+		case <-ctx.Done():
+			break LOOP
+		case tableDataIRCh <- td:
+		}
+	}
+	close(tableDataIRCh)
+}
+
+func getWhereConditions(startKeys, endKeys []string, counts []uint64, field string, rows uint64) []string {
+	whereConditions := make([]string, 0)
+	var cutoff uint64 = 0
+	lastStartKey := ""
+	generateWhereCondition := func(endKey string) {
+		where := ""
+		and := ""
+		if lastStartKey != "" {
+			where += fmt.Sprintf("`%s` >= %s", escapeString(field), lastStartKey)
+			and = " AND "
+		}
+		if endKey != "" {
+			where += and
+			where += fmt.Sprintf("`%s` < %s", escapeString(field), endKey)
+		}
+		lastStartKey = endKey
+		cutoff = 0
+		whereConditions = append(whereConditions, where)
+	}
+	for i := range endKeys {
+		cutoff += counts[i]
+		if cutoff >= rows {
+			generateWhereCondition(endKeys[i])
+		}
+	}
+	if cutoff > 0 {
+		generateWhereCondition("")
+	}
+	return whereConditions
 }
 
 type metaData struct {
