@@ -396,7 +396,7 @@ func splitTableDataIntoChunksByRegion(
 	}
 
 	whereConditions := getWhereConditions(startKeys, endKeys, estimatedCounts, field, conf.Rows)
-	if len(whereConditions) == 0 {
+	if len(whereConditions) <= 1 {
 		linear <- struct{}{}
 		return
 	}

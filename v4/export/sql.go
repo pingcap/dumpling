@@ -747,6 +747,9 @@ func getTableRegionInfo(db *sql.DB, schema, table string) (startKeys []string, e
 				}
 			}
 		}
+		if startKey == "" && endKey == "" {
+			continue
+		}
 		startKeys = append(startKeys, startKey)
 		endKeys = append(endKeys, endKey)
 		counts = append(counts, count)
