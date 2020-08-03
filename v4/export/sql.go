@@ -127,7 +127,7 @@ func SelectVersion(db *sql.DB) (string, error) {
 	row := db.QueryRow("SELECT version()")
 	err := row.Scan(&versionInfo)
 	if err != nil {
-		return "", err
+		return "", withStack(err)
 	}
 	return versionInfo, nil
 }
