@@ -648,18 +648,13 @@ func parseSnapshotToTSO(pool *sql.DB, snapshot string) (uint64, error) {
 		return snapshotTS, nil
 	}
 	var tso sql.NullInt64
-	err = simpleQueryWithArgs(pool, func(rows *sql.Rows) error {
-		err := rows.Scan(&tso)
-		if err != nil {
-			return err
-		}
-		if !tso.Valid {
-			return fmt.Errorf("snapshot %s format not supported. please use tso or '2006-01-02 15:04:05' format time", snapshot)
-		}
-		return nil
-	}, "SELECT unix_timestamp(?)", snapshot)
+	row := pool.QueryRow("SELECT unix_timestamp(?)", snapshot)
+	err = row.Scan(&tso)
 	if err != nil {
 		return 0, withStack(err)
+	}
+	if !tso.Valid {
+		return 0, withStack(fmt.Errorf("snapshot %s format not supported. please use tso or '2006-01-02 15:04:05' format time", snapshot))
 	}
 	return (uint64(tso.Int64)<<18)*1000 + 1, nil
 }
