@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"strconv"
 	"strings"
 	"time"
 
@@ -94,7 +93,7 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 	}
 
 	if doPdGC {
-		snapshotTS, err := strconv.ParseUint(conf.Snapshot, 10, 64)
+		snapshotTS, err := parseSnapshotToTSO(pool, conf.Snapshot)
 		if err != nil {
 			return err
 		}
