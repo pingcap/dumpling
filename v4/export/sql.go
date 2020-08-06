@@ -296,18 +296,18 @@ func GetUniqueIndexName(db *sql.Conn, database, table string) (string, error) {
 	return colName, nil
 }
 
-func FlushTableWithReadLock(db *sql.Conn) error {
-	_, err := db.ExecContext(context.Background(), "FLUSH TABLES WITH READ LOCK")
+func FlushTableWithReadLock(ctx context.Context, db *sql.Conn) error {
+	_, err := db.ExecContext(ctx, "FLUSH TABLES WITH READ LOCK")
 	return withStack(err)
 }
 
-func LockTables(db *sql.Conn, database, table string) error {
-	_, err := db.ExecContext(context.Background(), fmt.Sprintf("LOCK TABLES `%s`.`%s` READ", escapeString(database), escapeString(table)))
+func LockTables(ctx context.Context, db *sql.Conn, database, table string) error {
+	_, err := db.ExecContext(ctx, fmt.Sprintf("LOCK TABLES `%s`.`%s` READ", escapeString(database), escapeString(table)))
 	return withStack(err)
 }
 
-func UnlockTables(db *sql.Conn) error {
-	_, err := db.ExecContext(context.Background(), "UNLOCK TABLES")
+func UnlockTables(ctx context.Context, db *sql.Conn) error {
+	_, err := db.ExecContext(ctx, "UNLOCK TABLES")
 	return withStack(err)
 }
 

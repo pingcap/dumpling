@@ -16,11 +16,13 @@ func NewConsistencyController(ctx context.Context, conf *Config, session *sql.DB
 	switch conf.Consistency {
 	case "flush":
 		return &ConsistencyFlushTableWithReadLock{
+			ctx:        ctx,
 			serverType: conf.ServerInfo.ServerType,
 			conn:       conn,
 		}, nil
 	case "lock":
 		return &ConsistencyLockDumpingTables{
+			ctx:       ctx,
 			conn:      conn,
 			allTables: conf.Tables,
 		}, nil
@@ -52,6 +54,7 @@ func (c *ConsistencyNone) TearDown() error {
 }
 
 type ConsistencyFlushTableWithReadLock struct {
+	ctx        context.Context
 	serverType ServerType
 	conn       *sql.Conn
 }
@@ -60,15 +63,16 @@ func (c *ConsistencyFlushTableWithReadLock) Setup() error {
 	if c.serverType == ServerTypeTiDB {
 		return withStack(errors.New("'flush table with read lock' cannot be used to ensure the consistency in TiDB"))
 	}
-	return FlushTableWithReadLock(c.conn)
+	return FlushTableWithReadLock(c.ctx, c.conn)
 }
 
 func (c *ConsistencyFlushTableWithReadLock) TearDown() error {
 	defer c.conn.Close()
-	return UnlockTables(c.conn)
+	return UnlockTables(c.ctx, c.conn)
 }
 
 type ConsistencyLockDumpingTables struct {
+	ctx       context.Context
 	conn      *sql.Conn
 	allTables DatabaseTables
 }
@@ -76,7 +80,7 @@ type ConsistencyLockDumpingTables struct {
 func (c *ConsistencyLockDumpingTables) Setup() error {
 	for dbName, tables := range c.allTables {
 		for _, table := range tables {
-			err := LockTables(c.conn, dbName, table.Name)
+			err := LockTables(c.ctx, c.conn, dbName, table.Name)
 			if err != nil {
 				return err
 			}
@@ -87,7 +91,7 @@ func (c *ConsistencyLockDumpingTables) Setup() error {
 
 func (c *ConsistencyLockDumpingTables) TearDown() error {
 	defer c.conn.Close()
-	return UnlockTables(c.conn)
+	return UnlockTables(c.ctx, c.conn)
 }
 
 const showMasterStatusFieldNum = 5
