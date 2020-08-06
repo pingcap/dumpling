@@ -10,6 +10,7 @@ import (
 	"github.com/pingcap/dumpling/v4/log"
 
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/pingcap/failpoint"
 	pd "github.com/pingcap/pd/v4/client"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -165,9 +166,15 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 		return err
 	}
 
-	//log.Info("time is stopped now")
-	//time.Sleep(time.Minute)
-	//log.Info("time starts to flow again")
+	failpoint.Inject("ConsistencyCheck", func(val failpoint.Value) {
+		interval, err := time.ParseDuration(val.(string))
+		if err != nil {
+			log.Warn("inject failpoint ConsistencyCheck failed", zap.Reflect("value", val), zap.Error(err))
+		} else {
+			log.Info("start to sleep for failpoint ConsistencyCheck", zap.Duration("sleepTime", interval))
+			time.Sleep(interval)
+		}
+	})
 
 	var writer Writer
 	switch strings.ToLower(conf.FileType) {
