@@ -1,22 +1,27 @@
 package export
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
 )
 
-func NewConsistencyController(conf *Config, session *sql.DB) (ConsistencyController, error) {
+func NewConsistencyController(ctx context.Context, conf *Config, session *sql.DB) (ConsistencyController, error) {
 	resolveAutoConsistency(conf)
+	conn, err := session.Conn(ctx)
+	if err != nil {
+		return nil, err
+	}
 	switch conf.Consistency {
 	case "flush":
 		return &ConsistencyFlushTableWithReadLock{
 			serverType: conf.ServerInfo.ServerType,
-			db:         session,
+			conn:       conn,
 		}, nil
 	case "lock":
 		return &ConsistencyLockDumpingTables{
-			db:        session,
+			conn:      conn,
 			allTables: conf.Tables,
 		}, nil
 	case "snapshot":
@@ -48,33 +53,30 @@ func (c *ConsistencyNone) TearDown() error {
 
 type ConsistencyFlushTableWithReadLock struct {
 	serverType ServerType
-	db         *sql.DB
+	conn       *sql.Conn
 }
 
 func (c *ConsistencyFlushTableWithReadLock) Setup() error {
 	if c.serverType == ServerTypeTiDB {
 		return withStack(errors.New("'flush table with read lock' cannot be used to ensure the consistency in TiDB"))
 	}
-	return FlushTableWithReadLock(c.db)
+	return FlushTableWithReadLock(c.conn)
 }
 
 func (c *ConsistencyFlushTableWithReadLock) TearDown() error {
-	err := c.db.Ping()
-	if err != nil {
-		return withStack(errors.New("ConsistencyFlushTableWithReadLock lost database connection"))
-	}
-	return UnlockTables(c.db)
+	defer c.conn.Close()
+	return UnlockTables(c.conn)
 }
 
 type ConsistencyLockDumpingTables struct {
-	db        *sql.DB
+	conn      *sql.Conn
 	allTables DatabaseTables
 }
 
 func (c *ConsistencyLockDumpingTables) Setup() error {
 	for dbName, tables := range c.allTables {
 		for _, table := range tables {
-			err := LockTables(c.db, dbName, table.Name)
+			err := LockTables(c.conn, dbName, table.Name)
 			if err != nil {
 				return err
 			}
@@ -84,11 +86,8 @@ func (c *ConsistencyLockDumpingTables) Setup() error {
 }
 
 func (c *ConsistencyLockDumpingTables) TearDown() error {
-	err := c.db.Ping()
-	if err != nil {
-		return withStack(errors.New("ConsistencyLockDumpingTables lost database connection"))
-	}
-	return UnlockTables(c.db)
+	defer c.conn.Close()
+	return UnlockTables(c.conn)
 }
 
 const showMasterStatusFieldNum = 5

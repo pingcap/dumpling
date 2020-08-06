@@ -133,7 +133,7 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 		conn.Close()
 	}
 
-	conCtrl, err := NewConsistencyController(conf, pool)
+	conCtrl, err := NewConsistencyController(ctx, conf, pool)
 	if err != nil {
 		return err
 	}
@@ -143,10 +143,6 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 
 	connectPool, err := newConnectionsPool(ctx, conf.Threads, pool)
 	if err != nil {
-		return err
-	}
-
-	if err = conCtrl.TearDown(); err != nil {
 		return err
 	}
 
@@ -164,6 +160,14 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 		}
 		connectPool.releaseConn(conn)
 	}
+
+	if err = conCtrl.TearDown(); err != nil {
+		return err
+	}
+
+	//log.Info("time is stopped now")
+	//time.Sleep(time.Minute)
+	//log.Info("time starts to flow again")
 
 	var writer Writer
 	switch strings.ToLower(conf.FileType) {
