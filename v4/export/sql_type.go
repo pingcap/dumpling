@@ -116,7 +116,7 @@ func SQLTypeNumberMaker() RowReceiverStringer {
 }
 
 func MakeRowReceiver(colTypes []string) RowReceiverStringer {
-	rowReceiverArr := make(RowReceiverArr, len(colTypes))
+	rowReceiverArr := make([]RowReceiverStringer, len(colTypes))
 	for i, colTp := range colTypes {
 		recMaker, ok := colTypeRowReceiverMap[colTp]
 		if !ok {
@@ -124,19 +124,29 @@ func MakeRowReceiver(colTypes []string) RowReceiverStringer {
 		}
 		rowReceiverArr[i] = recMaker()
 	}
-	return rowReceiverArr
+	return RowReceiverArr{
+		bound:     false,
+		receivers: rowReceiverArr,
+	}
 }
 
-type RowReceiverArr []RowReceiverStringer
+type RowReceiverArr struct {
+	bound     bool
+	receivers []RowReceiverStringer
+}
 
 func (r RowReceiverArr) BindAddress(args []interface{}) {
+	if r.bound {
+		return
+	}
+	r.bound = true
 	for i := range args {
-		r[i].BindAddress(args[i : i+1])
+		r.receivers[i].BindAddress(args[i : i+1])
 	}
 }
 func (r RowReceiverArr) ReportSize() uint64 {
 	var sum uint64
-	for _, receiver := range r {
+	for _, receiver := range r.receivers {
 		sum += receiver.ReportSize()
 	}
 	return sum
@@ -144,9 +154,9 @@ func (r RowReceiverArr) ReportSize() uint64 {
 
 func (r RowReceiverArr) WriteToBuffer(bf *bytes.Buffer, escapeBackslash bool) {
 	bf.WriteByte('(')
-	for i, receiver := range r {
+	for i, receiver := range r.receivers {
 		receiver.WriteToBuffer(bf, escapeBackslash)
-		if i != len(r)-1 {
+		if i != len(r.receivers)-1 {
 			bf.WriteByte(',')
 		}
 	}
@@ -154,9 +164,9 @@ func (r RowReceiverArr) WriteToBuffer(bf *bytes.Buffer, escapeBackslash bool) {
 }
 
 func (r RowReceiverArr) WriteToBufferInCsv(bf *bytes.Buffer, escapeBackslash bool, opt *csvOption) {
-	for i, receiver := range r {
+	for i, receiver := range r.receivers {
 		receiver.WriteToBufferInCsv(bf, escapeBackslash, opt)
-		if i != len(r)-1 {
+		if i != len(r.receivers)-1 {
 			bf.Write(opt.separator)
 		}
 	}
