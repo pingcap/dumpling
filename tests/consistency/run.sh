@@ -18,7 +18,7 @@ run_sql "insert into $DB_NAME.$TABLE_NAME values $(seq -s, 100 | sed 's/,*$//g' 
 
 # dumping with consistency flush
 export DUMPLING_TEST_DATABASE=$DB_NAME
-export GO_FAILPOINTS="github.com/pingcap/dumpling/v4/export/ConsistencyCheck=return(\"5s\")"
+export GO_FAILPOINTS="github.com/pingcap/dumpling/v4/export/ConsistencyCheck=1*sleep(5000)"
 run_dumpling &
 # wait dumpling process to start to sleep
 sleep 2

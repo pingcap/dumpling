@@ -19,9 +19,9 @@ func (s *testConsistencySuite) assertNil(err error, c *C) {
 	}
 }
 
-func (s *testConsistencySuite) assertLifetimeErrNil(ctrl ConsistencyController, c *C) {
-	s.assertNil(ctrl.Setup(), c)
-	s.assertNil(ctrl.TearDown(), c)
+func (s *testConsistencySuite) assertLifetimeErrNil(ctx context.Context, ctrl ConsistencyController, c *C) {
+	s.assertNil(ctrl.Setup(ctx), c)
+	s.assertNil(ctrl.TearDown(ctx), c)
 }
 
 func (s *testConsistencySuite) TestConsistencyController(c *C) {
@@ -37,7 +37,7 @@ func (s *testConsistencySuite) TestConsistencyController(c *C) {
 	ctrl, _ := NewConsistencyController(ctx, conf, db)
 	_, ok := ctrl.(*ConsistencyNone)
 	c.Assert(ok, IsTrue)
-	s.assertLifetimeErrNil(ctrl, c)
+	s.assertLifetimeErrNil(ctx, ctrl, c)
 
 	conf.Consistency = "flush"
 	mock.ExpectExec("FLUSH TABLES WITH READ LOCK").WillReturnResult(resultOk)
@@ -45,7 +45,7 @@ func (s *testConsistencySuite) TestConsistencyController(c *C) {
 	ctrl, _ = NewConsistencyController(ctx, conf, db)
 	_, ok = ctrl.(*ConsistencyFlushTableWithReadLock)
 	c.Assert(ok, IsTrue)
-	s.assertLifetimeErrNil(ctrl, c)
+	s.assertLifetimeErrNil(ctx, ctrl, c)
 	if err = mock.ExpectationsWereMet(); err != nil {
 		c.Fatalf(err.Error())
 	}
@@ -55,7 +55,7 @@ func (s *testConsistencySuite) TestConsistencyController(c *C) {
 	ctrl, _ = NewConsistencyController(ctx, conf, db)
 	_, ok = ctrl.(*ConsistencyNone)
 	c.Assert(ok, IsTrue)
-	s.assertLifetimeErrNil(ctrl, c)
+	s.assertLifetimeErrNil(ctx, ctrl, c)
 
 	conf.Consistency = "lock"
 	conf.Tables = NewDatabaseTables().
@@ -68,7 +68,7 @@ func (s *testConsistencySuite) TestConsistencyController(c *C) {
 	ctrl, _ = NewConsistencyController(ctx, conf, db)
 	_, ok = ctrl.(*ConsistencyLockDumpingTables)
 	c.Assert(ok, IsTrue)
-	s.assertLifetimeErrNil(ctrl, c)
+	s.assertLifetimeErrNil(ctx, ctrl, c)
 	if err = mock.ExpectationsWereMet(); err != nil {
 		c.Fatalf(err.Error())
 	}
@@ -118,7 +118,7 @@ func (s *testConsistencySuite) TestConsistencyControllerError(c *C) {
 	conf.Consistency = "flush"
 	conf.ServerInfo.ServerType = ServerTypeTiDB
 	ctrl, _ := NewConsistencyController(ctx, conf, db)
-	err = ctrl.Setup()
+	err = ctrl.Setup(ctx)
 	c.Assert(err, NotNil)
 
 	// lock table fail
@@ -126,6 +126,6 @@ func (s *testConsistencySuite) TestConsistencyControllerError(c *C) {
 	conf.Tables = NewDatabaseTables().AppendTables("db", "t")
 	mock.ExpectExec("LOCK TABLE").WillReturnError(errors.New(""))
 	ctrl, _ = NewConsistencyController(ctx, conf, db)
-	err = ctrl.Setup()
+	err = ctrl.Setup(ctx)
 	c.Assert(err, NotNil)
 }

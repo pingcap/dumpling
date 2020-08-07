@@ -138,7 +138,7 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 	if err != nil {
 		return err
 	}
-	if err = conCtrl.Setup(); err != nil {
+	if err = conCtrl.Setup(ctx); err != nil {
 		return err
 	}
 
@@ -162,19 +162,11 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 		connectPool.releaseConn(conn)
 	}
 
-	if err = conCtrl.TearDown(); err != nil {
+	if err = conCtrl.TearDown(ctx); err != nil {
 		return err
 	}
 
-	failpoint.Inject("ConsistencyCheck", func(val failpoint.Value) {
-		interval, err := time.ParseDuration(val.(string))
-		if err != nil {
-			log.Warn("inject failpoint ConsistencyCheck failed", zap.Reflect("value", val), zap.Error(err))
-		} else {
-			log.Info("start to sleep for failpoint ConsistencyCheck", zap.Duration("sleepTime", interval))
-			time.Sleep(interval)
-		}
-	})
+	failpoint.Inject("ConsistencyCheck", nil)
 
 	var writer Writer
 	switch strings.ToLower(conf.FileType) {
