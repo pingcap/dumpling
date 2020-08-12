@@ -147,6 +147,7 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 		return err
 	}
 
+	defer connectPool.Close()
 	// for other consistencies, we should get table list after consistency is set up and GlobalMetaData is cached
 	// for other consistencies, record snapshot after whole tables are locked. The recorded meta info is exactly the locked snapshot.
 	if conf.Consistency != "lock" {
@@ -157,6 +158,7 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 			log.Info("get global metadata failed", zap.Error(err))
 		}
 		if err = prepareTableListToDump(conf, conn); err != nil {
+			connectPool.releaseConn(conn)
 			return err
 		}
 		connectPool.releaseConn(conn)
