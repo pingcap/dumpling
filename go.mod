@@ -12,12 +12,12 @@ require (
 	github.com/gorilla/websocket v1.2.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway v1.14.3 // indirect
 	github.com/json-iterator/go v1.1.9 // indirect
-	github.com/pingcap/check v0.0.0-20191216031241-8a5a85928f12
+	github.com/pingcap/check v0.0.0-20200212061837-5e12011dc712
 	github.com/pingcap/errors v0.11.5-0.20200729012136-4e113ddee29e
 	github.com/pingcap/failpoint v0.0.0-20200702092429-9f69995143ce
 	github.com/pingcap/log v0.0.0-20200511115504-543df19646ad
 	github.com/pingcap/pd/v4 v4.0.0-rc.2.0.20200730093003-dc8c75cf7ca0
-	github.com/pingcap/tidb-tools v4.0.0-rc.2.0.20200521050818-6dd445d83fe0+incompatible
+	github.com/pingcap/tidb-tools v4.0.5-0.20200805025317-02a16e0521cb+incompatible
 	github.com/pkg/errors v0.9.1
 	github.com/soheilhy/cmux v0.1.4
 	github.com/spf13/pflag v1.0.3
