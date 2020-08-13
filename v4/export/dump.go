@@ -111,6 +111,7 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 		return withStack(err)
 	} else {
 		pool = newPool
+		defer newPool.Close()
 	}
 
 	m := newGlobalMetadata(conf.OutputDirPath)
