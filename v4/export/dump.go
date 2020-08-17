@@ -10,6 +10,7 @@ import (
 	"github.com/pingcap/dumpling/v4/log"
 
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/pingcap/failpoint"
 	pd "github.com/pingcap/pd/v4/client"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -68,13 +69,14 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 	if conf.Snapshot == "" && (doPdGC || conf.Consistency == "snapshot") {
 		conn, err := pool.Conn(ctx)
 		if err != nil {
+			conn.Close()
 			return withStack(err)
 		}
 		conf.Snapshot, err = getSnapshot(conn)
+		conn.Close()
 		if err != nil {
 			return err
 		}
-		conn.Close()
 	}
 
 	if conf.Snapshot != "" {
@@ -109,6 +111,7 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 		return withStack(err)
 	} else {
 		pool = newPool
+		defer newPool.Close()
 	}
 
 	m := newGlobalMetadata(conf.OutputDirPath)
@@ -120,7 +123,7 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 	if conf.Consistency == "lock" {
 		conn, err := createConnWithConsistency(ctx, pool)
 		if err != nil {
-			return err
+			return withStack(err)
 		}
 		m.recordStartTime(time.Now())
 		err = m.recordGlobalMetaData(conn, conf.ServerInfo.ServerType)
@@ -128,42 +131,57 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 			log.Info("get global metadata failed", zap.Error(err))
 		}
 		if err = prepareTableListToDump(conf, conn); err != nil {
+			conn.Close()
 			return err
 		}
 		conn.Close()
 	}
 
-	conCtrl, err := NewConsistencyController(conf, pool)
+	conCtrl, err := NewConsistencyController(ctx, conf, pool)
 	if err != nil {
 		return err
 	}
-	if err = conCtrl.Setup(); err != nil {
+	if err = conCtrl.Setup(ctx); err != nil {
 		return err
+	}
+	// To avoid lock is not released
+	defer conCtrl.TearDown(ctx)
+
+	// for other consistencies, we should get table list after consistency is set up and GlobalMetaData is cached
+	// for other consistencies, record snapshot after whole tables are locked. The recorded meta info is exactly the locked snapshot.
+	if conf.Consistency != "lock" {
+		conn, err := pool.Conn(ctx)
+		if err != nil {
+			return withStack(err)
+		}
+		m.recordStartTime(time.Now())
+		err = m.recordGlobalMetaData(conn, conf.ServerInfo.ServerType)
+		if err != nil {
+			log.Info("get global metadata failed", zap.Error(err))
+		}
+		conn.Close()
 	}
 
 	connectPool, err := newConnectionsPool(ctx, conf.Threads, pool)
 	if err != nil {
 		return err
 	}
+	defer connectPool.Close()
 
-	if err = conCtrl.TearDown(); err != nil {
-		return err
-	}
-
-	// for other consistencies, we should get table list after consistency is set up and GlobalMetaData is cached
-	// for other consistencies, record snapshot after whole tables are locked. The recorded meta info is exactly the locked snapshot.
 	if conf.Consistency != "lock" {
-		m.recordStartTime(time.Now())
 		conn := connectPool.getConn()
-		err = m.recordGlobalMetaData(conn, conf.ServerInfo.ServerType)
-		if err != nil {
-			log.Info("get global metadata failed", zap.Error(err))
-		}
 		if err = prepareTableListToDump(conf, conn); err != nil {
+			connectPool.releaseConn(conn)
 			return err
 		}
 		connectPool.releaseConn(conn)
 	}
+
+	if err = conCtrl.TearDown(ctx); err != nil {
+		return err
+	}
+
+	failpoint.Inject("ConsistencyCheck", nil)
 
 	var writer Writer
 	switch strings.ToLower(conf.FileType) {
@@ -211,10 +229,10 @@ func dumpDatabases(ctx context.Context, conf *Config, connectPool *connectionsPo
 			table := table
 			conn := connectPool.getConn()
 			tableDataIRArray, err := dumpTable(ctx, conf, conn, dbName, table, writer)
+			connectPool.releaseConn(conn)
 			if err != nil {
 				return err
 			}
-			connectPool.releaseConn(conn)
 			for _, tableIR := range tableDataIRArray {
 				tableIR := tableIR
 				g.Go(func() error {
