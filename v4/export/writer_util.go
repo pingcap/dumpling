@@ -24,6 +24,7 @@ type writerPipe struct {
 	input  chan *bytes.Buffer
 	closed chan struct{}
 	errCh  chan error
+	size   uint64
 
 	w io.Writer
 }
@@ -33,6 +34,7 @@ func newWriterPipe(w io.Writer) *writerPipe {
 		input:  make(chan *bytes.Buffer, 8),
 		closed: make(chan struct{}),
 		errCh:  make(chan error, 1),
+		size:   0,
 		w:      w,
 	}
 }
