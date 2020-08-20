@@ -228,7 +228,11 @@ func (s *SQLTypeBytes) ReportSize() uint64 {
 }
 
 func (s *SQLTypeBytes) WriteToBuffer(bf *bytes.Buffer, _ bool) {
-	fmt.Fprintf(bf, "x'%x'", s.RawBytes)
+	if s.RawBytes != nil {
+		fmt.Fprintf(bf, "x'%x'", s.RawBytes)
+	} else {
+		bf.WriteString(nullValue)
+	}
 }
 
 func (s *SQLTypeBytes) WriteToBufferInCsv(bf *bytes.Buffer, _ bool, opt *csvOption) {
