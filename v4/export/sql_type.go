@@ -235,10 +235,10 @@ func (s *SQLTypeBytes) WriteToBuffer(bf *bytes.Buffer, _ bool) {
 	}
 }
 
-func (s *SQLTypeBytes) WriteToBufferInCsv(bf *bytes.Buffer, _ bool, opt *csvOption) {
+func (s *SQLTypeBytes) WriteToBufferInCsv(bf *bytes.Buffer, escapeBackslash bool, opt *csvOption) {
 	if s.RawBytes != nil {
 		bf.Write(opt.delimiter)
-		bf.Write(s.RawBytes)
+		escape(s.RawBytes, bf, getEscapeQuotation(escapeBackslash, opt.delimiter))
 		bf.Write(opt.delimiter)
 	} else {
 		bf.WriteString(opt.nullValue)
