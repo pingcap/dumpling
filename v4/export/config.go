@@ -1,6 +1,7 @@
 package export
 
 import (
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strings"
@@ -14,51 +15,51 @@ import (
 )
 
 type Config struct {
-	Databases []string
-	Host      string
-	User      string
-	Port      int
-	Password  string
+	Databases []string `json:"Databases"`
+	Host      string   `json:"Host"`
+	User      string   `json:"User"`
+	Port      int      `json:"Port"`
+	Password  string   `json:"-"` // omit it for privacy
 	Security  struct {
-		CAPath   string
-		CertPath string
-		KeyPath  string
-	}
+		CAPath   string `json:"CAPath"`
+		CertPath string `json:"CertPath"`
+		KeyPath  string `json:"KeyPath"`
+	} `json:"Security`
 
-	Threads int
+	Threads int `json:"Threads"`
 
-	LogLevel  string
-	LogFile   string
-	LogFormat string
+	LogLevel  string `json:"LogLevel"`
+	LogFile   string `json:"LogFile"`
+	LogFormat string `json:"LogFormat"`
 	Logger    *zap.Logger
 
-	FileSize      uint64
-	StatementSize uint64
-	OutputDirPath string
-	ServerInfo    ServerInfo
-	SortByPk      bool
-	Tables        DatabaseTables
-	StatusAddr    string
-	Snapshot      string
-	Consistency   string
-	NoViews       bool
-	NoHeader      bool
-	NoSchemas     bool
-	NoData        bool
-	CsvNullValue  string
-	Sql           string
-	CsvSeparator  string
-	CsvDelimiter  string
+	FileSize      uint64         `json:"FileSize"`
+	StatementSize uint64         `json:"StatementSize"`
+	OutputDirPath string         `json:"OutputDirPath"`
+	ServerInfo    ServerInfo     `json:"ServerInfo"`
+	SortByPk      bool           `json:"SortByPk"`
+	Tables        DatabaseTables `json:"Tables"`
+	StatusAddr    string         `json:"StatusAddr"`
+	Snapshot      string         `json:"Snapshot"`
+	Consistency   string         `json:"Consistency"`
+	NoViews       bool           `json:"NoViews"`
+	NoHeader      bool           `json:"NoHeader"`
+	NoSchemas     bool           `json:"NoSchemas"`
+	NoData        bool           `json:"NoData"`
+	CsvNullValue  string         `json:"CsvNullValue"`
+	Sql           string         `json:"Sql"`
+	CsvSeparator  string         `json:"CsvSeparator"`
+	CsvDelimiter  string         `json:"CsvDelimiter"`
 
-	TableFilter        filter.Filter
-	Rows               uint64
-	Where              string
-	FileType           string
-	CompleteInsert     bool
-	EscapeBackslash    bool
-	DumpEmptyDatabase  bool
-	OutputFileTemplate *template.Template
-	SessionParams      map[string]interface{}
+	TableFilter        filter.Filter          `json:"TableFilter"`
+	Rows               uint64                 `json:"Rows"`
+	Where              string                 `json:"Where"`
+	FileType           string                 `json:"FileType"`
+	CompleteInsert     bool                   `json:"CompleteInsert"`
+	EscapeBackslash    bool                   `json:"EscapeBackslash"`
+	DumpEmptyDatabase  bool                   `json:"DumpEmptyDatabase"`
+	OutputFileTemplate *template.Template     `json:"OutputFileTemplate`
+	SessionParams      map[string]interface{} `json:"SessionParams"`
 }
 
 func DefaultConfig() *Config {
@@ -95,6 +96,14 @@ func DefaultConfig() *Config {
 		SessionParams:      make(map[string]interface{}),
 		OutputFileTemplate: tmpl,
 	}
+}
+
+func (config *Config) String() string {
+	cfg, err := json.Marshal(config)
+	if err != nil {
+		log.Error("marshal config to json", zap.Error(err))
+	}
+	return string(cfg)
 }
 
 // GetDSN generates DSN from Config
