@@ -51,14 +51,14 @@ type Config struct {
 	CsvSeparator  string
 	CsvDelimiter  string
 
-	TableFilter        filter.Filter
+	TableFilter        filter.Filter `json:"-"`
 	Rows               uint64
 	Where              string
 	FileType           string
 	CompleteInsert     bool
 	EscapeBackslash    bool
 	DumpEmptyDatabase  bool
-	OutputFileTemplate *template.Template
+	OutputFileTemplate *template.Template `json:"-"`
 	SessionParams      map[string]interface{}
 }
 
