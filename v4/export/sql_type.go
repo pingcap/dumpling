@@ -144,13 +144,6 @@ func (r RowReceiverArr) BindAddress(args []interface{}) {
 		r.receivers[i].BindAddress(args[i : i+1])
 	}
 }
-func (r RowReceiverArr) ReportSize() uint64 {
-	var sum uint64
-	for _, receiver := range r.receivers {
-		sum += receiver.ReportSize()
-	}
-	return sum
-}
 
 func (r RowReceiverArr) WriteToBuffer(bf *bytes.Buffer, escapeBackslash bool) {
 	bf.WriteByte('(')
@@ -199,12 +192,6 @@ type SQLTypeString struct {
 func (s *SQLTypeString) BindAddress(arg []interface{}) {
 	arg[0] = &s.RawBytes
 }
-func (s *SQLTypeString) ReportSize() uint64 {
-	if s.RawBytes != nil {
-		return uint64(len(s.RawBytes))
-	}
-	return uint64(len(nullValue))
-}
 
 func (s *SQLTypeString) WriteToBuffer(bf *bytes.Buffer, escapeBackslash bool) {
 	if s.RawBytes != nil {
@@ -232,9 +219,6 @@ type SQLTypeBytes struct {
 
 func (s *SQLTypeBytes) BindAddress(arg []interface{}) {
 	arg[0] = &s.RawBytes
-}
-func (s *SQLTypeBytes) ReportSize() uint64 {
-	return uint64(len(s.RawBytes))
 }
 
 func (s *SQLTypeBytes) WriteToBuffer(bf *bytes.Buffer, _ bool) {

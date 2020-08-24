@@ -24,7 +24,9 @@ type writerPipe struct {
 	input  chan *bytes.Buffer
 	closed chan struct{}
 	errCh  chan error
-	size   uint64
+
+	currentFileSize      uint64
+	currentStatementSize uint64
 
 	w io.Writer
 }
@@ -34,8 +36,10 @@ func newWriterPipe(w io.Writer) *writerPipe {
 		input:  make(chan *bytes.Buffer, 8),
 		closed: make(chan struct{}),
 		errCh:  make(chan error, 1),
-		size:   0,
 		w:      w,
+
+		currentFileSize:      0,
+		currentStatementSize: 0,
 	}
 }
 
@@ -62,6 +66,11 @@ func (b *writerPipe) Run(ctx context.Context) {
 			return
 		}
 	}
+}
+
+func (b *writerPipe) AddFileSize(fileSize uint64) {
+	b.currentFileSize += fileSize
+	b.currentStatementSize += fileSize
 }
 
 func (b *writerPipe) Error() error {
@@ -93,7 +102,7 @@ func WriteMeta(meta MetaIR, w io.StringWriter) error {
 
 func WriteInsert(pCtx context.Context, tblIR TableDataIR, w io.Writer) error {
 	fileRowIter := tblIR.Rows()
-	if !fileRowIter.HasNext() {
+	if !fileRowIter.HasNext(0, 0) {
 		return nil
 	}
 
@@ -121,6 +130,7 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w io.Writer) error {
 		bf.WriteString(specCmtIter.Next())
 		bf.WriteByte('\n')
 	}
+	wp.currentFileSize += uint64(bf.Len())
 
 	var (
 		insertStatementPrefix string
@@ -139,22 +149,29 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w io.Writer) error {
 		insertStatementPrefix = fmt.Sprintf("INSERT INTO %s VALUES\n",
 			wrapBackTicks(escapeString(tblIR.TableName())))
 	}
+	insertStatementPrefixLen := uint64(len(insertStatementPrefix))
+	// make sure fileRowIter can write at least one row
+	fileRowIter.AdjustFileRowIterSize(insertStatementPrefixLen, wp.currentFileSize+insertStatementPrefixLen)
 
-	for fileRowIter.HasNextSQLRowIter() {
+	// use wp.currentFileSize + insertStatementPrefixLen to make sure file can still be written after prefix is written
+	for fileRowIter.HasNextSQLRowIter(wp.currentFileSize + insertStatementPrefixLen) {
+		wp.currentStatementSize = 0
 		bf.WriteString(insertStatementPrefix)
+		wp.AddFileSize(insertStatementPrefixLen)
 
-		fileRowIter = fileRowIter.NextSQLRowIter()
-		for fileRowIter.HasNext() {
+		for fileRowIter.HasNext(wp.currentStatementSize, wp.currentFileSize) {
 			if err = fileRowIter.Decode(row); err != nil {
 				log.Error("scanning from sql.Row failed", zap.Error(err))
 				return err
 			}
 
+			lastBfSize := bf.Len()
 			row.WriteToBuffer(bf, escapeBackSlash)
 			counter += 1
+			wp.AddFileSize(uint64(bf.Len()-lastBfSize) + 2) // 2 is for ",\n" and ";\n"
 
 			fileRowIter.Next()
-			if fileRowIter.HasNext() {
+			if fileRowIter.HasNext(wp.currentStatementSize, wp.currentFileSize) {
 				bf.WriteString(",\n")
 			} else {
 				bf.WriteString(";\n")
@@ -175,6 +192,7 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w io.Writer) error {
 			default:
 			}
 		}
+
 	}
 	log.Debug("dumping table",
 		zap.String("table", tblIR.TableName()),
@@ -192,7 +210,7 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w io.Writer) error {
 
 func WriteInsertInCsv(pCtx context.Context, tblIR TableDataIR, w io.Writer, noHeader bool, opt *csvOption) error {
 	fileRowIter := tblIR.Rows()
-	if !fileRowIter.HasNext() {
+	if !fileRowIter.HasNext(0, 0) {
 		return nil
 	}
 
@@ -233,18 +251,24 @@ func WriteInsertInCsv(pCtx context.Context, tblIR TableDataIR, w io.Writer, noHe
 		}
 		bf.WriteByte('\n')
 	}
+	wp.currentFileSize += uint64(bf.Len())
 
-	for fileRowIter.HasNextSQLRowIter() {
-		fileRowIter = fileRowIter.NextSQLRowIter()
-		for fileRowIter.HasNext() {
+	// make sure fileRowIter can write at least one row
+	fileRowIter.AdjustFileRowIterSize(0, wp.currentFileSize)
+
+	for fileRowIter.HasNextSQLRowIter(wp.currentFileSize) {
+		for fileRowIter.HasNext(wp.currentStatementSize, wp.currentFileSize) {
 			if err = fileRowIter.Decode(row); err != nil {
 				log.Error("scanning from sql.Row failed", zap.Error(err))
 				return err
 			}
 
+			lastBfSize := bf.Len()
 			row.WriteToBufferInCsv(bf, escapeBackSlash, opt)
 			counter += 1
+			wp.currentFileSize += uint64(bf.Len()-lastBfSize) + 1 // 1 is for "\n"
 
+			bf.WriteByte('\n')
 			if bf.Len() >= lengthLimit {
 				wp.input <- bf
 				bf = pool.Get().(*bytes.Buffer)
@@ -254,8 +278,6 @@ func WriteInsertInCsv(pCtx context.Context, tblIR TableDataIR, w io.Writer, noHe
 			}
 
 			fileRowIter.Next()
-			bf.WriteByte('\n')
-
 			select {
 			case <-pCtx.Done():
 				return pCtx.Err()

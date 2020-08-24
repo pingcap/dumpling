@@ -27,9 +27,9 @@ type SQLRowIter interface {
 	Decode(RowReceiver) error
 	Next()
 	Error() error
-	HasNext() bool
-	HasNextSQLRowIter() bool
-	NextSQLRowIter() SQLRowIter
+	HasNext(currentStatementSize, currentFileSize uint64) bool
+	HasNextSQLRowIter(currentFileSize uint64) bool
+	AdjustFileRowIterSize(currentStatementSize, currentFileSize uint64)
 	// release SQLRowIter
 	Close() error
 }
@@ -46,7 +46,6 @@ type Stringer interface {
 
 type RowReceiver interface {
 	BindAddress([]interface{})
-	ReportSize() uint64
 }
 
 func decodeFromRows(rows *sql.Rows, args []interface{}, row RowReceiver) error {

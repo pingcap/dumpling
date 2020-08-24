@@ -46,25 +46,20 @@ func (iter *rowIter) Next() {
 	iter.hasNext = iter.rows.Next()
 }
 
-func (iter *rowIter) HasNext() bool {
+func (iter *rowIter) HasNext(_, _ uint64) bool {
 	return iter.hasNext
 }
 
-func (iter *rowIter) HasNextSQLRowIter() bool {
+func (iter *rowIter) HasNextSQLRowIter(_ uint64) bool {
 	return iter.hasNext
 }
 
-func (iter *rowIter) NextSQLRowIter() SQLRowIter {
-	return iter
-}
+func (iter *rowIter) AdjustFileRowIterSize(_, _ uint64) {}
 
 type fileRowIter struct {
 	rowIter            SQLRowIter
 	fileSizeLimit      uint64
 	statementSizeLimit uint64
-
-	currentStatementSize uint64
-	currentFileSize      uint64
 }
 
 func (c *fileRowIter) Close() error {
@@ -76,9 +71,6 @@ func (c *fileRowIter) Decode(row RowReceiver) error {
 	if err != nil {
 		return err
 	}
-	size := row.ReportSize()
-	c.currentFileSize += size
-	c.currentStatementSize += size
 	return nil
 }
 
@@ -90,31 +82,30 @@ func (c *fileRowIter) Next() {
 	c.rowIter.Next()
 }
 
-func (c *fileRowIter) HasNext() bool {
-	if c.fileSizeLimit != UnspecifiedSize && c.currentFileSize >= c.fileSizeLimit {
+func (c *fileRowIter) HasNext(currentStatementSize, currentFileSize uint64) bool {
+	if c.fileSizeLimit != UnspecifiedSize && currentFileSize >= c.fileSizeLimit {
 		return false
 	}
 
-	if c.statementSizeLimit != UnspecifiedSize && c.currentStatementSize >= c.statementSizeLimit {
+	if c.statementSizeLimit != UnspecifiedSize && currentStatementSize >= c.statementSizeLimit {
 		return false
 	}
-	return c.rowIter.HasNext()
+	return c.rowIter.HasNext(currentStatementSize, currentFileSize)
 }
 
-func (c *fileRowIter) HasNextSQLRowIter() bool {
-	if c.fileSizeLimit != UnspecifiedSize && c.currentFileSize >= c.fileSizeLimit {
+func (c *fileRowIter) HasNextSQLRowIter(currentFileSize uint64) bool {
+	if c.fileSizeLimit != UnspecifiedSize && currentFileSize >= c.fileSizeLimit {
 		return false
 	}
-	return c.rowIter.HasNext()
+	return c.rowIter.HasNext(0, currentFileSize)
 }
 
-func (c *fileRowIter) NextSQLRowIter() SQLRowIter {
-	return &fileRowIter{
-		rowIter:              c.rowIter,
-		fileSizeLimit:        c.fileSizeLimit,
-		statementSizeLimit:   c.statementSizeLimit,
-		currentFileSize:      c.currentFileSize,
-		currentStatementSize: 0,
+func (c *fileRowIter) AdjustFileRowIterSize(currentStatementSize, currentFileSize uint64) {
+	if c.fileSizeLimit != UnspecifiedSize && currentFileSize >= c.fileSizeLimit {
+		c.fileSizeLimit = currentFileSize + 1
+	}
+	if c.statementSizeLimit != UnspecifiedSize && currentStatementSize >= c.statementSizeLimit {
+		c.statementSizeLimit = currentStatementSize + 1
 	}
 }
 
