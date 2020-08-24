@@ -21,7 +21,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"text/template"
 	"time"
 
 	"github.com/docker/go-units"
@@ -67,6 +66,7 @@ var (
 	csvSeparator  string
 	csvDelimiter  string
 
+	completeInsert       bool
 	dumpEmptyDatabase    bool
 	escapeBackslash      bool
 	tidbMemQuotaQuery    uint64
@@ -121,7 +121,8 @@ func main() {
 	pflag.StringVar(&keyPath, "key", "", "The path name to the client private key file for TLS connection")
 	pflag.StringVar(&csvSeparator, "csv-separator", ",", "The separator for csv files, default ','")
 	pflag.StringVar(&csvDelimiter, "csv-delimiter", "\"", "The delimiter for values in csv files, default '\"'")
-	pflag.StringVar(&outputFilenameFormat, "output-filename-template", "", "The output filename template (without file extension), default '{{.DB}}.{{.Table}}.{{.Index}}'")
+	pflag.StringVar(&outputFilenameFormat, "output-filename-template", "", "The output filename template (without file extension)")
+	pflag.BoolVar(&completeInsert, "complete-insert", false, "Use complete INSERT statements that include column names")
 
 	printVersion := pflag.BoolP("version", "V", false, "Print Dumpling version")
 
@@ -155,14 +156,10 @@ func main() {
 		os.Exit(2)
 	}
 
-	if outputFilenameFormat == "" {
-		if sql != "" {
-			outputFilenameFormat = "result.{{.Index}}"
-		} else {
-			outputFilenameFormat = "{{.DB}}.{{.Table}}.{{.Index}}"
-		}
+	if outputFilenameFormat == "" && sql != "" {
+		outputFilenameFormat = export.DefaultAnonymousOutputFileTemplateText
 	}
-	tmpl, err := template.New("filename").Parse(outputFilenameFormat)
+	tmpl, err := export.ParseOutputFileTemplate(outputFilenameFormat)
 	if err != nil {
 		fmt.Printf("failed to parse output filename template (--output-filename-template '%s')\n", outputFilenameFormat)
 		os.Exit(2)
@@ -208,6 +205,7 @@ func main() {
 	conf.CsvSeparator = csvSeparator
 	conf.CsvDelimiter = csvDelimiter
 	conf.OutputFileTemplate = tmpl
+	conf.CompleteInsert = completeInsert
 
 	err = export.Dump(context.Background(), conf)
 	if err != nil {
