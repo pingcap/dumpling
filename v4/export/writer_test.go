@@ -210,11 +210,10 @@ func (s *testDumpSuite) TestWriteTableDataWithStatementSize(c *C) {
 	}
 
 	// with file size and statement size
-	config.FileSize = 100
-	config.StatementSize = 45
+	config.FileSize = 204
+	config.StatementSize = 95
 	config.FileSize += uint64(len(specCmts[0]) + 1)
 	config.FileSize += uint64(len(specCmts[1]) + 1)
-	config.FileSize += uint64(len("INSERT INTO `employee` VALUES\n"))
 	config.StatementSize += uint64(len("INSERT INTO `employee` VALUES\n"))
 	// test specifying filename format
 	config.OutputFileTemplate, err = ParseOutputFileTemplate("{{.Index}}-{{.Table}}-{{fn .DB}}")
