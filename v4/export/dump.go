@@ -126,7 +126,7 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 			return withStack(err)
 		}
 		m.recordStartTime(time.Now())
-		err = m.recordGlobalMetaData(conn, conf.ServerInfo.ServerType)
+		err = m.recordGlobalMetaData(conn, conf.ServerInfo.ServerType, false)
 		if err != nil {
 			log.Info("get global metadata failed", zap.Error(err))
 		}
@@ -155,7 +155,7 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 			return withStack(err)
 		}
 		m.recordStartTime(time.Now())
-		err = m.recordGlobalMetaData(conn, conf.ServerInfo.ServerType)
+		err = m.recordGlobalMetaData(conn, conf.ServerInfo.ServerType, false)
 		if err != nil {
 			log.Info("get global metadata failed", zap.Error(err))
 		}
@@ -170,6 +170,11 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 
 	if conf.Consistency != "lock" {
 		conn := connectPool.getConn()
+		// record again, to provide a location to exit safe mode for DM
+		err = m.recordGlobalMetaData(conn, conf.ServerInfo.ServerType, true)
+		if err != nil {
+			log.Info("get global metadata (after connection pool established) failed", zap.Error(err))
+		}
 		if err = prepareTableListToDump(conf, conn); err != nil {
 			connectPool.releaseConn(conn)
 			return err
