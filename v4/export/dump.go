@@ -168,13 +168,18 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 	}
 	defer connectPool.Close()
 
-	if conf.Consistency != "lock" {
+	if conf.PosAfterConnect {
 		conn := connectPool.getConn()
 		// record again, to provide a location to exit safe mode for DM
 		err = m.recordGlobalMetaData(conn, conf.ServerInfo.ServerType, true)
 		if err != nil {
 			log.Info("get global metadata (after connection pool established) failed", zap.Error(err))
 		}
+		connectPool.releaseConn(conn)
+	}
+
+	if conf.Consistency != "lock" {
+		conn := connectPool.getConn()
 		if err = prepareTableListToDump(conf, conn); err != nil {
 			connectPool.releaseConn(conn)
 			return err
