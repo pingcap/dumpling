@@ -27,9 +27,7 @@ type SQLRowIter interface {
 	Decode(RowReceiver) error
 	Next()
 	Error() error
-	HasNext(currentStatementSize, currentFileSize uint64) bool
-	HasNextSQLRowIter(currentFileSize uint64) bool
-	AdjustFileRowIterSize(currentStatementSize, currentFileSize uint64)
+	HasNext() bool
 	// release SQLRowIter
 	Close() error
 }

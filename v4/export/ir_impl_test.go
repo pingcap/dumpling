@@ -40,22 +40,22 @@ func (s *testIRImplSuite) TestRowIter(c *C) {
 
 	iter := newRowIter(rows, 1)
 	for i := 0; i < 100; i++ {
-		c.Assert(iter.HasNext(0, 0), IsTrue)
+		c.Assert(iter.HasNext(), IsTrue)
 	}
 	res := newSimpleRowReceiver(1)
 	c.Assert(iter.Decode(res), IsNil)
 	c.Assert(res.data, DeepEquals, []string{"1"})
 	iter.Next()
-	c.Assert(iter.HasNext(0, 0), IsTrue)
-	c.Assert(iter.HasNext(0, 0), IsTrue)
+	c.Assert(iter.HasNext(), IsTrue)
+	c.Assert(iter.HasNext(), IsTrue)
 	c.Assert(iter.Decode(res), IsNil)
 	c.Assert(res.data, DeepEquals, []string{"2"})
 	iter.Next()
-	c.Assert(iter.HasNext(0, 0), IsTrue)
+	c.Assert(iter.HasNext(), IsTrue)
 	c.Assert(iter.Decode(res), IsNil)
 	iter.Next()
 	c.Assert(res.data, DeepEquals, []string{"3"})
-	c.Assert(iter.HasNext(0, 0), IsFalse)
+	c.Assert(iter.HasNext(), IsFalse)
 }
 
 func (s *testIRImplSuite) TestChunkRowIter(c *C) {
@@ -85,34 +85,33 @@ func (s *testIRImplSuite) TestChunkRowIter(c *C) {
 		}
 	)
 
-	sqlRowIter := SQLRowIter(&fileRowIter{
-		rowIter:            newRowIter(rows, 2),
-		fileSizeLimit:      testFileSize,
-		statementSizeLimit: testStatementSize,
-	})
+	sqlRowIter := SQLRowIter(newRowIter(rows, 2))
 
 	res := newSimpleRowReceiver(2)
+	wp := newWriterPipe(nil, testFileSize, testStatementSize)
 
 	var (
-		resSize              [][]uint64
-		currentStatementSize uint64 = 0
-		currentFileSize      uint64 = 0
+		resSize [][]uint64
 	)
-	for sqlRowIter.HasNextSQLRowIter(currentFileSize) {
-		currentStatementSize = 0
-		for sqlRowIter.HasNext(currentStatementSize, currentFileSize) {
+	for sqlRowIter.HasNext() {
+		wp.currentStatementSize = 0
+		for sqlRowIter.HasNext() {
 			c.Assert(sqlRowIter.Decode(res), IsNil)
 			sz := uint64(len(res.data[0]) + len(res.data[1]))
-			currentFileSize += sz
-			currentStatementSize += sz
+			wp.AddFileSize(sz)
 			sqlRowIter.Next()
-			resSize = append(resSize, []uint64{currentFileSize, currentStatementSize})
+			resSize = append(resSize, []uint64{wp.currentFileSize, wp.currentStatementSize})
+			if wp.ShouldSwitchStatement() {
+				break
+			}
+		}
+		if wp.ShouldSwitchFile() {
+			break
 		}
 	}
 
 	c.Assert(resSize, DeepEquals, expectedSize)
-	c.Assert(sqlRowIter.HasNextSQLRowIter(currentFileSize), IsFalse)
-	c.Assert(sqlRowIter.HasNext(currentStatementSize, currentFileSize), IsFalse)
+	c.Assert(sqlRowIter.HasNext(), IsFalse)
 	rows.Close()
 	c.Assert(sqlRowIter.Decode(res), NotNil)
 	sqlRowIter.Next()
