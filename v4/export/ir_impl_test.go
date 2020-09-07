@@ -90,9 +90,7 @@ func (s *testIRImplSuite) TestChunkRowIter(c *C) {
 	res := newSimpleRowReceiver(2)
 	wp := newWriterPipe(nil, testFileSize, testStatementSize)
 
-	var (
-		resSize [][]uint64
-	)
+	var resSize [][]uint64
 	for sqlRowIter.HasNext() {
 		wp.currentStatementSize = 0
 		for sqlRowIter.HasNext() {
