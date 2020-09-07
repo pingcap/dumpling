@@ -126,6 +126,7 @@ func (s *testUtilSuite) TestWriteInsertInCsv(c *C) {
 	// test delimiter
 	bf.Reset()
 	opt.delimiter = quotationMark
+	tableIR = newMockTableIR("test", "employee", data, nil, colTypes)
 	err = WriteInsertInCsv(context.Background(), tableIR, bf, true, opt, UnspecifiedSize)
 	c.Assert(err, IsNil)
 	expected = "1,'male','bob@mail.com','020-1234',\\N\n" +
@@ -137,6 +138,7 @@ func (s *testUtilSuite) TestWriteInsertInCsv(c *C) {
 	// test separator
 	bf.Reset()
 	opt.separator = []byte(";")
+	tableIR = newMockTableIR("test", "employee", data, nil, colTypes)
 	err = WriteInsertInCsv(context.Background(), tableIR, bf, true, opt, UnspecifiedSize)
 	c.Assert(err, IsNil)
 	expected = "1;'male';'bob@mail.com';'020-1234';\\N\n" +
@@ -149,6 +151,7 @@ func (s *testUtilSuite) TestWriteInsertInCsv(c *C) {
 	bf.Reset()
 	opt.separator = []byte("&;,?")
 	opt.delimiter = []byte("ma")
+	tableIR = newMockTableIR("test", "employee", data, nil, colTypes)
 	tableIR.colNames = []string{"id", "gender", "email", "phone_number", "status"}
 	err = WriteInsertInCsv(context.Background(), tableIR, bf, false, opt, UnspecifiedSize)
 	c.Assert(err, IsNil)

@@ -279,39 +279,36 @@ func WriteInsertInCsv(pCtx context.Context, tblIR TableDataIR, w io.Writer, noHe
 	}
 	wp.currentFileSize += uint64(bf.Len())
 
-LOOP:
 	for fileRowIter.HasNext() {
-		for fileRowIter.HasNext() {
-			if err = fileRowIter.Decode(row); err != nil {
-				log.Error("scanning from sql.Row failed", zap.Error(err))
-				return err
-			}
+		if err = fileRowIter.Decode(row); err != nil {
+			log.Error("scanning from sql.Row failed", zap.Error(err))
+			return err
+		}
 
-			lastBfSize := bf.Len()
-			row.WriteToBufferInCsv(bf, escapeBackSlash, opt)
-			counter += 1
-			wp.currentFileSize += uint64(bf.Len()-lastBfSize) + 1 // 1 is for "\n"
+		lastBfSize := bf.Len()
+		row.WriteToBufferInCsv(bf, escapeBackSlash, opt)
+		counter += 1
+		wp.currentFileSize += uint64(bf.Len()-lastBfSize) + 1 // 1 is for "\n"
 
-			bf.WriteByte('\n')
-			if bf.Len() >= lengthLimit {
-				wp.input <- bf
-				bf = pool.Get().(*bytes.Buffer)
-				if bfCap := bf.Cap(); bfCap < lengthLimit {
-					bf.Grow(lengthLimit - bfCap)
-				}
+		bf.WriteByte('\n')
+		if bf.Len() >= lengthLimit {
+			wp.input <- bf
+			bf = pool.Get().(*bytes.Buffer)
+			if bfCap := bf.Cap(); bfCap < lengthLimit {
+				bf.Grow(lengthLimit - bfCap)
 			}
+		}
 
-			fileRowIter.Next()
-			select {
-			case <-pCtx.Done():
-				return pCtx.Err()
-			case err := <-wp.errCh:
-				return err
-			default:
-			}
-			if wp.ShouldSwitchFile() {
-				break LOOP
-			}
+		fileRowIter.Next()
+		select {
+		case <-pCtx.Done():
+			return pCtx.Err()
+		case err := <-wp.errCh:
+			return err
+		default:
+		}
+		if wp.ShouldSwitchFile() {
+			break
 		}
 	}
 

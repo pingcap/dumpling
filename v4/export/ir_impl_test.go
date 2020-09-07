@@ -85,7 +85,7 @@ func (s *testIRImplSuite) TestChunkRowIter(c *C) {
 		}
 	)
 
-	sqlRowIter := SQLRowIter(newRowIter(rows, 2))
+	sqlRowIter := newRowIter(rows, 2)
 
 	res := newSimpleRowReceiver(2)
 	wp := newWriterPipe(nil, testFileSize, testStatementSize)
@@ -111,7 +111,9 @@ func (s *testIRImplSuite) TestChunkRowIter(c *C) {
 	}
 
 	c.Assert(resSize, DeepEquals, expectedSize)
-	c.Assert(sqlRowIter.HasNext(), IsFalse)
+	c.Assert(sqlRowIter.HasNext(), IsTrue)
+	c.Assert(wp.ShouldSwitchFile(), IsTrue)
+	c.Assert(wp.ShouldSwitchStatement(), IsTrue)
 	rows.Close()
 	c.Assert(sqlRowIter.Decode(res), NotNil)
 	sqlRowIter.Next()

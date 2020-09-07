@@ -85,6 +85,7 @@ type tableData struct {
 	selectedField   string
 	specCmts        []string
 	escapeBackslash bool
+	SQLRowIter
 }
 
 func (td *tableData) Start(ctx context.Context, conn *sql.Conn) error {
@@ -129,7 +130,10 @@ func (td *tableData) ColumnCount() uint {
 }
 
 func (td *tableData) Rows() SQLRowIter {
-	return newRowIter(td.rows, len(td.colTypes))
+	if td.SQLRowIter == nil {
+		td.SQLRowIter = newRowIter(td.rows, len(td.colTypes))
+	}
+	return td.SQLRowIter
 }
 
 func (td *tableData) SelectedField() string {

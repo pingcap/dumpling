@@ -237,6 +237,7 @@ func (s *testDumpSuite) TestWriteTableDataWithStatementSize(c *C) {
 			"(4,'female','sarah@mail.com','020-1235','healthy');\n",
 	}
 
+	tableIR = newMockTableIR("te%/st", "employee", data, specCmts, colTypes)
 	c.Assert(writer.WriteTableData(ctx, tableIR), IsNil)
 	c.Assert(err, IsNil)
 	for p, expected := range cases {
