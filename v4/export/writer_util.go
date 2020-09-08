@@ -88,20 +88,12 @@ func (b *writerPipe) Error() error {
 }
 
 func (b *writerPipe) ShouldSwitchFile() bool {
-	if b.fileSizeLimit != UnspecifiedSize && b.currentFileSize >= b.fileSizeLimit {
-		return true
-	}
-	return false
+	return b.fileSizeLimit != UnspecifiedSize && b.currentFileSize >= b.fileSizeLimit
 }
 
 func (b *writerPipe) ShouldSwitchStatement() bool {
-	if b.fileSizeLimit != UnspecifiedSize && b.currentFileSize >= b.fileSizeLimit {
-		return true
-	}
-	if b.statementSizeLimit != UnspecifiedSize && b.currentStatementSize >= b.statementSizeLimit {
-		return true
-	}
-	return false
+	return (b.fileSizeLimit != UnspecifiedSize && b.currentFileSize >= b.fileSizeLimit) ||
+		(b.statementSizeLimit != UnspecifiedSize && b.currentStatementSize >= b.statementSizeLimit)
 }
 
 func WriteMeta(meta MetaIR, w io.StringWriter) error {
