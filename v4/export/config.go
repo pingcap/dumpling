@@ -1,6 +1,7 @@
 package export
 
 import (
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strings"
@@ -18,7 +19,7 @@ type Config struct {
 	Host      string
 	User      string
 	Port      int
-	Password  string
+	Password  string `json:"-"`
 	Security  struct {
 		CAPath   string
 		CertPath string
@@ -30,7 +31,7 @@ type Config struct {
 	LogLevel  string
 	LogFile   string
 	LogFormat string
-	Logger    *zap.Logger
+	Logger    *zap.Logger `json:"-"`
 
 	FileSize      uint64
 	StatementSize uint64
@@ -51,19 +52,21 @@ type Config struct {
 	CsvDelimiter  string
 	ChunkByRegion bool
 
-	TableFilter        filter.Filter
+	TableFilter        filter.Filter `json:"-"`
 	Rows               uint64
 	Where              string
 	FileType           string
+	CompleteInsert     bool
 	EscapeBackslash    bool
 	DumpEmptyDatabase  bool
-	OutputFileTemplate *template.Template
+	OutputFileTemplate *template.Template `json:"-"`
 	SessionParams      map[string]interface{}
+
+	PosAfterConnect bool
 }
 
 func DefaultConfig() *Config {
 	allFilter, _ := filter.Parse([]string{"*.*"})
-	tmpl := template.Must(template.New("filename").Parse("{{.DB}}.{{.Table}}.{{.Index}}"))
 	return &Config{
 		Databases:          nil,
 		Host:               "127.0.0.1",
@@ -93,11 +96,21 @@ func DefaultConfig() *Config {
 		TableFilter:        allFilter,
 		DumpEmptyDatabase:  true,
 		SessionParams:      make(map[string]interface{}),
-		OutputFileTemplate: tmpl,
+		OutputFileTemplate: DefaultOutputFileTemplate,
+		PosAfterConnect:    false,
 	}
 }
 
-func (conf *Config) getDSN(db string) string {
+func (config *Config) String() string {
+	cfg, err := json.Marshal(config)
+	if err != nil {
+		log.Error("marshal config to json", zap.Error(err))
+	}
+	return string(cfg)
+}
+
+// GetDSN generates DSN from Config
+func (conf *Config) GetDSN(db string) string {
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4", conf.User, conf.Password, conf.Host, conf.Port, db)
 	if len(conf.Security.CAPath) > 0 {
 		dsn += "&tls=dumpling-tls-target"

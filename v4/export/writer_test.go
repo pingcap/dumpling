@@ -7,7 +7,6 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
-	"text/template"
 
 	. "github.com/pingcap/check"
 )
@@ -67,8 +66,9 @@ func (s *testDumpSuite) TestWriteTableData(c *C) {
 	config.OutputDirPath = dir
 	ctx := context.Background()
 
-	writer, err := NewSimpleWriter(config)
+	simpleWriter, err := NewSimpleWriter(config)
 	c.Assert(err, IsNil)
+	writer := SQLWriter{SimpleWriter: simpleWriter}
 
 	data := [][]driver.Value{
 		{"1", "male", "bob@mail.com", "020-1234", nil},
@@ -110,9 +110,17 @@ func (s *testDumpSuite) TestWriteTableDataWithFileSize(c *C) {
 	config.OutputDirPath = dir
 	config.FileSize = 50
 	ctx := context.Background()
+	specCmts := []string{
+		"/*!40101 SET NAMES binary*/;",
+		"/*!40014 SET FOREIGN_KEY_CHECKS=0*/;",
+	}
+	config.FileSize += uint64(len(specCmts[0]) + 1)
+	config.FileSize += uint64(len(specCmts[1]) + 1)
+	config.FileSize += uint64(len("INSERT INTO `employees` VALUES\n"))
 
-	writer, err := NewSimpleWriter(config)
+	simpleWriter, err := NewSimpleWriter(config)
 	c.Assert(err, IsNil)
+	writer := SQLWriter{SimpleWriter: simpleWriter}
 
 	data := [][]driver.Value{
 		{"1", "male", "bob@mail.com", "020-1234", nil},
@@ -121,10 +129,6 @@ func (s *testDumpSuite) TestWriteTableDataWithFileSize(c *C) {
 		{"4", "female", "sarah@mail.com", "020-1235", "healthy"},
 	}
 	colTypes := []string{"INT", "SET", "VARCHAR", "VARCHAR", "TEXT"}
-	specCmts := []string{
-		"/*!40101 SET NAMES binary*/;",
-		"/*!40014 SET FOREIGN_KEY_CHECKS=0*/;",
-	}
 	tableIR := newMockTableIR("test", "employee", data, specCmts, colTypes)
 	err = writer.WriteTableData(ctx, tableIR)
 	c.Assert(err, IsNil)
@@ -159,13 +163,15 @@ func (s *testDumpSuite) TestWriteTableDataWithStatementSize(c *C) {
 	config := DefaultConfig()
 	config.OutputDirPath = dir
 	config.StatementSize = 50
-	config.OutputFileTemplate, err = template.New("filename").Parse("specified-name")
+	config.StatementSize += uint64(len("INSERT INTO `employee` VALUES\n"))
+	config.OutputFileTemplate, err = ParseOutputFileTemplate("specified-name")
 	c.Assert(err, IsNil)
 	ctx := context.Background()
 	defer os.RemoveAll(config.OutputDirPath)
 
-	writer, err := NewSimpleWriter(config)
+	simpleWriter, err := NewSimpleWriter(config)
 	c.Assert(err, IsNil)
+	writer := SQLWriter{SimpleWriter: simpleWriter}
 
 	data := [][]driver.Value{
 		{"1", "male", "bob@mail.com", "020-1234", nil},
@@ -178,7 +184,7 @@ func (s *testDumpSuite) TestWriteTableDataWithStatementSize(c *C) {
 		"/*!40101 SET NAMES binary*/;",
 		"/*!40014 SET FOREIGN_KEY_CHECKS=0*/;",
 	}
-	tableIR := newMockTableIR("test", "employee", data, specCmts, colTypes)
+	tableIR := newMockTableIR("te%/st", "employee", data, specCmts, colTypes)
 	err = writer.WriteTableData(ctx, tableIR)
 	c.Assert(err, IsNil)
 
@@ -204,10 +210,13 @@ func (s *testDumpSuite) TestWriteTableDataWithStatementSize(c *C) {
 	}
 
 	// with file size and statement size
-	config.FileSize = 90
-	config.StatementSize = 30
+	config.FileSize = 204
+	config.StatementSize = 95
+	config.FileSize += uint64(len(specCmts[0]) + 1)
+	config.FileSize += uint64(len(specCmts[1]) + 1)
+	config.StatementSize += uint64(len("INSERT INTO `employee` VALUES\n"))
 	// test specifying filename format
-	config.OutputFileTemplate, err = template.New("filename").Parse("{{.Index}}-{{.Table}}-{{.DB}}")
+	config.OutputFileTemplate, err = ParseOutputFileTemplate("{{.Index}}-{{.Table}}-{{fn .DB}}")
 	c.Assert(err, IsNil)
 	os.RemoveAll(config.OutputDirPath)
 	config.OutputDirPath, err = ioutil.TempDir("", "dumpling")
@@ -215,20 +224,20 @@ func (s *testDumpSuite) TestWriteTableDataWithStatementSize(c *C) {
 	c.Assert(err, IsNil)
 
 	cases = map[string]string{
-		"0-employee-test.sql": "/*!40101 SET NAMES binary*/;\n" +
+		"0-employee-te%25%2Fst.sql": "/*!40101 SET NAMES binary*/;\n" +
 			"/*!40014 SET FOREIGN_KEY_CHECKS=0*/;\n" +
 			"INSERT INTO `employee` VALUES\n" +
 			"(1,'male','bob@mail.com','020-1234',NULL),\n" +
 			"(2,'female','sarah@mail.com','020-1253','healthy');\n" +
 			"INSERT INTO `employee` VALUES\n" +
 			"(3,'male','john@mail.com','020-1256','healthy');\n",
-		"1-employee-test.sql": "/*!40101 SET NAMES binary*/;\n" +
+		"1-employee-te%25%2Fst.sql": "/*!40101 SET NAMES binary*/;\n" +
 			"/*!40014 SET FOREIGN_KEY_CHECKS=0*/;\n" +
 			"INSERT INTO `employee` VALUES\n" +
 			"(4,'female','sarah@mail.com','020-1235','healthy');\n",
 	}
 
-	tableIR = newMockTableIR("test", "employee", data, specCmts, colTypes)
+	tableIR = newMockTableIR("te%/st", "employee", data, specCmts, colTypes)
 	c.Assert(writer.WriteTableData(ctx, tableIR), IsNil)
 	c.Assert(err, IsNil)
 	for p, expected := range cases {

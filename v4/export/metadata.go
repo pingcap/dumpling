@@ -2,6 +2,7 @@ package export
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -46,9 +47,13 @@ func (m *globalMetadata) recordFinishTime(t time.Time) {
 	m.buffer.WriteString("Finished dump at: " + t.Format(metadataTimeLayout) + "\n")
 }
 
-func (m *globalMetadata) recordGlobalMetaData(db *sql.DB, serverType ServerType) error {
+func (m *globalMetadata) recordGlobalMetaData(db *sql.Conn, serverType ServerType, afterConn bool) error {
 	// get master status info
-	m.buffer.WriteString("SHOW MASTER STATUS:\n")
+	m.buffer.WriteString("SHOW MASTER STATUS:")
+	if afterConn {
+		m.buffer.WriteString(" /* AFTER CONNECTION POOL ESTABLISHED */")
+	}
+	m.buffer.WriteString("\n")
 	switch serverType {
 	// For MySQL:
 	// mysql> SHOW MASTER STATUS;
@@ -107,7 +112,7 @@ func (m *globalMetadata) recordGlobalMetaData(db *sql.DB, serverType ServerType)
 			m.buffer.WriteString("\tPos: " + pos + "\n")
 		}
 		var gtidSet string
-		err = db.QueryRow("SELECT @@global.gtid_binlog_pos").Scan(&gtidSet)
+		err = db.QueryRowContext(context.Background(), "SELECT @@global.gtid_binlog_pos").Scan(&gtidSet)
 		if err != nil {
 			return err
 		}
@@ -119,6 +124,11 @@ func (m *globalMetadata) recordGlobalMetaData(db *sql.DB, serverType ServerType)
 	}
 	m.buffer.WriteString("\n")
 	if serverType == ServerTypeTiDB {
+		return nil
+	}
+
+	// omit follower status if called after connection pool established
+	if afterConn {
 		return nil
 	}
 	// get follower status info
@@ -142,7 +152,7 @@ func (m *globalMetadata) recordGlobalMetaData(db *sql.DB, serverType ServerType)
 		if err != nil {
 			return err
 		}
-		data := make([]string, len(cols))
+		data := make([]sql.NullString, len(cols))
 		args := make([]interface{}, 0, len(cols))
 		for i := range data {
 			args = append(args, &data[i])
@@ -152,18 +162,20 @@ func (m *globalMetadata) recordGlobalMetaData(db *sql.DB, serverType ServerType)
 		}
 		var connName, pos, logFile, host, gtidSet string
 		for i, col := range cols {
-			col = strings.ToLower(col)
-			switch col {
-			case "connection_name":
-				connName = data[i]
-			case "exec_master_log_pos":
-				pos = data[i]
-			case "relay_master_log_file":
-				logFile = data[i]
-			case "master_host":
-				host = data[i]
-			case "executed_gtid_set":
-				gtidSet = data[i]
+			if data[i].Valid {
+				col = strings.ToLower(col)
+				switch col {
+				case "connection_name":
+					connName = data[i].String
+				case "exec_master_log_pos":
+					pos = data[i].String
+				case "relay_master_log_file":
+					logFile = data[i].String
+				case "master_host":
+					host = data[i].String
+				case "executed_gtid_set":
+					gtidSet = data[i].String
+				}
 			}
 		}
 		if len(host) > 0 {

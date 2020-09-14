@@ -2,6 +2,8 @@ package export
 
 import (
 	"database/sql"
+	"fmt"
+	"regexp"
 	"strings"
 	"text/template"
 
@@ -10,6 +12,63 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-tools/pkg/utils"
 )
+
+const (
+	outputFileTemplateSchema = "schema"
+	outputFileTemplateTable  = "table"
+	outputFileTemplateData   = "data"
+
+	defaultOutputFileTemplateBase = `
+		{{- define "objectName" -}}
+			{{fn .DB}}.{{fn .Table}}
+		{{- end -}}
+		{{- define "schema" -}}
+			{{fn .DB}}-schema-create
+		{{- end -}}
+		{{- define "event" -}}
+			{{template "objectName" .}}-schema-post
+		{{- end -}}
+		{{- define "function" -}}
+			{{template "objectName" .}}-schema-post
+		{{- end -}}
+		{{- define "procedure" -}}
+			{{template "objectName" .}}-schema-post
+		{{- end -}}
+		{{- define "sequence" -}}
+			{{template "objectName" .}}-schema-sequence
+		{{- end -}}
+		{{- define "trigger" -}}
+			{{template "objectName" .}}-schema-triggers
+		{{- end -}}
+		{{- define "view" -}}
+			{{template "objectName" .}}-schema-view
+		{{- end -}}
+		{{- define "table" -}}
+			{{template "objectName" .}}-schema
+		{{- end -}}
+		{{- define "data" -}}
+			{{template "objectName" .}}.{{.Index}}
+		{{- end -}}
+	`
+
+	DefaultAnonymousOutputFileTemplateText = "result.{{.Index}}"
+)
+
+var filenameEscapeRegexp = regexp.MustCompile(`[\x00-\x1f%"*./:<>?\\|]|-(?i:schema)`)
+var DefaultOutputFileTemplate = template.Must(template.New("data").
+	Option("missingkey=error").
+	Funcs(template.FuncMap{
+		"fn": func(input string) string {
+			return filenameEscapeRegexp.ReplaceAllStringFunc(input, func(match string) string {
+				return fmt.Sprintf("%%%02X%s", match[0], match[1:])
+			})
+		},
+	}).
+	Parse(defaultOutputFileTemplateBase))
+
+func ParseOutputFileTemplate(text string) (*template.Template, error) {
+	return template.Must(DefaultOutputFileTemplate.Clone()).Parse(text)
+}
 
 func adjustConfig(conf *Config) error {
 	// Init logger
@@ -46,11 +105,7 @@ func adjustConfig(conf *Config) error {
 		conf.SessionParams = make(map[string]interface{})
 	}
 	if conf.OutputFileTemplate == nil {
-		var err error
-		conf.OutputFileTemplate, err = template.New("filename").Parse("{{.DB}}.{{.Table}}.{{.Index}}")
-		if err != nil {
-			return err
-		}
+		conf.OutputFileTemplate = DefaultOutputFileTemplate
 	}
 
 	return nil
@@ -64,7 +119,7 @@ func detectServerInfo(db *sql.DB) (ServerInfo, error) {
 	return ParseServerInfo(versionStr), nil
 }
 
-func prepareDumpingDatabases(conf *Config, db *sql.DB) ([]string, error) {
+func prepareDumpingDatabases(conf *Config, db *sql.Conn) ([]string, error) {
 	databases, err := ShowDatabases(db)
 	if len(conf.Databases) == 0 {
 		return databases, err
@@ -86,12 +141,12 @@ func prepareDumpingDatabases(conf *Config, db *sql.DB) ([]string, error) {
 	}
 }
 
-func listAllTables(db *sql.DB, databaseNames []string) (DatabaseTables, error) {
+func listAllTables(db *sql.Conn, databaseNames []string) (DatabaseTables, error) {
 	log.Debug("list all the tables")
 	return ListAllDatabasesTables(db, databaseNames, TableTypeBase)
 }
 
-func listAllViews(db *sql.DB, databaseNames []string) (DatabaseTables, error) {
+func listAllViews(db *sql.Conn, databaseNames []string) (DatabaseTables, error) {
 	log.Debug("list all the views")
 	return ListAllDatabasesTables(db, databaseNames, TableTypeView)
 }

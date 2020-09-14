@@ -50,74 +50,6 @@ func (iter *rowIter) HasNext() bool {
 	return iter.hasNext
 }
 
-func (iter *rowIter) HasNextSQLRowIter() bool {
-	return iter.hasNext
-}
-
-func (iter *rowIter) NextSQLRowIter() SQLRowIter {
-	return iter
-}
-
-type fileRowIter struct {
-	rowIter            SQLRowIter
-	fileSizeLimit      uint64
-	statementSizeLimit uint64
-
-	currentStatementSize uint64
-	currentFileSize      uint64
-}
-
-func (c *fileRowIter) Close() error {
-	return c.rowIter.Close()
-}
-
-func (c *fileRowIter) Decode(row RowReceiver) error {
-	err := c.rowIter.Decode(row)
-	if err != nil {
-		return err
-	}
-	size := row.ReportSize()
-	c.currentFileSize += size
-	c.currentStatementSize += size
-	return nil
-}
-
-func (c *fileRowIter) Error() error {
-	return c.rowIter.Error()
-}
-
-func (c *fileRowIter) Next() {
-	c.rowIter.Next()
-}
-
-func (c *fileRowIter) HasNext() bool {
-	if c.fileSizeLimit != UnspecifiedSize && c.currentFileSize >= c.fileSizeLimit {
-		return false
-	}
-
-	if c.statementSizeLimit != UnspecifiedSize && c.currentStatementSize >= c.statementSizeLimit {
-		return false
-	}
-	return c.rowIter.HasNext()
-}
-
-func (c *fileRowIter) HasNextSQLRowIter() bool {
-	if c.fileSizeLimit != UnspecifiedSize && c.currentFileSize >= c.fileSizeLimit {
-		return false
-	}
-	return c.rowIter.HasNext()
-}
-
-func (c *fileRowIter) NextSQLRowIter() SQLRowIter {
-	return &fileRowIter{
-		rowIter:              c.rowIter,
-		fileSizeLimit:        c.fileSizeLimit,
-		statementSizeLimit:   c.statementSizeLimit,
-		currentFileSize:      c.currentFileSize,
-		currentStatementSize: 0,
-	}
-}
-
 type stringIter struct {
 	idx int
 	ss  []string
@@ -146,12 +78,23 @@ func (m *stringIter) HasNext() bool {
 type tableData struct {
 	database        string
 	table           string
+	query           string
 	chunkIndex      int
 	rows            *sql.Rows
 	colTypes        []*sql.ColumnType
 	selectedField   string
 	specCmts        []string
 	escapeBackslash bool
+	SQLRowIter
+}
+
+func (td *tableData) Start(ctx context.Context, conn *sql.Conn) error {
+	rows, err := conn.QueryContext(ctx, td.query)
+	if err != nil {
+		return err
+	}
+	td.rows = rows
+	return nil
 }
 
 func (td *tableData) ColumnTypes() []string {
@@ -187,7 +130,10 @@ func (td *tableData) ColumnCount() uint {
 }
 
 func (td *tableData) Rows() SQLRowIter {
-	return newRowIter(td.rows, len(td.colTypes))
+	if td.SQLRowIter == nil {
+		td.SQLRowIter = newRowIter(td.rows, len(td.colTypes))
+	}
+	return td.SQLRowIter
 }
 
 func (td *tableData) SelectedField() string {
@@ -205,43 +151,12 @@ func (td *tableData) EscapeBackSlash() bool {
 	return td.escapeBackslash
 }
 
-type tableDataChunks struct {
-	TableDataIR
-	rows               SQLRowIter
-	chunkSizeLimit     uint64
-	statementSizeLimit uint64
-}
-
-func (t *tableDataChunks) Rows() SQLRowIter {
-	if t.rows == nil {
-		t.rows = t.TableDataIR.Rows()
-	}
-
-	return &fileRowIter{
-		rowIter:            t.rows,
-		statementSizeLimit: t.statementSizeLimit,
-		fileSizeLimit:      t.chunkSizeLimit,
-	}
-}
-
-func (t *tableDataChunks) EscapeBackSlash() bool {
-	return t.TableDataIR.EscapeBackSlash()
-}
-
-func buildChunksIter(td TableDataIR, chunkSize uint64, statementSize uint64) *tableDataChunks {
-	return &tableDataChunks{
-		TableDataIR:        td,
-		chunkSizeLimit:     chunkSize,
-		statementSizeLimit: statementSize,
-	}
-}
-
 func splitTableDataIntoChunks(
 	ctx context.Context,
 	tableDataIRCh chan TableDataIR,
 	errCh chan error,
 	linear chan struct{},
-	dbName, tableName string, db *sql.DB, conf *Config) {
+	dbName, tableName string, db *sql.Conn, conf *Config) {
 	if conf.ChunkByRegion {
 		splitTableDataIntoChunksByRegion(
 			ctx,
@@ -251,6 +166,7 @@ func splitTableDataIntoChunks(
 			dbName, tableName, db, conf)
 		return
 	}
+
 	field, err := pickupPossibleField(dbName, tableName, db, conf)
 	if err != nil {
 		errCh <- withStack(err)
@@ -272,7 +188,7 @@ func splitTableDataIntoChunks(
 
 	var smin sql.NullString
 	var smax sql.NullString
-	row := db.QueryRow(query)
+	row := db.QueryRowContext(ctx, query)
 	err = row.Scan(&smin, &smax)
 	if err != nil {
 		log.Error("split chunks - get max min failed", zap.String("query", query), zap.Error(err))
@@ -314,7 +230,7 @@ func splitTableDataIntoChunks(
 	estimatedStep := (max-min)/estimatedChunks + 1
 	cutoff := min
 
-	selectedField, err := buildSelectField(db, dbName, tableName)
+	selectedField, err := buildSelectField(db, dbName, tableName, conf.CompleteInsert)
 	if err != nil {
 		errCh <- withStack(err)
 		return
@@ -338,22 +254,18 @@ LOOP:
 		chunkIndex += 1
 		where := fmt.Sprintf("%s(`%s` >= %d AND `%s` < %d)", nullValueCondition, escapeString(field), cutoff, escapeString(field), cutoff+estimatedStep)
 		query = buildSelectQuery(dbName, tableName, selectedField, buildWhereCondition(conf, where), orderByClause)
-		rows, err := db.Query(query)
-		if err != nil {
-			errCh <- errors.WithMessage(err, query)
-			return
-		}
 		if len(nullValueCondition) > 0 {
 			nullValueCondition = ""
 		}
 
 		td := &tableData{
-			database:      dbName,
-			table:         tableName,
-			rows:          rows,
-			chunkIndex:    chunkIndex,
-			colTypes:      colTypes,
-			selectedField: selectedField,
+			database:        dbName,
+			table:           tableName,
+			query:           query,
+			chunkIndex:      chunkIndex,
+			colTypes:        colTypes,
+			selectedField:   selectedField,
+			escapeBackslash: conf.EscapeBackslash,
 			specCmts: []string{
 				"/*!40101 SET NAMES binary*/;",
 			},
@@ -373,7 +285,7 @@ func splitTableDataIntoChunksByRegion(
 	tableDataIRCh chan TableDataIR,
 	errCh chan error,
 	linear chan struct{},
-	dbName, tableName string, db *sql.DB, conf *Config) {
+	dbName, tableName string, db *sql.Conn, conf *Config) {
 	if conf.ServerInfo.ServerType != ServerTypeTiDB {
 		errCh <- errors.Errorf("can't split chunks by region info for database %s except TiDB", serverTypeString[conf.ServerInfo.ServerType])
 		return
@@ -389,7 +301,7 @@ func splitTableDataIntoChunksByRegion(
 		return
 	}
 
-	startKeys, endKeys, estimatedCounts, err := getTableRegionInfo(db, dbName, tableName)
+	startKeys, endKeys, estimatedCounts, err := getTableRegionInfo(ctx, db, dbName, tableName)
 	if err != nil {
 		errCh <- errors.WithMessage(err, "fail to get TiDB table regions info")
 		return
@@ -401,7 +313,7 @@ func splitTableDataIntoChunksByRegion(
 		return
 	}
 
-	selectedField, err := buildSelectField(db, dbName, tableName)
+	selectedField, err := buildSelectField(db, dbName, tableName, conf.CompleteInsert)
 	if err != nil {
 		errCh <- withStack(err)
 		return
@@ -425,11 +337,6 @@ LOOP:
 		chunkIndex += 1
 		where := fmt.Sprintf("%s(%s)", nullValueCondition, whereCondition)
 		query := buildSelectQuery(dbName, tableName, selectedField, buildWhereCondition(conf, where), orderByClause)
-		rows, err := db.Query(query)
-		if err != nil {
-			errCh <- errors.WithMessage(err, query)
-			return
-		}
 		if len(nullValueCondition) > 0 {
 			nullValueCondition = ""
 		}
@@ -437,7 +344,7 @@ LOOP:
 		td := &tableData{
 			database:      dbName,
 			table:         tableName,
-			rows:          rows,
+			query:         query,
 			chunkIndex:    chunkIndex,
 			colTypes:      colTypes,
 			selectedField: selectedField,

@@ -2,11 +2,13 @@ package export
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
 )
 
 // TableDataIR is table data intermediate representation.
 type TableDataIR interface {
+	Start(context.Context, *sql.Conn) error
 	DatabaseName() string
 	TableName() string
 	ChunkIndex() int
@@ -26,8 +28,6 @@ type SQLRowIter interface {
 	Next()
 	Error() error
 	HasNext() bool
-	HasNextSQLRowIter() bool
-	NextSQLRowIter() SQLRowIter
 	// release SQLRowIter
 	Close() error
 }
@@ -44,7 +44,6 @@ type Stringer interface {
 
 type RowReceiver interface {
 	BindAddress([]interface{})
-	ReportSize() uint64
 }
 
 func decodeFromRows(rows *sql.Rows, args []interface{}, row RowReceiver) error {
