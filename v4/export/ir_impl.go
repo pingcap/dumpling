@@ -1,15 +1,23 @@
 package export
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/dumpling/v4/log"
+)
+
+const (
+	clusterHandle = "clusterHandle="
+	tidbRowID     = "_tidb_rowid="
+	indexID       = "indexID="
 )
 
 // rowIter implements the SQLRowIter interface.
@@ -290,24 +298,18 @@ func splitTableDataIntoChunksByRegion(
 		errCh <- errors.Errorf("can't split chunks by region info for database %s except TiDB", serverTypeString[conf.ServerInfo.ServerType])
 		return
 	}
-	field, err := pickupTiDBPKHandle(dbName, tableName, db)
-	if err != nil {
-		errCh <- errors.WithMessage(err, "fail to pick TiDB pk handle")
-		return
-	}
-	if field == "" {
-		log.Debug("skip concurrent dump due to no proper pk handle", zap.String("field", field))
-		linear <- struct{}{}
-		return
-	}
 
-	startKeys, endKeys, estimatedCounts, err := getTableRegionInfo(ctx, db, dbName, tableName)
+	startKeys, estimatedCounts, err := getTableRegionInfo(ctx, db, dbName, tableName)
 	if err != nil {
 		errCh <- errors.WithMessage(err, "fail to get TiDB table regions info")
 		return
 	}
 
-	whereConditions := getWhereConditions(startKeys, endKeys, estimatedCounts, field, conf.Rows)
+	whereConditions, err := getWhereConditions(ctx, db, startKeys, estimatedCounts, conf.Rows, dbName, tableName)
+	if err != nil {
+		errCh <- errors.WithMessage(err, "fail to generate whereConditions")
+		return
+	}
 	if len(whereConditions) <= 1 {
 		linear <- struct{}{}
 		return
@@ -331,15 +333,10 @@ func splitTableDataIntoChunksByRegion(
 	}
 
 	chunkIndex := 0
-	nullValueCondition := fmt.Sprintf("`%s` IS NULL OR ", escapeString(field))
 LOOP:
 	for _, whereCondition := range whereConditions {
 		chunkIndex += 1
-		where := fmt.Sprintf("%s(%s)", nullValueCondition, whereCondition)
-		query := buildSelectQuery(dbName, tableName, selectedField, buildWhereCondition(conf, where), orderByClause)
-		if len(nullValueCondition) > 0 {
-			nullValueCondition = ""
-		}
+		query := buildSelectQuery(dbName, tableName, selectedField, buildWhereCondition(conf, whereCondition), orderByClause)
 
 		td := &tableData{
 			database:        dbName,
@@ -362,35 +359,107 @@ LOOP:
 	close(tableDataIRCh)
 }
 
-func getWhereConditions(startKeys, endKeys []string, counts []uint64, field string, rows uint64) []string {
+func tryDecodeRowKey(ctx context.Context, db *sql.Conn, key string) ([]string, error) {
+	var (
+		decodedRowKey string
+		p             int
+	)
+	row := db.QueryRowContext(ctx, fmt.Sprintf("select tidb_decode_key('%s')", key))
+	err := row.Scan(&decodedRowKey)
+	if err != nil {
+		return nil, err
+	}
+	if p = strings.Index(decodedRowKey, clusterHandle); p != -1 {
+		p += len(clusterHandle)
+		decodedRowKey = decodedRowKey[p:]
+		if len(decodedRowKey) <= 2 {
+			return nil, nil
+		}
+		keys := strings.Split(decodedRowKey[1:len(decodedRowKey)-1], ", ")
+		return keys, nil
+	} else if p = strings.Index(decodedRowKey, tidbRowID); p != -1 {
+		p += len(tidbRowID)
+		return []string{decodedRowKey[p:]}, nil
+	} else if p = strings.Index(decodedRowKey, indexID); p != -1 {
+		return nil, nil
+	}
+	return []string{"_tidb_rowid"}, nil
+}
+
+func getWhereConditions(ctx context.Context, db *sql.Conn, startKeys []string, counts []uint64, confRows uint64, dbName, tableName string) ([]string, error) {
 	whereConditions := make([]string, 0)
-	var cutoff uint64 = 0
+	var (
+		cutoff     uint64 = 0
+		columnName []string
+		dataType   []string
+	)
 	lastStartKey := ""
+	rows, err := db.QueryContext(ctx, "SELECT s.COLUMN_NAME,t.DATA_TYPE FROM INFORMATION_SCHEMA.TIDB_INDEXES s, INFORMATION_SCHEMA.COLUMNS t WHERE s.KEY_NAME = 'PRIMARY' and s.TABLE_SCHEMA=t.TABLE_SCHEMA AND s.TABLE_NAME=t.TABLE_NAME AND s.COLUMN_NAME = t.COLUMN_NAME AND s.TABLE_SCHEMA=? AND s.TABLE_NAME=? ORDER BY s.SEQ_IN_INDEX;", dbName, tableName)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var col, dType string
+	for rows.Next() {
+		err = rows.Scan(&col, &dType)
+		if err != nil {
+			return nil, err
+		}
+		columnName = append(columnName, fmt.Sprintf("`%s`", escapeString(col)))
+		dataType = append(dataType, dType)
+	}
+	rows.Close()
+	if len(columnName) == 0 {
+		columnName = append(columnName, "_tidb_rowid")
+		dataType = append(dataType, "int")
+	}
+	field := strings.Join(columnName, ",")
+
 	generateWhereCondition := func(endKey string) {
 		where := ""
 		and := ""
 		if lastStartKey != "" {
-			where += fmt.Sprintf("`%s` >= %s", escapeString(field), lastStartKey)
+			where += fmt.Sprintf("(%s) >= (%s)", field, lastStartKey)
 			and = " AND "
 		}
 		if endKey != "" {
 			where += and
-			where += fmt.Sprintf("`%s` < %s", escapeString(field), endKey)
+			where += fmt.Sprintf("(%s) < (%s)", field, endKey)
 		}
 		lastStartKey = endKey
 		cutoff = 0
 		whereConditions = append(whereConditions, where)
 	}
-	for i := range endKeys {
-		cutoff += counts[i]
-		if cutoff >= rows {
-			generateWhereCondition(endKeys[i])
+	for i := 1; i < len(startKeys); i++ {
+		keys, err := tryDecodeRowKey(ctx, db, startKeys[i])
+		if err != nil {
+			return nil, err
+		}
+		// omit indexID
+		if len(dataType) == 0 {
+			continue
+		}
+		cutoff += counts[i-1]
+		if cutoff >= confRows {
+			if len(dataType) != len(keys) {
+				return nil, errors.Errorf("invalid column names %s and keys %s", columnName, keys)
+			}
+			var bf bytes.Buffer
+			for j := range keys {
+				if _, ok := dataTypeStringMap[strings.ToUpper(dataType[j])]; ok {
+					bf.Reset()
+					escape([]byte(keys[j]), &bf, nil)
+					keys[j] = fmt.Sprintf("'%s'", bf.String())
+				}
+			}
+			generateWhereCondition(strings.Join(keys, ","))
 		}
 	}
+	cutoff += counts[len(startKeys)-1]
 	if cutoff > 0 {
 		generateWhereCondition("")
 	}
-	return whereConditions
+	return whereConditions, nil
 }
 
 type metaData struct {

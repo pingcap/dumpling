@@ -13,8 +13,10 @@ var quotationMark = []byte{'\''}
 var doubleQuotationMark = []byte{'"'}
 
 func init() {
+	dataTypeStringMap = make(map[string]interface{}, len(dataTypeString))
 	for _, s := range dataTypeString {
 		colTypeRowReceiverMap[s] = SQLTypeStringMaker
+		dataTypeStringMap[s] = struct{}{}
 	}
 	for _, s := range dataTypeNum {
 		colTypeRowReceiverMap[s] = SQLTypeNumberMaker
@@ -30,6 +32,8 @@ var dataTypeString = []string{
 	"TEXT", "TINYTEXT", "MEDIUMTEXT", "LONGTEXT",
 	"ENUM", "SET", "JSON",
 }
+
+var dataTypeStringMap map[string]interface{}
 
 var dataTypeNum = []string{
 	"INTEGER", "BIGINT", "TINYINT", "SMALLINT", "MEDIUMINT",

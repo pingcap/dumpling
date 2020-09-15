@@ -713,51 +713,25 @@ func getRowId(s string) string {
 	return ""
 }
 
-func getTableRegionInfo(ctx context.Context, db *sql.Conn, schema, table string) (startKeys []string, endKeys []string, counts []uint64, err error) {
+func getTableRegionInfo(ctx context.Context, db *sql.Conn, schema, table string) (startKeys []string, counts []uint64, err error) {
 	startKeys = make([]string, 0)
-	endKeys = make([]string, 0)
 	counts = make([]uint64, 0)
-	rows, err := db.QueryContext(ctx, fmt.Sprintf("SHOW TABLE `%s`.`%s` REGIONS", escapeString(schema), escapeString(table)))
+	rows, err := db.QueryContext(ctx, "SELECT START_KEY, APPROXIMATE_KEYS from INFORMATION_SCHEMA.TIKV_REGION_STATUS s, INFORMATION_SCHEMA.TABLES t WHERE s.TABLE_ID = t.TIDB_TABLE_ID AND t.TABLE_SCHEMA = ? AND t.TABLE_NAME = ? AND IS_INDEX = 0 ORDER BY START_KEY;", schema, table)
 	if err != nil {
 		return
 	}
 	defer rows.Close()
-	columns, err := rows.Columns()
-	if err != nil {
-		return
-	}
-	colVals := make([]sql.NullString, len(columns))
-	args := make([]interface{}, len(columns))
-	for i := range columns {
-		args[i] = &colVals[i]
-	}
+	var (
+		startKey string
+		count    uint64
+	)
 	for rows.Next() {
-		err = rows.Scan(args...)
+		err = rows.Scan(&startKey, &count)
 		if err != nil {
 			return
 		}
-		startKey := ""
-		endKey := ""
-		var count uint64
-		for i, colName := range columns {
-			colName = strings.ToUpper(colName)
-			switch colName {
-			case "START_KEY":
-				startKey = getRowId(colVals[i].String)
-			case "END_KEY":
-				endKey = getRowId(colVals[i].String)
-			case "APPROXIMATE_KEYS":
-				count, err = strconv.ParseUint(colVals[i].String, 10, 64)
-				if err != nil {
-					return
-				}
-			}
-		}
-		if startKey == "" && endKey == "" {
-			continue
-		}
+
 		startKeys = append(startKeys, startKey)
-		endKeys = append(endKeys, endKey)
 		counts = append(counts, count)
 	}
 	return
