@@ -337,7 +337,8 @@ LOOP:
 	for _, whereCondition := range whereConditions {
 		chunkIndex += 1
 		query := buildSelectQuery(dbName, tableName, selectedField, buildWhereCondition(conf, whereCondition), orderByClause)
-
+		log.Debug("build region chunk query", zap.String("query", query), zap.Int("chunkIndex", chunkIndex),
+			zap.String("db", dbName), zap.String("table", tableName))
 		td := &tableData{
 			database:        dbName,
 			table:           tableName,

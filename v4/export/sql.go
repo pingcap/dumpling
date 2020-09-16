@@ -565,22 +565,6 @@ func pickupPossibleField(dbName, tableName string, db *sql.Conn, conf *Config) (
 	return "", nil
 }
 
-func pickupTiDBPKHandle(dbName, tableName string, db *sql.Conn) (string, error) {
-	ok, err := SelectTiDBRowID(db, dbName, tableName)
-	if err != nil {
-		return "", nil
-	}
-	if ok {
-		return "_tidb_rowid", nil
-	}
-	// try to use pk
-	fieldName, err := GetPrimaryKeyName(db, dbName, tableName)
-	if err != nil {
-		return "", err
-	}
-	return fieldName, nil
-}
-
 func estimateCount(dbName, tableName string, db *sql.Conn, field string, conf *Config) uint64 {
 	query := fmt.Sprintf("EXPLAIN SELECT `%s` FROM `%s`.`%s`", field, escapeString(dbName), escapeString(tableName))
 
@@ -699,24 +683,10 @@ func escapeString(s string) string {
 	return strings.ReplaceAll(s, "`", "``")
 }
 
-func getRowId(s string) string {
-	keys := strings.Split(s, "_")
-	for i, key := range keys {
-		if key == "r" {
-			if i+1 < len(keys) {
-				return keys[i+1]
-			} else {
-				break
-			}
-		}
-	}
-	return ""
-}
-
 func getTableRegionInfo(ctx context.Context, db *sql.Conn, schema, table string) (startKeys []string, counts []uint64, err error) {
 	startKeys = make([]string, 0)
 	counts = make([]uint64, 0)
-	rows, err := db.QueryContext(ctx, "SELECT START_KEY, APPROXIMATE_KEYS from INFORMATION_SCHEMA.TIKV_REGION_STATUS s, INFORMATION_SCHEMA.TABLES t WHERE s.TABLE_ID = t.TIDB_TABLE_ID AND t.TABLE_SCHEMA = ? AND t.TABLE_NAME = ? AND IS_INDEX = 0 ORDER BY START_KEY;", schema, table)
+	rows, err := db.QueryContext(ctx, "SELECT START_KEY, APPROXIMATE_KEYS from INFORMATION_SCHEMA.TIKV_REGION_STATUS s WHERE s.DB_NAME = ? AND s.TABLE_NAME = ? AND IS_INDEX = 0 ORDER BY START_KEY;", schema, table)
 	if err != nil {
 		return
 	}
