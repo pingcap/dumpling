@@ -436,10 +436,6 @@ func getWhereConditions(ctx context.Context, db *sql.Conn, startKeys []string, c
 		if err != nil {
 			return nil, err
 		}
-		// omit indexID
-		if len(dataType) == 0 {
-			continue
-		}
 		cutoff += counts[i-1]
 		if cutoff >= confRows {
 			if len(dataType) != len(keys) {
