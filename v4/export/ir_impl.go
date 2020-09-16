@@ -456,10 +456,7 @@ func getWhereConditions(ctx context.Context, db *sql.Conn, startKeys []string, c
 			generateWhereCondition(strings.Join(keys, ","))
 		}
 	}
-	cutoff += counts[len(startKeys)-1]
-	if cutoff > 0 {
-		generateWhereCondition("")
-	}
+	generateWhereCondition("")
 	return whereConditions, nil
 }
 
