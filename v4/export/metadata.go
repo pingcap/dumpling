@@ -6,15 +6,16 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"path"
 	"strings"
 	"time"
+
+	"github.com/c2fo/vfs/v5"
 )
 
 type globalMetadata struct {
 	buffer bytes.Buffer
 
-	filePath string
+	outputLoc vfs.Location
 }
 
 const (
@@ -28,10 +29,10 @@ const (
 	mariadbShowMasterStatusFieldNum = 4
 )
 
-func newGlobalMetadata(outputDir string) *globalMetadata {
+func newGlobalMetadata(outputLoc vfs.Location) *globalMetadata {
 	return &globalMetadata{
-		filePath: path.Join(outputDir, metadataPath),
-		buffer:   bytes.Buffer{},
+		outputLoc: outputLoc,
+		buffer:    bytes.Buffer{},
 	}
 }
 
@@ -190,7 +191,7 @@ func (m *globalMetadata) recordGlobalMetaData(db *sql.Conn, serverType ServerTyp
 }
 
 func (m *globalMetadata) writeGlobalMetaData() error {
-	fileWriter, tearDown, err := buildFileWriter(m.filePath)
+	fileWriter, tearDown, err := buildFileWriter(m.outputLoc, metadataPath)
 	if err != nil {
 		return err
 	}

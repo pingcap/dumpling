@@ -4,6 +4,8 @@ go 1.13
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.4.1
+	github.com/aws/aws-sdk-go v1.34.25
+	github.com/c2fo/vfs/v5 v5.5.4
 	github.com/coreos/go-semver v0.3.0
 	github.com/docker/go-units v0.4.0
 	github.com/dustin/go-humanize v0.0.0-20180421182945-02af3965c54e // indirect

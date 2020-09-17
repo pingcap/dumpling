@@ -6,12 +6,13 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 	"sync"
 
-	"github.com/pingcap/dumpling/v4/log"
+	"github.com/c2fo/vfs/v5"
 	"go.uber.org/zap"
+
+	"github.com/pingcap/dumpling/v4/log"
 )
 
 const lengthLimit = 1048576
@@ -343,20 +344,22 @@ func writeBytes(writer io.Writer, p []byte) error {
 		}
 		log.Error("writing failed",
 			zap.ByteString("string", p[:outputLength]),
+			zap.String("writer", fmt.Sprintf("%#v", writer)),
 			zap.Error(err))
 	}
 	return err
 }
 
-func buildFileWriter(path string) (io.StringWriter, func(), error) {
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0755)
+func buildFileWriter(location vfs.Location, path string) (io.StringWriter, func(), error) {
+	file, err := location.NewFile(path)
+	fullPath := location.URI() + path
 	if err != nil {
 		log.Error("open file failed",
-			zap.String("path", path),
+			zap.String("path", fullPath),
 			zap.Error(err))
 		return nil, nil, err
 	}
-	log.Debug("opened file", zap.String("path", path))
+	log.Debug("opened file", zap.String("path", fullPath))
 	buf := bufio.NewWriter(file)
 	tearDownRoutine := func() {
 		_ = buf.Flush()
@@ -365,24 +368,24 @@ func buildFileWriter(path string) (io.StringWriter, func(), error) {
 			return
 		}
 		log.Error("close file failed",
-			zap.String("path", path),
+			zap.String("path", fullPath),
 			zap.Error(err))
 	}
 	return buf, tearDownRoutine, nil
 }
 
-func buildInterceptFileWriter(path string) (io.Writer, func()) {
-	var file *os.File
+func buildInterceptFileWriter(loc vfs.Location, path string) (io.Writer, func()) {
+	var file vfs.File
 	fileWriter := &InterceptFileWriter{}
 	initRoutine := func() error {
-		f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0755)
+		f, err := loc.NewFile(path)
 		file = f
 		if err != nil {
 			log.Error("open file failed",
-				zap.String("path", path),
+				zap.String("path", loc.URI()+path),
 				zap.Error(err))
 		}
-		log.Debug("opened file", zap.String("path", path))
+		log.Debug("opened file", zap.String("path", f.URI()))
 		fileWriter.Writer = file
 		return err
 	}
@@ -394,12 +397,15 @@ func buildInterceptFileWriter(path string) (io.Writer, func()) {
 		}
 		log.Debug("tear down lazy file writer...")
 		err := file.Close()
-		if err == nil {
-			return
+		if err != nil {
+			log.Error("close file failed", zap.String("path", file.URI()))
 		}
-		log.Error("close file failed", zap.String("path", path))
 	}
 	return fileWriter, tearDownRoutine
+}
+
+func encodeFileName(path string) string {
+	return strings.ReplaceAll(path, "%", "%25")
 }
 
 type LazyStringWriter struct {

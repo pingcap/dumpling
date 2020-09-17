@@ -3,10 +3,9 @@ package export
 import (
 	"bytes"
 	"context"
-	"os"
-	"path"
 	"text/template"
 
+	"github.com/c2fo/vfs/v5"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/dumpling/v4/log"
@@ -24,7 +23,7 @@ type SimpleWriter struct {
 
 func NewSimpleWriter(config *Config) (SimpleWriter, error) {
 	sw := SimpleWriter{cfg: config}
-	return sw, os.MkdirAll(config.OutputDirPath, 0755)
+	return sw, nil
 }
 
 func (f SimpleWriter) WriteDatabaseMeta(ctx context.Context, db, createSQL string) error {
@@ -32,8 +31,7 @@ func (f SimpleWriter) WriteDatabaseMeta(ctx context.Context, db, createSQL strin
 	if err != nil {
 		return err
 	}
-	filePath := path.Join(f.cfg.OutputDirPath, fileName+".sql")
-	return writeMetaToFile(db, createSQL, filePath)
+	return writeMetaToFile(db, createSQL, f.cfg.OutputLocation(), fileName+".sql")
 }
 
 func (f SimpleWriter) WriteTableMeta(ctx context.Context, db, table, createSQL string) error {
@@ -41,8 +39,7 @@ func (f SimpleWriter) WriteTableMeta(ctx context.Context, db, table, createSQL s
 	if err != nil {
 		return err
 	}
-	filePath := path.Join(f.cfg.OutputDirPath, fileName+".sql")
-	return writeMetaToFile(db, createSQL, filePath)
+	return writeMetaToFile(db, createSQL, f.cfg.OutputLocation(), fileName+".sql")
 }
 
 type SQLWriter struct{ SimpleWriter }
@@ -68,9 +65,8 @@ func (f SQLWriter) WriteTableData(ctx context.Context, ir TableDataIR) error {
 	defer chunksIter.Rows().Close()
 
 	for {
-		filePath := path.Join(f.cfg.OutputDirPath, fileName)
-		fileWriter, tearDown := buildInterceptFileWriter(filePath)
-		err := WriteInsert(ctx, chunksIter, fileWriter, f.cfg.FileSize, f.cfg.StatementSize)
+		fileWriter, tearDown := buildInterceptFileWriter(f.cfg.OutputLocation(), fileName)
+		err = WriteInsert(ctx, chunksIter, fileWriter, f.cfg.FileSize, f.cfg.StatementSize)
 		tearDown()
 		if err != nil {
 			return err
@@ -94,8 +90,8 @@ func (f SQLWriter) WriteTableData(ctx context.Context, ir TableDataIR) error {
 	return nil
 }
 
-func writeMetaToFile(target, metaSQL, path string) error {
-	fileWriter, tearDown, err := buildFileWriter(path)
+func writeMetaToFile(target, metaSQL string, location vfs.Location, path string) error {
+	fileWriter, tearDown, err := buildFileWriter(location, path)
 	if err != nil {
 		return err
 	}
@@ -162,9 +158,8 @@ func (f CSVWriter) WriteTableData(ctx context.Context, ir TableDataIR) error {
 	}
 
 	for {
-		filePath := path.Join(f.cfg.OutputDirPath, fileName)
-		fileWriter, tearDown := buildInterceptFileWriter(filePath)
-		err := WriteInsertInCsv(ctx, chunksIter, fileWriter, f.cfg.NoHeader, opt, f.cfg.FileSize)
+		fileWriter, tearDown := buildInterceptFileWriter(f.cfg.OutputLocation(), fileName)
+		err = WriteInsertInCsv(ctx, chunksIter, fileWriter, f.cfg.NoHeader, opt, f.cfg.FileSize)
 		tearDown()
 		if err != nil {
 			return err

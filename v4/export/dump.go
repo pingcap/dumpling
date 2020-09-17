@@ -114,7 +114,7 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 		defer newPool.Close()
 	}
 
-	m := newGlobalMetadata(conf.OutputDirPath)
+	m := newGlobalMetadata(conf.OutputLocation())
 	// write metadata even if dump failed
 	defer m.writeGlobalMetaData()
 

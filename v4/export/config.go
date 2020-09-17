@@ -3,15 +3,26 @@ package export
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"text/template"
 	"time"
 
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/session"
+	awss3 "github.com/aws/aws-sdk-go/service/s3"
+	"github.com/c2fo/vfs/v5"
+	"github.com/c2fo/vfs/v5/backend"
+	"github.com/c2fo/vfs/v5/backend/s3"
+	"github.com/c2fo/vfs/v5/vfssimple"
 	"github.com/coreos/go-semver/semver"
-	"github.com/pingcap/dumpling/v4/log"
 	filter "github.com/pingcap/tidb-tools/pkg/table-filter"
 	"go.uber.org/zap"
+
+	"github.com/pingcap/dumpling/v4/log"
 )
 
 type Config struct {
@@ -62,6 +73,9 @@ type Config struct {
 	SessionParams      map[string]interface{}
 
 	PosAfterConnect bool
+
+	outputLocation     vfs.Location
+	outputLocationOnce sync.Once
 }
 
 func DefaultConfig() *Config {
@@ -115,6 +129,69 @@ func (conf *Config) GetDSN(db string) string {
 		dsn += "&tls=dumpling-tls-target"
 	}
 	return dsn
+}
+
+func (config *Config) OutputLocation() vfs.Location {
+	config.outputLocationOnce.Do(func() {
+		loc, err := config.doOutputLocation()
+		if err != nil {
+			panic(err)
+		}
+		config.outputLocation = loc
+	})
+	return config.outputLocation
+}
+
+func (config *Config) doOutputLocation() (vfs.Location, error) {
+	path := config.OutputDirPath
+	// TODO support other filesystems
+	if strings.HasPrefix(path, "s3://") {
+		return config.s3OutputLocation(path)
+	} else {
+		return config.fileOutputLocation(path)
+	}
+}
+
+func (config *Config) s3OutputLocation(path string) (vfs.Location, error) {
+	client, err := config.awsClient()
+	if err != nil {
+		return nil, err
+	}
+	fs := s3.NewFileSystem().WithClient(client)
+	backend.Register("s3", fs)
+	return vfssimple.NewLocation(ensureTrailingSlash(path))
+}
+
+func ensureTrailingSlash(path string) string {
+	if !strings.HasSuffix(path, "/") {
+		path = path + "/"
+	}
+	return path
+}
+
+func (config *Config) fileOutputLocation(path string) (vfs.Location, error) {
+	var err error
+	path, err = filepath.Abs(path)
+	if err != nil {
+		return nil, err
+	}
+	if !strings.HasPrefix(path, "file://") {
+		path = "file://" + path
+	}
+	return vfssimple.NewLocation(ensureTrailingSlash(path))
+}
+
+func (config *Config) awsClient() (*awss3.S3, error) {
+	cfg := aws.NewConfig()
+	endpoint := os.Getenv("DUMPLING_S3_ENDPOINT")
+	if endpoint != "" {
+		log.Info("using custom S3 endpoint",
+			zap.String("endpoint", endpoint))
+		cfg = cfg.WithEndpoint(endpoint).
+			WithS3ForcePathStyle(true)
+	}
+	s := session.Must(session.NewSession())
+	return awss3.New(s, cfg), nil
 }
 
 const (
