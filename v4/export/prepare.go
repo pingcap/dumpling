@@ -108,7 +108,7 @@ func adjustConfig(conf *Config) error {
 		conf.OutputFileTemplate = DefaultOutputFileTemplate
 	}
 	if conf.Sql != "" && conf.Where != "" {
-		return errors.New("can't specify both --where and --sql at the same time")
+		return errors.New("can't specify both --sql and --where at the same time. Please try to combine them into --sql")
 	}
 
 	return nil
