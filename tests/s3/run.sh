@@ -18,7 +18,7 @@ cleanup() {
 trap cleanup EXIT
 
 awslocal() {
-  PAGER=cat AWS_ACCESS_KEY_ID=foo AWS_SECRET_ACCESS_KEY=foo aws --endpoint http://localhost:5000 "$@"
+  PAGER=cat AWS_ACCESS_KEY_ID=foo AWS_SECRET_ACCESS_KEY=foo docker run --rm -it amazon/aws-cli --net=host --endpoint http://localhost:5000 "$@"
 }
 awslocal s3api create-bucket --bucket mybucket
 
