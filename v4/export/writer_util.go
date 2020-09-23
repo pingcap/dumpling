@@ -1,7 +1,6 @@
 package export
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"fmt"
@@ -9,13 +8,17 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/c2fo/vfs/v5"
 	"go.uber.org/zap"
+
+	"github.com/pingcap/br/pkg/storage"
 
 	"github.com/pingcap/dumpling/v4/log"
 )
 
 const lengthLimit = 1048576
+
+// TODO make this configurable, 5 mb is a good minimum size but on low latency/high bandwidth network you can go a lot bigger
+const hardcodedS3ChunkSize = 5 * 1024 * 1024
 
 var pool = sync.Pool{New: func() interface{} {
 	return &bytes.Buffer{}
@@ -32,10 +35,10 @@ type writerPipe struct {
 	fileSizeLimit      uint64
 	statementSizeLimit uint64
 
-	w io.Writer
+	w storage.Writer
 }
 
-func newWriterPipe(w io.Writer, fileSizeLimit, statementSizeLimit uint64) *writerPipe {
+func newWriterPipe(w storage.Writer, fileSizeLimit, statementSizeLimit uint64) *writerPipe {
 	return &writerPipe{
 		input:  make(chan *bytes.Buffer, 8),
 		closed: make(chan struct{}),
@@ -61,7 +64,7 @@ func (b *writerPipe) Run(ctx context.Context) {
 			if errOccurs {
 				continue
 			}
-			err := writeBytes(b.w, s.Bytes())
+			err := writeBytes(ctx, b.w, s.Bytes())
 			s.Reset()
 			pool.Put(s)
 			if err != nil {
@@ -97,17 +100,17 @@ func (b *writerPipe) ShouldSwitchStatement() bool {
 		(b.statementSizeLimit != UnspecifiedSize && b.currentStatementSize >= b.statementSizeLimit)
 }
 
-func WriteMeta(meta MetaIR, w io.StringWriter) error {
+func WriteMeta(ctx context.Context, meta MetaIR, w storage.Writer) error {
 	log.Debug("start dumping meta data", zap.String("target", meta.TargetName()))
 
 	specCmtIter := meta.SpecialComments()
 	for specCmtIter.HasNext() {
-		if err := write(w, fmt.Sprintf("%s\n", specCmtIter.Next())); err != nil {
+		if err := write(ctx, w, fmt.Sprintf("%s\n", specCmtIter.Next())); err != nil {
 			return err
 		}
 	}
 
-	if err := write(w, fmt.Sprintf("%s;\n", meta.MetaSQL())); err != nil {
+	if err := write(ctx, w, fmt.Sprintf("%s;\n", meta.MetaSQL())); err != nil {
 		return err
 	}
 
@@ -115,7 +118,7 @@ func WriteMeta(meta MetaIR, w io.StringWriter) error {
 	return nil
 }
 
-func WriteInsert(pCtx context.Context, tblIR TableDataIR, w io.Writer, fileSizeLimit, statementSizeLimit uint64) error {
+func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, fileSizeLimit, statementSizeLimit uint64) error {
 	fileRowIter := tblIR.Rows()
 	if !fileRowIter.HasNext() {
 		return nil
@@ -227,7 +230,7 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w io.Writer, fileSizeL
 	return wp.Error()
 }
 
-func WriteInsertInCsv(pCtx context.Context, tblIR TableDataIR, w io.Writer, noHeader bool, opt *csvOption, fileSizeLimit uint64) error {
+func WriteInsertInCsv(pCtx context.Context, tblIR TableDataIR, w storage.Writer, noHeader bool, opt *csvOption, fileSizeLimit uint64) error {
 	fileRowIter := tblIR.Rows()
 	if !fileRowIter.HasNext() {
 		return nil
@@ -319,8 +322,8 @@ func WriteInsertInCsv(pCtx context.Context, tblIR TableDataIR, w io.Writer, noHe
 	return wp.Error()
 }
 
-func write(writer io.StringWriter, str string) error {
-	_, err := writer.WriteString(str)
+func write(ctx context.Context, writer storage.Writer, str string) error {
+	_, err := writer.Write(ctx, []byte(str))
 	if err != nil {
 		// str might be very long, only output the first 200 chars
 		outputLength := len(str)
@@ -334,8 +337,8 @@ func write(writer io.StringWriter, str string) error {
 	return err
 }
 
-func writeBytes(writer io.Writer, p []byte) error {
-	_, err := writer.Write(p)
+func writeBytes(ctx context.Context, writer storage.Writer, p []byte) error {
+	_, err := writer.Write(ctx, p)
 	if err != nil {
 		// str might be very long, only output the first 200 chars
 		outputLength := len(p)
@@ -350,20 +353,19 @@ func writeBytes(writer io.Writer, p []byte) error {
 	return err
 }
 
-func buildFileWriter(location vfs.Location, path string) (io.StringWriter, func(), error) {
-	file, err := location.NewFile(path)
-	fullPath := location.URI() + path
+func buildFileWriter(ctx context.Context, s storage.ExternalStorage, path string) (storage.Writer, func(ctx context.Context), error) {
+	fullPath := s.URI() + path
+	uploader, err := s.CreateUploader(ctx, path)
 	if err != nil {
 		log.Error("open file failed",
 			zap.String("path", fullPath),
 			zap.Error(err))
 		return nil, nil, err
 	}
+	writer := storage.NewUploaderWriter(uploader, hardcodedS3ChunkSize)
 	log.Debug("opened file", zap.String("path", fullPath))
-	buf := bufio.NewWriter(file)
-	tearDownRoutine := func() {
-		_ = buf.Flush()
-		err := file.Close()
+	tearDownRoutine := func(ctx context.Context) {
+		err := writer.Close(ctx)
 		if err == nil {
 			return
 		}
@@ -371,34 +373,37 @@ func buildFileWriter(location vfs.Location, path string) (io.StringWriter, func(
 			zap.String("path", fullPath),
 			zap.Error(err))
 	}
-	return buf, tearDownRoutine, nil
+	return writer, tearDownRoutine, nil
 }
 
-func buildInterceptFileWriter(loc vfs.Location, path string) (io.Writer, func()) {
-	var file vfs.File
+func buildInterceptFileWriter(s storage.ExternalStorage, path string) (storage.Writer, func(context.Context)) {
+	var writer storage.Writer
+	fullPath := s.URI() + path
 	fileWriter := &InterceptFileWriter{}
-	initRoutine := func() error {
-		f, err := loc.NewFile(path)
-		file = f
+	initRoutine := func(ctx context.Context) error {
+		uploader, err := s.CreateUploader(ctx, path)
 		if err != nil {
 			log.Error("open file failed",
-				zap.String("path", loc.URI()+path),
+				zap.String("path", fullPath),
 				zap.Error(err))
+			return err
 		}
-		log.Debug("opened file", zap.String("path", f.URI()))
-		fileWriter.Writer = file
+		w := storage.NewUploaderWriter(uploader, hardcodedS3ChunkSize)
+		writer = w
+		log.Debug("opened file", zap.String("path", fullPath))
+		fileWriter.Writer = writer
 		return err
 	}
 	fileWriter.initRoutine = initRoutine
 
-	tearDownRoutine := func() {
-		if file == nil {
+	tearDownRoutine := func(ctx context.Context) {
+		if writer == nil {
 			return
 		}
 		log.Debug("tear down lazy file writer...")
-		err := file.Close()
+		err := writer.Close(ctx)
 		if err != nil {
-			log.Error("close file failed", zap.String("path", file.URI()))
+			log.Error("close file failed", zap.String("path", fullPath))
 		}
 	}
 	return fileWriter, tearDownRoutine
@@ -426,23 +431,27 @@ func (l *LazyStringWriter) WriteString(str string) (int, error) {
 // InterceptFileWriter is an interceptor of os.File,
 // tracking whether a StringWriter has written something.
 type InterceptFileWriter struct {
-	io.Writer
+	storage.Writer
 	sync.Once
-	initRoutine func() error
+	initRoutine func(context.Context) error
 	err         error
 
 	SomethingIsWritten bool
 }
 
-func (w *InterceptFileWriter) Write(p []byte) (int, error) {
-	w.Do(func() { w.err = w.initRoutine() })
+func (w *InterceptFileWriter) Write(ctx context.Context, p []byte) (int, error) {
+	w.Do(func() { w.err = w.initRoutine(ctx) })
 	if len(p) > 0 {
 		w.SomethingIsWritten = true
 	}
 	if w.err != nil {
 		return 0, fmt.Errorf("open file error: %s", w.err.Error())
 	}
-	return w.Writer.Write(p)
+	return w.Writer.Write(ctx, p)
+}
+
+func (w *InterceptFileWriter) Close(ctx context.Context) error {
+	return w.Writer.Close(ctx)
 }
 
 func wrapBackTicks(identifier string) string {

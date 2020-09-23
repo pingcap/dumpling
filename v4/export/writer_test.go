@@ -221,8 +221,8 @@ func (s *testDumpSuite) TestWriteTableDataWithStatementSize(c *C) {
 	c.Assert(err, IsNil)
 	os.RemoveAll(config.OutputDirPath)
 	config.OutputDirPath, err = ioutil.TempDir("", "dumpling")
-	config.outputLocation = nil
-	config.outputLocationOnce = sync.Once{}
+	config.externalStorage = nil
+	config.externalStorageOnce = sync.Once{}
 	fmt.Println(config.OutputDirPath)
 	c.Assert(err, IsNil)
 

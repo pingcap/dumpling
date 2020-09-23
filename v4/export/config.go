@@ -1,24 +1,19 @@
 package export
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
 	"text/template"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
-	awss3 "github.com/aws/aws-sdk-go/service/s3"
-	"github.com/c2fo/vfs/v5"
-	"github.com/c2fo/vfs/v5/backend"
-	"github.com/c2fo/vfs/v5/backend/s3"
-	"github.com/c2fo/vfs/v5/vfssimple"
 	"github.com/coreos/go-semver/semver"
+	"github.com/pingcap/br/pkg/storage"
+	"github.com/pingcap/kvproto/pkg/backup"
 	filter "github.com/pingcap/tidb-tools/pkg/table-filter"
 	"go.uber.org/zap"
 
@@ -26,6 +21,9 @@ import (
 )
 
 type Config struct {
+	// TODO support passing in options via flags as well as toml
+	storage.BackendOptions
+
 	Databases []string
 	Host      string
 	User      string
@@ -74,8 +72,8 @@ type Config struct {
 
 	PosAfterConnect bool
 
-	outputLocation     vfs.Location
-	outputLocationOnce sync.Once
+	externalStorage     storage.ExternalStorage
+	externalStorageOnce sync.Once
 }
 
 func DefaultConfig() *Config {
@@ -131,35 +129,44 @@ func (conf *Config) GetDSN(db string) string {
 	return dsn
 }
 
-func (config *Config) OutputLocation() vfs.Location {
-	config.outputLocationOnce.Do(func() {
-		loc, err := config.doOutputLocation()
+func (config *Config) ExternalStorage(ctx context.Context) storage.ExternalStorage {
+	config.externalStorageOnce.Do(func() {
+		s, err := config.createExternalStorage(ctx)
 		if err != nil {
 			panic(err)
 		}
-		config.outputLocation = loc
+		config.externalStorage = s
 	})
-	return config.outputLocation
+	return config.externalStorage
 }
 
-func (config *Config) doOutputLocation() (vfs.Location, error) {
+func (config *Config) createExternalStorage(ctx context.Context) (storage.ExternalStorage, error) {
 	path := config.OutputDirPath
+	var b *backup.StorageBackend
+	var err error
 	// TODO support other filesystems
-	if strings.HasPrefix(path, "s3://") {
-		return config.s3OutputLocation(path)
-	} else {
-		return config.fileOutputLocation(path)
+	options := &config.BackendOptions
+	// used for testing
+	endpoint := os.Getenv("DUMPLING_S3_ENDPOINT")
+	if endpoint != "" {
+		options.S3.Endpoint = endpoint
+		options.S3.ForcePathStyle = true
+		options.GCS.Endpoint = endpoint
 	}
-}
-
-func (config *Config) s3OutputLocation(path string) (vfs.Location, error) {
-	client, err := config.awsClient()
+	b, err = storage.ParseBackend(ensureTrailingSlash(ensureStorageClassPrefix(path)), options)
 	if err != nil {
 		return nil, err
 	}
-	fs := s3.NewFileSystem().WithClient(client)
-	backend.Register("s3", fs)
-	return vfssimple.NewLocation(ensureTrailingSlash(path))
+	// TODO support sendCreds config option?
+	return storage.Create(ctx, b, true)
+}
+
+func ensureStorageClassPrefix(path string) string {
+	if !regexp.MustCompile("^\\w+://").MatchString(path) {
+		return "file:///" + path
+	} else {
+		return path
+	}
 }
 
 func ensureTrailingSlash(path string) string {
@@ -167,31 +174,6 @@ func ensureTrailingSlash(path string) string {
 		path = path + "/"
 	}
 	return path
-}
-
-func (config *Config) fileOutputLocation(path string) (vfs.Location, error) {
-	var err error
-	path, err = filepath.Abs(path)
-	if err != nil {
-		return nil, err
-	}
-	if !strings.HasPrefix(path, "file://") {
-		path = "file://" + path
-	}
-	return vfssimple.NewLocation(ensureTrailingSlash(path))
-}
-
-func (config *Config) awsClient() (*awss3.S3, error) {
-	cfg := aws.NewConfig()
-	endpoint := os.Getenv("DUMPLING_S3_ENDPOINT")
-	if endpoint != "" {
-		log.Info("using custom S3 endpoint",
-			zap.String("endpoint", endpoint))
-		cfg = cfg.WithEndpoint(endpoint).
-			WithS3ForcePathStyle(true)
-	}
-	s := session.Must(session.NewSession())
-	return awss3.New(s, cfg), nil
 }
 
 const (

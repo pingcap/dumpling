@@ -9,13 +9,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/c2fo/vfs/v5"
+	"github.com/pingcap/br/pkg/storage"
 )
 
 type globalMetadata struct {
 	buffer bytes.Buffer
 
-	outputLoc vfs.Location
+	storage storage.ExternalStorage
 }
 
 const (
@@ -29,10 +29,10 @@ const (
 	mariadbShowMasterStatusFieldNum = 4
 )
 
-func newGlobalMetadata(outputLoc vfs.Location) *globalMetadata {
+func newGlobalMetadata(s storage.ExternalStorage) *globalMetadata {
 	return &globalMetadata{
-		outputLoc: outputLoc,
-		buffer:    bytes.Buffer{},
+		storage: s,
+		buffer:  bytes.Buffer{},
 	}
 }
 
@@ -190,12 +190,12 @@ func (m *globalMetadata) recordGlobalMetaData(db *sql.Conn, serverType ServerTyp
 	})
 }
 
-func (m *globalMetadata) writeGlobalMetaData() error {
-	fileWriter, tearDown, err := buildFileWriter(m.outputLoc, metadataPath)
+func (m *globalMetadata) writeGlobalMetaData(ctx context.Context) error {
+	fileWriter, tearDown, err := buildFileWriter(ctx, m.storage, metadataPath)
 	if err != nil {
 		return err
 	}
-	defer tearDown()
+	defer tearDown(ctx)
 
-	return write(fileWriter, m.String())
+	return write(ctx, fileWriter, m.String())
 }
