@@ -9,7 +9,7 @@ require (
 	github.com/go-sql-driver/mysql v1.5.0
 	github.com/grpc-ecosystem/grpc-gateway v1.14.3 // indirect
 	github.com/json-iterator/go v1.1.9 // indirect
-	github.com/pingcap/br v0.0.0-20200925071146-f29837472fe7
+	github.com/pingcap/br v0.0.0-20200925095602-bf9cc603382e
 	github.com/pingcap/check v0.0.0-20200212061837-5e12011dc712
 	github.com/pingcap/errors v0.11.5-0.20200902104258-eba4f1d8f6de
 	github.com/pingcap/failpoint v0.0.0-20200702092429-9f69995143ce

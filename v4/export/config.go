@@ -141,27 +141,12 @@ func (config *Config) createExternalStorage(ctx context.Context) (storage.Extern
 			options.GCS.Endpoint = endpoint
 		}
 	})
-	b, err = storage.ParseBackend(ensureTrailingSlash(ensureStorageClassPrefix(path)), options)
+	b, err = storage.ParseBackend(path, options)
 	if err != nil {
 		return nil, err
 	}
 	// TODO support sendCreds config option?
 	return storage.Create(ctx, b, true)
-}
-
-func ensureStorageClassPrefix(path string) string {
-	if !regexp.MustCompile("^\\w+://").MatchString(path) {
-		return "file:///" + path
-	} else {
-		return path
-	}
-}
-
-func ensureTrailingSlash(path string) string {
-	if !strings.HasSuffix(path, "/") {
-		path = path + "/"
-	}
-	return path
 }
 
 const (
