@@ -2,8 +2,6 @@
 
 set -eux
 
-export DUMPLING_TEST_DATABASE=
-
 echo "starting localstack writing to ${DUMPLING_OUTPUT_DIR}"
 mkdir -p "${DUMPLING_OUTPUT_DIR}"
 ls "${DUMPLING_OUTPUT_DIR}"
@@ -39,7 +37,7 @@ run_sql "insert into $DB_NAME.$TABLE_NAME values $(seq -s, 100 | sed 's/,*$//g' 
 HOST_DIR=${DUMPLING_OUTPUT_DIR}
 export DUMPLING_OUTPUT_DIR=s3://mybucket/dump
 export DUMPLING_TEST_DATABASE=$DB_NAME
-export DUMPLING_S3_ENDPOINT=http://localhost:5000
+export GO_FAILPOINTS="github.com/pingcap/dumpling/v4/export/ExternalStorageEndpoint=100%return(\"http://localhost:5000\")"
 export AWS_REGION=us-east-1
 export AWS_ACCESS_KEY_ID=testid
 export AWS_SECRET_ACCESS_KEY=testkey

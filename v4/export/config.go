@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"regexp"
 	"strings"
 	"text/template"
@@ -12,6 +11,7 @@ import (
 
 	"github.com/coreos/go-semver/semver"
 	"github.com/pingcap/br/pkg/storage"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/kvproto/pkg/backup"
 	filter "github.com/pingcap/tidb-tools/pkg/table-filter"
 	"go.uber.org/zap"
@@ -131,15 +131,16 @@ func (config *Config) createExternalStorage(ctx context.Context) (storage.Extern
 	path := config.OutputDirPath
 	var b *backup.StorageBackend
 	var err error
-	// TODO support other filesystems
 	options := &config.BackendOptions
-	// used for testing
-	endpoint := os.Getenv("DUMPLING_S3_ENDPOINT")
-	if endpoint != "" {
-		options.S3.Endpoint = endpoint
-		options.S3.ForcePathStyle = true
-		options.GCS.Endpoint = endpoint
-	}
+	failpoint.Inject("ExternalStorageEndpoint", func(val failpoint.Value) {
+		// used for testing
+		endpoint := val.(string)
+		if endpoint != "" {
+			options.S3.Endpoint = endpoint
+			options.S3.ForcePathStyle = true
+			options.GCS.Endpoint = endpoint
+		}
+	})
 	b, err = storage.ParseBackend(ensureTrailingSlash(ensureStorageClassPrefix(path)), options)
 	if err != nil {
 		return nil, err
