@@ -31,7 +31,7 @@ func (f SimpleWriter) WriteDatabaseMeta(ctx context.Context, db, createSQL strin
 	if err != nil {
 		return err
 	}
-	return writeMetaToFile(ctx, db, createSQL, f.cfg.ExternalStorage(ctx), fileName+".sql")
+	return writeMetaToFile(ctx, db, createSQL, f.cfg.ExternalStorage, fileName+".sql")
 }
 
 func (f SimpleWriter) WriteTableMeta(ctx context.Context, db, table, createSQL string) error {
@@ -39,7 +39,7 @@ func (f SimpleWriter) WriteTableMeta(ctx context.Context, db, table, createSQL s
 	if err != nil {
 		return err
 	}
-	return writeMetaToFile(ctx, db, createSQL, f.cfg.ExternalStorage(ctx), fileName+".sql")
+	return writeMetaToFile(ctx, db, createSQL, f.cfg.ExternalStorage, fileName+".sql")
 }
 
 type SQLWriter struct{ SimpleWriter }
@@ -65,7 +65,7 @@ func (f SQLWriter) WriteTableData(ctx context.Context, ir TableDataIR) error {
 	defer chunksIter.Rows().Close()
 
 	for {
-		fileWriter, tearDown := buildInterceptFileWriter(f.cfg.ExternalStorage(ctx), fileName)
+		fileWriter, tearDown := buildInterceptFileWriter(f.cfg.ExternalStorage, fileName)
 		err = WriteInsert(ctx, chunksIter, fileWriter, f.cfg.FileSize, f.cfg.StatementSize)
 		tearDown(ctx)
 		if err != nil {
@@ -158,7 +158,7 @@ func (f CSVWriter) WriteTableData(ctx context.Context, ir TableDataIR) error {
 	}
 
 	for {
-		fileWriter, tearDown := buildInterceptFileWriter(f.cfg.ExternalStorage(ctx), fileName)
+		fileWriter, tearDown := buildInterceptFileWriter(f.cfg.ExternalStorage, fileName)
 		err = WriteInsertInCsv(ctx, chunksIter, fileWriter, f.cfg.NoHeader, opt, f.cfg.FileSize)
 		tearDown(ctx)
 		if err != nil {

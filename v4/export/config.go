@@ -7,7 +7,6 @@ import (
 	"os"
 	"regexp"
 	"strings"
-	"sync"
 	"text/template"
 	"time"
 
@@ -72,8 +71,7 @@ type Config struct {
 
 	PosAfterConnect bool
 
-	externalStorage     storage.ExternalStorage
-	externalStorageOnce sync.Once
+	ExternalStorage storage.ExternalStorage `json:"-"`
 }
 
 func DefaultConfig() *Config {
@@ -127,17 +125,6 @@ func (conf *Config) GetDSN(db string) string {
 		dsn += "&tls=dumpling-tls-target"
 	}
 	return dsn
-}
-
-func (config *Config) ExternalStorage(ctx context.Context) storage.ExternalStorage {
-	config.externalStorageOnce.Do(func() {
-		s, err := config.createExternalStorage(ctx)
-		if err != nil {
-			panic(err)
-		}
-		config.externalStorage = s
-	})
-	return config.externalStorage
 }
 
 func (config *Config) createExternalStorage(ctx context.Context) (storage.ExternalStorage, error) {

@@ -3,11 +3,9 @@ package export
 import (
 	"context"
 	"database/sql/driver"
-	"fmt"
 	"io/ioutil"
 	"os"
 	"path"
-	"sync"
 
 	. "github.com/pingcap/check"
 )
@@ -21,9 +19,12 @@ func (s *testDumpSuite) TestWriteDatabaseMeta(c *C) {
 	c.Assert(err, IsNil)
 	defer os.RemoveAll(dir)
 
+	ctx := context.Background()
+
 	config := DefaultConfig()
 	config.OutputDirPath = dir
-	ctx := context.Background()
+	err = adjustConfig(ctx, config)
+	c.Assert(err, IsNil)
 
 	writer, err := NewSimpleWriter(config)
 	c.Assert(err, IsNil)
@@ -42,9 +43,11 @@ func (s *testDumpSuite) TestWriteTableMeta(c *C) {
 	c.Assert(err, IsNil)
 	defer os.RemoveAll(dir)
 
+	ctx := context.Background()
+
 	config := DefaultConfig()
 	config.OutputDirPath = dir
-	ctx := context.Background()
+	err = adjustConfig(ctx, config)
 
 	writer, err := NewSimpleWriter(config)
 	c.Assert(err, IsNil)
@@ -63,9 +66,11 @@ func (s *testDumpSuite) TestWriteTableData(c *C) {
 	c.Assert(err, IsNil)
 	defer os.RemoveAll(dir)
 
+	ctx := context.Background()
+
 	config := DefaultConfig()
 	config.OutputDirPath = dir
-	ctx := context.Background()
+	err = adjustConfig(ctx, config)
 
 	simpleWriter, err := NewSimpleWriter(config)
 	c.Assert(err, IsNil)
@@ -107,10 +112,12 @@ func (s *testDumpSuite) TestWriteTableDataWithFileSize(c *C) {
 	c.Assert(err, IsNil)
 	defer os.RemoveAll(dir)
 
+	ctx := context.Background()
+
 	config := DefaultConfig()
 	config.OutputDirPath = dir
 	config.FileSize = 50
-	ctx := context.Background()
+	err = adjustConfig(ctx, config)
 	specCmts := []string{
 		"/*!40101 SET NAMES binary*/;",
 		"/*!40014 SET FOREIGN_KEY_CHECKS=0*/;",
@@ -161,13 +168,15 @@ func (s *testDumpSuite) TestWriteTableDataWithStatementSize(c *C) {
 	dir, err := ioutil.TempDir("", "dumpling")
 	c.Assert(err, IsNil)
 
+	ctx := context.Background()
+
 	config := DefaultConfig()
 	config.OutputDirPath = dir
 	config.StatementSize = 50
 	config.StatementSize += uint64(len("INSERT INTO `employee` VALUES\n"))
 	config.OutputFileTemplate, err = ParseOutputFileTemplate("specified-name")
+	err = adjustConfig(ctx, config)
 	c.Assert(err, IsNil)
-	ctx := context.Background()
 	defer os.RemoveAll(config.OutputDirPath)
 
 	simpleWriter, err := NewSimpleWriter(config)
@@ -221,10 +230,9 @@ func (s *testDumpSuite) TestWriteTableDataWithStatementSize(c *C) {
 	c.Assert(err, IsNil)
 	os.RemoveAll(config.OutputDirPath)
 	config.OutputDirPath, err = ioutil.TempDir("", "dumpling")
-	config.externalStorage = nil
-	config.externalStorageOnce = sync.Once{}
-	fmt.Println(config.OutputDirPath)
+	newStorage, err := config.createExternalStorage(context.Background())
 	c.Assert(err, IsNil)
+	config.ExternalStorage = newStorage
 
 	cases = map[string]string{
 		"0-employee-te%25%2Fst.sql": "/*!40101 SET NAMES binary*/;\n" +

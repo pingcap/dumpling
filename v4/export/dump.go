@@ -17,7 +17,7 @@ import (
 )
 
 func Dump(pCtx context.Context, conf *Config) (err error) {
-	if err = adjustConfig(conf); err != nil {
+	if err = adjustConfig(pCtx, conf); err != nil {
 		return withStack(err)
 	}
 
@@ -114,7 +114,7 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 		defer newPool.Close()
 	}
 
-	m := newGlobalMetadata(conf.ExternalStorage(ctx))
+	m := newGlobalMetadata(conf.ExternalStorage)
 	// write metadata even if dump failed
 	defer m.writeGlobalMetaData(ctx)
 
