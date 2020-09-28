@@ -409,10 +409,6 @@ func buildInterceptFileWriter(s storage.ExternalStorage, path string) (storage.W
 	return fileWriter, tearDownRoutine
 }
 
-func encodeFileName(path string) string {
-	return strings.ReplaceAll(path, "%", "%25")
-}
-
 type LazyStringWriter struct {
 	initRoutine func() error
 	sync.Once
