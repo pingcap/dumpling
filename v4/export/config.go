@@ -11,8 +11,6 @@ import (
 
 	"github.com/coreos/go-semver/semver"
 	"github.com/pingcap/br/pkg/storage"
-	"github.com/pingcap/failpoint"
-	"github.com/pingcap/kvproto/pkg/backup"
 	filter "github.com/pingcap/tidb-tools/pkg/table-filter"
 	"go.uber.org/zap"
 
@@ -128,25 +126,11 @@ func (conf *Config) GetDSN(db string) string {
 }
 
 func (config *Config) createExternalStorage(ctx context.Context) (storage.ExternalStorage, error) {
-	path := config.OutputDirPath
-	var b *backup.StorageBackend
-	var err error
-	options := &config.BackendOptions
-	failpoint.Inject("ExternalStorageEndpoint", func(val failpoint.Value) {
-		// used for testing
-		endpoint := val.(string)
-		if endpoint != "" {
-			options.S3.Endpoint = endpoint
-			options.S3.ForcePathStyle = true
-			options.GCS.Endpoint = endpoint
-		}
-	})
-	b, err = storage.ParseBackend(path, options)
+	b, err := storage.ParseBackend(config.OutputDirPath, &config.BackendOptions)
 	if err != nil {
 		return nil, err
 	}
-	// TODO support sendCreds config option?
-	return storage.Create(ctx, b, true)
+	return storage.Create(ctx, b, false)
 }
 
 const (

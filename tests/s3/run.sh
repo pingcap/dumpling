@@ -37,11 +37,10 @@ run_sql "insert into $DB_NAME.$TABLE_NAME values $(seq -s, 100 | sed 's/,*$//g' 
 HOST_DIR=${DUMPLING_OUTPUT_DIR}
 export DUMPLING_OUTPUT_DIR=s3://mybucket/dump
 export DUMPLING_TEST_DATABASE=$DB_NAME
-export GO_FAILPOINTS="github.com/pingcap/dumpling/v4/export/ExternalStorageEndpoint=100%return(\"http://localhost:5000\")"
 export AWS_REGION=us-east-1
 export AWS_ACCESS_KEY_ID=testid
 export AWS_SECRET_ACCESS_KEY=testkey
-run_dumpling
+run_dumpling --s3.endpoint=http://localhost:5000
 ls "${HOST_DIR}"
 
 curl -o "${HOST_DIR}/s3-schema-create.sql" http://localhost:5000/mybucket/dump/s3-schema-create.sql
