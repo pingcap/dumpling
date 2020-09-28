@@ -18,7 +18,6 @@ import (
 )
 
 type Config struct {
-	// TODO support passing in options via flags as well as toml
 	storage.BackendOptions
 
 	Databases []string
