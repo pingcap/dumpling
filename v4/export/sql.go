@@ -94,6 +94,13 @@ func ShowCreateView(db *sql.Conn, database, view string) (string, string, error)
 	if err != nil {
 		return "", "", errors.WithMessage(err, query)
 	}
+	// The result for `show create view` SQL
+	// mysql> show create view v1;
+	// +------+-------------------------------------------------------------------------------------------------------------------------------------+----------------------+----------------------+
+	// | View | Create View                                                                                                                         | character_set_client | collation_connection |
+	// +------+-------------------------------------------------------------------------------------------------------------------------------------+----------------------+----------------------+
+	// | v1   | CREATE ALGORITHM=UNDEFINED DEFINER=`root`@`localhost` SQL SECURITY DEFINER VIEW `v1` (`a`) AS SELECT `t`.`a` AS `a` FROM `test`.`t` | utf8                 | utf8_general_ci      |
+	// +------+-------------------------------------------------------------------------------------------------------------------------------------+----------------------+----------------------+
 	createViewSQL += SetCharset(oneRow[2], oneRow[3])
 	createViewSQL += oneRow[1]
 	createViewSQL += ";\n"
