@@ -35,7 +35,7 @@ func (s *testDumpSuite) TestWriteDatabaseMeta(c *C) {
 	c.Assert(err, IsNil)
 	bytes, err := ioutil.ReadFile(p)
 	c.Assert(err, IsNil)
-	c.Assert(string(bytes), Equals, "CREATE DATABASE `test`;\n")
+	c.Assert(string(bytes), Equals, "/*!40101 SET NAMES binary*/;\nCREATE DATABASE `test`;\n")
 }
 
 func (s *testDumpSuite) TestWriteTableMeta(c *C) {
@@ -48,6 +48,7 @@ func (s *testDumpSuite) TestWriteTableMeta(c *C) {
 	config := DefaultConfig()
 	config.OutputDirPath = dir
 	err = adjustConfig(ctx, config)
+	c.Assert(err, IsNil)
 
 	writer, err := NewSimpleWriter(config)
 	c.Assert(err, IsNil)
@@ -58,7 +59,7 @@ func (s *testDumpSuite) TestWriteTableMeta(c *C) {
 	c.Assert(err, IsNil)
 	bytes, err := ioutil.ReadFile(p)
 	c.Assert(err, IsNil)
-	c.Assert(string(bytes), Equals, "CREATE TABLE t (a INT);\n")
+	c.Assert(string(bytes), Equals, "/*!40101 SET NAMES binary*/;\nCREATE TABLE t (a INT);\n")
 }
 
 func (s *testDumpSuite) TestWriteTableData(c *C) {
