@@ -96,6 +96,7 @@ func (s *testDumpSuite) TestWriteTableData(c *C) {
 	config := DefaultConfig()
 	config.OutputDirPath = dir
 	err := adjustConfig(ctx, config)
+	c.Assert(err, IsNil)
 
 	simpleWriter, err := NewSimpleWriter(config)
 	c.Assert(err, IsNil)
@@ -141,6 +142,7 @@ func (s *testDumpSuite) TestWriteTableDataWithFileSize(c *C) {
 	config.OutputDirPath = dir
 	config.FileSize = 50
 	err := adjustConfig(ctx, config)
+	c.Assert(err, IsNil)
 	specCmts := []string{
 		"/*!40101 SET NAMES binary*/;",
 		"/*!40014 SET FOREIGN_KEY_CHECKS=0*/;",
