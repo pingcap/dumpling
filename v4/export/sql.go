@@ -74,7 +74,7 @@ func ShowCreateView(db *sql.Conn, database, view string) (string, string, error)
 	handleOneRow := func(rows *sql.Rows) error {
 		return rows.Scan(&oneRow[0], &oneRow[1], &oneRow[2], &oneRow[3])
 	}
-	var createTableSQL, createViewSQL string
+	var createTableSQL, createViewSQL strings.Builder
 
 	// Build createTableSQL
 	query := fmt.Sprintf("SHOW FIELDS FROM `%s`.`%s`", escapeString(database), escapeString(view))
@@ -82,13 +82,13 @@ func ShowCreateView(db *sql.Conn, database, view string) (string, string, error)
 	if err != nil {
 		return "", "", errors.WithMessage(err, query)
 	}
-	createTableSQL += fmt.Sprintf("CREATE TABLE `%s`(\n", escapeString(view))
-	createTableSQL += strings.Join(fieldNames, ",\n")
-	createTableSQL += "\n)ENGINE=MyISAM;\n"
+	fmt.Fprintf(&createTableSQL, "CREATE TABLE `%s`(\n", escapeString(view))
+	createTableSQL.WriteString(strings.Join(fieldNames, ",\n"))
+	createTableSQL.WriteString("\n)ENGINE=MyISAM;\n")
 
 	// Build createViewSQL
-	createViewSQL += fmt.Sprintf("DROP TABLE IF EXISTS `%s`;\n", escapeString(view))
-	createViewSQL += fmt.Sprintf("DROP VIEW IF EXISTS `%s`;\n", escapeString(view))
+	fmt.Fprintf(&createViewSQL, "DROP TABLE IF EXISTS `%s`;\n", escapeString(view))
+	fmt.Fprintf(&createViewSQL, "DROP VIEW IF EXISTS `%s`;\n", escapeString(view))
 	query = fmt.Sprintf("SHOW CREATE VIEW `%s`.`%s`", escapeString(database), escapeString(view))
 	err = simpleQuery(db, query, handleOneRow)
 	if err != nil {
@@ -101,33 +101,28 @@ func ShowCreateView(db *sql.Conn, database, view string) (string, string, error)
 	// +------+-------------------------------------------------------------------------------------------------------------------------------------+----------------------+----------------------+
 	// | v1   | CREATE ALGORITHM=UNDEFINED DEFINER=`root`@`localhost` SQL SECURITY DEFINER VIEW `v1` (`a`) AS SELECT `t`.`a` AS `a` FROM `test`.`t` | utf8                 | utf8_general_ci      |
 	// +------+-------------------------------------------------------------------------------------------------------------------------------------+----------------------+----------------------+
-	createViewSQL += SetCharset(oneRow[2], oneRow[3])
-	createViewSQL += oneRow[1]
-	createViewSQL += ";\n"
-	createViewSQL += RestoreCharset()
+	SetCharset(&createViewSQL, oneRow[2], oneRow[3])
+	createViewSQL.WriteString(oneRow[1])
+	createViewSQL.WriteString(";\n")
+	RestoreCharset(&createViewSQL)
 
-	return createTableSQL, createViewSQL, nil
+	return createTableSQL.String(), createViewSQL.String(), nil
 }
 
-func SetCharset(characterSet, collationConnection string) string {
-	var statement string
-	statement += "SET @PREV_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT;\n"
-	statement += "SET @PREV_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS;\n"
-	statement += "SET @PREV_COLLATION_CONNECTION=@@COLLATION_CONNECTION;\n"
+func SetCharset(w *strings.Builder, characterSet, collationConnection string) {
+	w.WriteString("SET @PREV_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT;\n")
+	w.WriteString("SET @PREV_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS;\n")
+	w.WriteString("SET @PREV_COLLATION_CONNECTION=@@COLLATION_CONNECTION;\n")
 
-	statement += fmt.Sprintf("SET character_set_client = %s;\n", characterSet)
-	statement += fmt.Sprintf("SET character_set_results = %s;\n", characterSet)
-	statement += fmt.Sprintf("SET collation_connection = %s;\n", collationConnection)
-
-	return statement
+	fmt.Fprintf(w, "SET character_set_client = %s;\n", characterSet)
+	fmt.Fprintf(w, "SET character_set_results = %s;\n", characterSet)
+	fmt.Fprintf(w, "SET collation_connection = %s;\n", collationConnection)
 }
 
-func RestoreCharset() string {
-	var statement string
-	statement += "SET character_set_client = @PREV_CHARACTER_SET_CLIENT;\n"
-	statement += "SET character_set_results = @PREV_CHARACTER_SET_RESULTS;\n"
-	statement += "SET collation_connection = @PREV_COLLATION_CONNECTION;\n"
-	return statement
+func RestoreCharset(w *strings.Builder) {
+	w.WriteString("SET character_set_client = @PREV_CHARACTER_SET_CLIENT;\n")
+	w.WriteString("SET character_set_results = @PREV_CHARACTER_SET_RESULTS;\n")
+	w.WriteString("SET collation_connection = @PREV_COLLATION_CONNECTION;\n")
 }
 
 func ListAllDatabasesTables(db *sql.Conn, databaseNames []string, tableType TableType) (DatabaseTables, error) {
