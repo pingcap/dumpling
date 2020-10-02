@@ -84,7 +84,7 @@ func DefaultConfig() *Config {
 		Logger:             nil,
 		StatusAddr:         ":8281",
 		FileSize:           UnspecifiedSize,
-		StatementSize:      UnspecifiedSize,
+		StatementSize:      DefaultStatementSize,
 		OutputDirPath:      ".",
 		ServerInfo:         ServerInfoUnknown,
 		SortByPk:           true,
