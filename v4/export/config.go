@@ -139,6 +139,7 @@ func (config *Config) createExternalStorage(ctx context.Context) (storage.Extern
 const (
 	UnspecifiedSize            = 0
 	DefaultTiDBMemQuotaQuery   = 32 * (1 << 30)
+	DefaultStatementSize       = 1000000
 	defaultDumpThreads         = 128
 	defaultDumpGCSafePointTTL  = 5 * 60
 	dumplingServiceSafePointID = "dumpling"
