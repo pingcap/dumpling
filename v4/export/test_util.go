@@ -13,7 +13,7 @@ type mockPoisonWriter struct {
 	buf string
 }
 
-func (m *mockPoisonWriter) Write(ctx context.Context, p []byte) (int, error) {
+func (m *mockPoisonWriter) Write(p []byte) (int, error) {
 	s := string(p)
 	if s == "poison" {
 		return 0, fmt.Errorf("poison_error")
@@ -22,7 +22,7 @@ func (m *mockPoisonWriter) Write(ctx context.Context, p []byte) (int, error) {
 	return len(s), nil
 }
 
-func (m *mockPoisonWriter) Close(ctx context.Context) error {
+func (m *mockPoisonWriter) Close() error {
 	// noop
 	return nil
 }

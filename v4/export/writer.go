@@ -82,9 +82,9 @@ func (f SQLWriter) WriteTableData(ctx context.Context, ir TableDataIR) error {
 	defer chunksIter.Rows().Close()
 
 	for {
-		fileWriter, tearDown := buildInterceptFileWriter(f.cfg.ExternalStorage, fileName)
+		fileWriter, tearDown := buildInterceptFileWriter(ctx, f.cfg.ExternalStorage, fileName)
 		err = WriteInsert(ctx, chunksIter, fileWriter, f.cfg.FileSize, f.cfg.StatementSize)
-		tearDown(ctx)
+		tearDown()
 		if err != nil {
 			return err
 		}
@@ -112,9 +112,9 @@ func writeMetaToFile(ctx context.Context, target, metaSQL string, s storage.Exte
 	if err != nil {
 		return err
 	}
-	defer tearDown(ctx)
+	defer tearDown()
 
-	return WriteMeta(ctx, &metaData{
+	return WriteMeta(&metaData{
 		target:  target,
 		metaSQL: metaSQL,
 		specCmts: []string{
@@ -178,9 +178,9 @@ func (f CSVWriter) WriteTableData(ctx context.Context, ir TableDataIR) error {
 	}
 
 	for {
-		fileWriter, tearDown := buildInterceptFileWriter(f.cfg.ExternalStorage, fileName)
+		fileWriter, tearDown := buildInterceptFileWriter(ctx, f.cfg.ExternalStorage, fileName)
 		err = WriteInsertInCsv(ctx, chunksIter, fileWriter, f.cfg.NoHeader, opt, f.cfg.FileSize)
-		tearDown(ctx)
+		tearDown()
 		if err != nil {
 			return err
 		}

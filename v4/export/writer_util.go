@@ -35,10 +35,10 @@ type writerPipe struct {
 	fileSizeLimit      uint64
 	statementSizeLimit uint64
 
-	w storage.Writer
+	w io.Writer
 }
 
-func newWriterPipe(w storage.Writer, fileSizeLimit, statementSizeLimit uint64) *writerPipe {
+func newWriterPipe(w io.Writer, fileSizeLimit, statementSizeLimit uint64) *writerPipe {
 	return &writerPipe{
 		input:  make(chan *bytes.Buffer, 8),
 		closed: make(chan struct{}),
@@ -64,7 +64,7 @@ func (b *writerPipe) Run(ctx context.Context) {
 			if errOccurs {
 				continue
 			}
-			err := writeBytes(ctx, b.w, s.Bytes())
+			err := writeBytes(b.w, s.Bytes())
 			s.Reset()
 			pool.Put(s)
 			if err != nil {
@@ -100,17 +100,17 @@ func (b *writerPipe) ShouldSwitchStatement() bool {
 		(b.statementSizeLimit != UnspecifiedSize && b.currentStatementSize >= b.statementSizeLimit)
 }
 
-func WriteMeta(ctx context.Context, meta MetaIR, w storage.Writer) error {
+func WriteMeta(meta MetaIR, w io.Writer) error {
 	log.Debug("start dumping meta data", zap.String("target", meta.TargetName()))
 
 	specCmtIter := meta.SpecialComments()
 	for specCmtIter.HasNext() {
-		if err := write(ctx, w, fmt.Sprintf("%s\n", specCmtIter.Next())); err != nil {
+		if err := write(w, fmt.Sprintf("%s\n", specCmtIter.Next())); err != nil {
 			return err
 		}
 	}
 
-	if err := write(ctx, w, meta.MetaSQL()); err != nil {
+	if err := write(w, meta.MetaSQL()); err != nil {
 		return err
 	}
 
@@ -118,7 +118,7 @@ func WriteMeta(ctx context.Context, meta MetaIR, w storage.Writer) error {
 	return nil
 }
 
-func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, fileSizeLimit, statementSizeLimit uint64) error {
+func WriteInsert(pCtx context.Context, tblIR TableDataIR, w io.Writer, fileSizeLimit, statementSizeLimit uint64) error {
 	fileRowIter := tblIR.Rows()
 	if !fileRowIter.HasNext() {
 		return nil
@@ -230,7 +230,7 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, file
 	return wp.Error()
 }
 
-func WriteInsertInCsv(pCtx context.Context, tblIR TableDataIR, w storage.Writer, noHeader bool, opt *csvOption, fileSizeLimit uint64) error {
+func WriteInsertInCsv(pCtx context.Context, tblIR TableDataIR, w io.Writer, noHeader bool, opt *csvOption, fileSizeLimit uint64) error {
 	fileRowIter := tblIR.Rows()
 	if !fileRowIter.HasNext() {
 		return nil
@@ -322,8 +322,8 @@ func WriteInsertInCsv(pCtx context.Context, tblIR TableDataIR, w storage.Writer,
 	return wp.Error()
 }
 
-func write(ctx context.Context, writer storage.Writer, str string) error {
-	_, err := writer.Write(ctx, []byte(str))
+func write(writer io.Writer, str string) error {
+	_, err := writer.Write([]byte(str))
 	if err != nil {
 		// str might be very long, only output the first 200 chars
 		outputLength := len(str)
@@ -337,8 +337,8 @@ func write(ctx context.Context, writer storage.Writer, str string) error {
 	return err
 }
 
-func writeBytes(ctx context.Context, writer storage.Writer, p []byte) error {
-	_, err := writer.Write(ctx, p)
+func writeBytes(writer io.Writer, p []byte) error {
+	_, err := writer.Write(p)
 	if err != nil {
 		// str might be very long, only output the first 200 chars
 		outputLength := len(p)
@@ -353,7 +353,7 @@ func writeBytes(ctx context.Context, writer storage.Writer, p []byte) error {
 	return err
 }
 
-func buildFileWriter(ctx context.Context, s storage.ExternalStorage, path string) (storage.Writer, func(ctx context.Context), error) {
+func buildFileWriter(ctx context.Context, s storage.ExternalStorage, path string) (io.Writer, func(), error) {
 	fullPath := s.URI() + path
 	uploader, err := s.CreateUploader(ctx, path)
 	if err != nil {
@@ -362,10 +362,10 @@ func buildFileWriter(ctx context.Context, s storage.ExternalStorage, path string
 			zap.Error(err))
 		return nil, nil, err
 	}
-	writer := storage.NewUploaderWriter(uploader, hardcodedS3ChunkSize)
+	writer := storage.NewUploaderWriter(ctx, uploader, hardcodedS3ChunkSize)
 	log.Debug("opened file", zap.String("path", fullPath))
-	tearDownRoutine := func(ctx context.Context) {
-		err := writer.Close(ctx)
+	tearDownRoutine := func() {
+		err := writer.Close()
 		if err == nil {
 			return
 		}
@@ -376,10 +376,10 @@ func buildFileWriter(ctx context.Context, s storage.ExternalStorage, path string
 	return writer, tearDownRoutine, nil
 }
 
-func buildInterceptFileWriter(s storage.ExternalStorage, path string) (storage.Writer, func(context.Context)) {
-	var writer storage.Writer
+func buildInterceptFileWriter(ctx context.Context, s storage.ExternalStorage, path string) (io.WriteCloser, func()) {
+	var writer io.WriteCloser
 	fullPath := s.URI() + path
-	fileWriter := &InterceptFileWriter{}
+	fileWriter := &InterceptFileWriter{ctx: ctx}
 	initRoutine := func(ctx context.Context) error {
 		uploader, err := s.CreateUploader(ctx, path)
 		if err != nil {
@@ -388,20 +388,20 @@ func buildInterceptFileWriter(s storage.ExternalStorage, path string) (storage.W
 				zap.Error(err))
 			return err
 		}
-		w := storage.NewUploaderWriter(uploader, hardcodedS3ChunkSize)
+		w := storage.NewUploaderWriter(ctx, uploader, hardcodedS3ChunkSize)
 		writer = w
 		log.Debug("opened file", zap.String("path", fullPath))
-		fileWriter.Writer = writer
+		fileWriter.WriteCloser = writer
 		return err
 	}
 	fileWriter.initRoutine = initRoutine
 
-	tearDownRoutine := func(ctx context.Context) {
+	tearDownRoutine := func() {
 		if writer == nil {
 			return
 		}
 		log.Debug("tear down lazy file writer...")
-		err := writer.Close(ctx)
+		err := writer.Close()
 		if err != nil {
 			log.Error("close file failed", zap.String("path", fullPath))
 		}
@@ -427,27 +427,28 @@ func (l *LazyStringWriter) WriteString(str string) (int, error) {
 // InterceptFileWriter is an interceptor of os.File,
 // tracking whether a StringWriter has written something.
 type InterceptFileWriter struct {
-	storage.Writer
+	io.WriteCloser
 	sync.Once
+	ctx         context.Context
 	initRoutine func(context.Context) error
 	err         error
 
 	SomethingIsWritten bool
 }
 
-func (w *InterceptFileWriter) Write(ctx context.Context, p []byte) (int, error) {
-	w.Do(func() { w.err = w.initRoutine(ctx) })
+func (w *InterceptFileWriter) Write(p []byte) (int, error) {
+	w.Do(func() { w.err = w.initRoutine(w.ctx) })
 	if len(p) > 0 {
 		w.SomethingIsWritten = true
 	}
 	if w.err != nil {
 		return 0, fmt.Errorf("open file error: %s", w.err.Error())
 	}
-	return w.Writer.Write(ctx, p)
+	return w.WriteCloser.Write(p)
 }
 
-func (w *InterceptFileWriter) Close(ctx context.Context) error {
-	return w.Writer.Close(ctx)
+func (w *InterceptFileWriter) Close() error {
+	return w.WriteCloser.Close()
 }
 
 func wrapBackTicks(identifier string) string {

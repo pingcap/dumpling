@@ -195,7 +195,7 @@ func (m *globalMetadata) writeGlobalMetaData(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	defer tearDown(ctx)
+	defer tearDown()
 
-	return write(ctx, fileWriter, m.String())
+	return write(fileWriter, m.String())
 }
