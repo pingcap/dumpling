@@ -164,6 +164,13 @@ func splitTableDataIntoChunks(
 		return
 	}
 	if field == "" {
+		// Try to get the TiDB region start keys.
+		regionStartKeys := GetTiDBRegionStartKeys(db, dbName, tableName)
+		cutOffPoints := DecodeTiDBClusteredRegionKeysToJSON(db, regionStartKeys)
+		if len(cutOffPoints) != 0 {
+			splitTiDBClusteredIndexTableIntoChunks(ctx, tableDataIRCh, errCh, cutOffPoints, dbName, tableName, db, conf)
+			return
+		}
 		// skip split chunk logic if not found proper field
 		log.Debug("skip concurrent dump due to no proper field", zap.String("field", field))
 		linear <- struct{}{}
@@ -269,6 +276,83 @@ LOOP:
 		}
 	}
 	close(tableDataIRCh)
+}
+
+func splitTiDBClusteredIndexTableIntoChunks(ctx context.Context,
+	tableDataIRCh chan TableDataIR,
+	errCh chan error,
+	cutOffPoints []map[string]interface{},
+	dbName, tableName string, db *sql.Conn, conf *Config) {
+	selectedField, err := buildSelectField(db, dbName, tableName, conf.CompleteInsert)
+	if err != nil {
+		errCh <- withStack(err)
+		return
+	}
+	colTypes, err := GetColumnTypes(db, selectedField, dbName, tableName)
+	if err != nil {
+		errCh <- withStack(err)
+		return
+	}
+	orderByClause, err := buildOrderByClause(conf, db, dbName, tableName)
+	if err != nil {
+		errCh <- withStack(err)
+		return
+	}
+	var whereFields []string
+	for colName := range cutOffPoints[0]["handle"].(map[string]interface{}) {
+		whereFields = append(whereFields, colName)
+	}
+	whereFieldsStr := strings.Join(whereFields, ", ")
+	whereValuesStrs := make([]string, len(whereFields))
+	for _, cutOff := range cutOffPoints {
+		colsVal := cutOff["handle"].(map[string]interface{})
+		whereValues := make([]string, 0, len(whereFields))
+		for _, wf := range whereFields {
+			switch v := colsVal[wf].(type) {
+			case int:
+				whereValues = append(whereValues, fmt.Sprintf("%d", v))
+			case string:
+				whereValues = append(whereValues, escapeString(v))
+			default:
+				errCh <- withStack(errors.Errorf("unsupported column type"))
+				return
+			}
+		}
+		whereValuesStrs = append(whereValuesStrs, strings.Join(whereValues, ", "))
+	}
+	where := make([]string, len(whereValuesStrs)+1)
+	where = append(where, fmt.Sprintf("(%s) < (%s)", whereFieldsStr, whereValuesStrs[0]))
+	for i := 1; i < len(whereValuesStrs); i++ {
+		low, up := whereValuesStrs[i-1], whereValuesStrs[i]
+		where = append(where, fmt.Sprintf("(%s) < (%s) AND (%s) >= (%s)", whereFieldsStr, low, whereFieldsStr, up))
+	}
+	where = append(where, fmt.Sprintf("(%s) >= (%s)", whereFieldsStr, whereValuesStrs[len(whereValuesStrs)-1]))
+	for i, w := range where {
+		query := buildSelectQuery(dbName, tableName, selectedField, buildWhereCondition(conf, w), orderByClause)
+		td := &tableData{
+			database:        dbName,
+			table:           tableName,
+			query:           query,
+			chunkIndex:      i,
+			colTypes:        colTypes,
+			selectedField:   selectedField,
+			escapeBackslash: conf.EscapeBackslash,
+			specCmts: []string{
+				"/*!40101 SET NAMES binary*/;",
+			},
+		}
+		contextDone := false
+		select {
+		case <-ctx.Done():
+			contextDone = true
+		case tableDataIRCh <- td:
+		}
+		if contextDone {
+			break
+		}
+	}
+	close(tableDataIRCh)
+	return
 }
 
 type metaData struct {

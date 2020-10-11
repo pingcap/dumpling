@@ -3,6 +3,7 @@ package export
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"strconv"
@@ -439,6 +440,62 @@ func GetTiDBDDLIDs(db *sql.DB) ([]string, error) {
 	}
 	defer rows.Close()
 	return GetSpecifiedColumnValue(rows, "DDL_ID")
+}
+
+func DecodeTiDBClusteredRegionKeysToJSON(db *sql.Conn, regionKeys []string) []map[string]interface{} {
+	query := "SELECT tidb_decode_row_key(?);"
+	var ret []map[string]interface{}
+	for _, key := range regionKeys {
+		var decodeResult string
+		row, err := db.QueryContext(context.Background(), query, key)
+		if err != nil {
+			log.Info("unable to decode region key, skip", zap.String("key", key))
+			continue
+		}
+		err = row.Scan(&decodeResult)
+		if err != nil || key == decodeResult {
+			log.Info("unable to decode region key, skip", zap.String("key", key))
+			continue
+		}
+		var js map[string]interface{}
+		err = json.Unmarshal([]byte(decodeResult), &js)
+		if err != nil {
+			log.Warn("unable to unmarshal json when decoding TiDB region key, skip",
+				zap.String("key", key), zap.String("decode result", decodeResult))
+			continue
+		}
+		switch v := js["handle"].(type) {
+		case string:
+			// table id not found, fallback to old method.
+			log.Warn("unable to decode the origin value when decoding TiDB region key, skip",
+				zap.String("key", key), zap.String("decode result", decodeResult), zap.String("handle", v))
+			continue
+		case map[string]interface{}:
+		default:
+			log.Warn("unexpected json value type when decoding TiDB region key",
+				zap.String("key", key), zap.String("decode result", decodeResult), zap.Any("handle", v))
+		}
+		ret = append(ret, js)
+	}
+	return ret
+}
+
+func GetTiDBRegionStartKeys(db *sql.Conn, dbName, tableName string) []string {
+	query := "SELECT start_key FROM information_schema.tikv_region_status s, information_schema.tables t " +
+		"WHERE s.table_id = t.tidb_table_id AND t.db_name = ? AND t.table_name = ? AND is_index = 0 ORDER BY start_key;"
+	rows, err := db.QueryContext(context.Background(), query, dbName, tableName)
+	if err != nil {
+		log.Info("can't execute query from db",
+			zap.String("query", query), zap.Error(err))
+		return []string{}
+	}
+	defer rows.Close()
+	startKeys, err := GetSpecifiedColumnValue(rows, "START_KEY")
+	if err != nil {
+		log.Warn("can't get specified column value START_KEY for query",
+			zap.String("query", query), zap.Error(err))
+	}
+	return startKeys
 }
 
 func CheckTiDBWithTiKV(db *sql.DB) (bool, error) {
