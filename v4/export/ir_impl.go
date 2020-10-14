@@ -158,19 +158,30 @@ func splitTableDataIntoChunks(
 	errCh chan error,
 	linear chan struct{},
 	dbName, tableName string, db *sql.Conn, conf *Config) {
-	field, err := pickupPossibleField(dbName, tableName, db, conf)
-	if err != nil {
-		errCh <- withStack(err)
-		return
-	}
-	if field == "" {
+	if conf.ChunkByTiDBRegion {
 		// Try to get the TiDB region start keys.
+		_, err := db.ExecContext(context.Background(), fmt.Sprintf("USE %s;", dbName))
+		if err != nil {
+			errCh <- withStack(err)
+			return
+		}
 		regionStartKeys := GetTiDBRegionStartKeys(db, dbName, tableName)
 		cutOffPoints := DecodeTiDBClusteredRegionKeysToJSON(db, regionStartKeys)
 		if len(cutOffPoints) != 0 {
 			splitTiDBClusteredIndexTableIntoChunks(ctx, tableDataIRCh, errCh, cutOffPoints, dbName, tableName, db, conf)
 			return
 		}
+		log.Debug("no valid region start key found",
+			zap.String("database", dbName), zap.String("table", tableName))
+		linear <- struct{}{}
+		return
+	}
+	field, err := pickupPossibleField(dbName, tableName, db, conf)
+	if err != nil {
+		errCh <- withStack(err)
+		return
+	}
+	if field == "" {
 		// skip split chunk logic if not found proper field
 		log.Debug("skip concurrent dump due to no proper field", zap.String("field", field))
 		linear <- struct{}{}
@@ -298,35 +309,11 @@ func splitTiDBClusteredIndexTableIntoChunks(ctx context.Context,
 		errCh <- withStack(err)
 		return
 	}
-	var whereFields []string
-	for colName := range cutOffPoints[0]["handle"].(map[string]interface{}) {
-		whereFields = append(whereFields, colName)
+	where, err := buildTiDBChunkByRegionWhereCondition(cutOffPoints)
+	if err != nil {
+		errCh <- withStack(err)
+		return
 	}
-	whereFieldsStr := strings.Join(whereFields, ", ")
-	whereValuesStrs := make([]string, len(whereFields))
-	for _, cutOff := range cutOffPoints {
-		colsVal := cutOff["handle"].(map[string]interface{})
-		whereValues := make([]string, 0, len(whereFields))
-		for _, wf := range whereFields {
-			switch v := colsVal[wf].(type) {
-			case int:
-				whereValues = append(whereValues, fmt.Sprintf("%d", v))
-			case string:
-				whereValues = append(whereValues, escapeString(v))
-			default:
-				errCh <- withStack(errors.Errorf("unsupported column type"))
-				return
-			}
-		}
-		whereValuesStrs = append(whereValuesStrs, strings.Join(whereValues, ", "))
-	}
-	where := make([]string, len(whereValuesStrs)+1)
-	where = append(where, fmt.Sprintf("(%s) < (%s)", whereFieldsStr, whereValuesStrs[0]))
-	for i := 1; i < len(whereValuesStrs); i++ {
-		low, up := whereValuesStrs[i-1], whereValuesStrs[i]
-		where = append(where, fmt.Sprintf("(%s) < (%s) AND (%s) >= (%s)", whereFieldsStr, low, whereFieldsStr, up))
-	}
-	where = append(where, fmt.Sprintf("(%s) >= (%s)", whereFieldsStr, whereValuesStrs[len(whereValuesStrs)-1]))
 	for i, w := range where {
 		query := buildSelectQuery(dbName, tableName, selectedField, buildWhereCondition(conf, w), orderByClause)
 		td := &tableData{
@@ -353,6 +340,38 @@ func splitTiDBClusteredIndexTableIntoChunks(ctx context.Context,
 	}
 	close(tableDataIRCh)
 	return
+}
+
+func buildTiDBChunkByRegionWhereCondition(cutOffPoints []map[string]interface{}) ([]string, error) {
+	var whereFields []string
+	for colName := range cutOffPoints[0]["handle"].(map[string]interface{}) {
+		whereFields = append(whereFields, colName)
+	}
+	whereFieldsStr := strings.Join(whereFields, ", ")
+	whereValuesStrs := make([]string, 0, len(cutOffPoints))
+	for _, cutOff := range cutOffPoints {
+		colsVal := cutOff["handle"].(map[string]interface{})
+		whereValues := make([]string, 0, len(whereFields))
+		for _, wf := range whereFields {
+			switch v := colsVal[wf].(type) {
+			case int:
+				whereValues = append(whereValues, fmt.Sprintf("%d", v))
+			case string:
+				whereValues = append(whereValues, wrapStringWith(v, `'`))
+			default:
+				return nil, withStack(errors.Errorf("unsupported column type"))
+			}
+		}
+		whereValuesStrs = append(whereValuesStrs, strings.Join(whereValues, ", "))
+	}
+	where := make([]string, 0, len(whereValuesStrs)+1)
+	where = append(where, fmt.Sprintf("(%s) < (%s)", whereFieldsStr, whereValuesStrs[0]))
+	for i := 1; i < len(whereValuesStrs); i++ {
+		low, up := whereValuesStrs[i-1], whereValuesStrs[i]
+		where = append(where, fmt.Sprintf("(%s) < (%s) AND (%s) >= (%s)", whereFieldsStr, low, whereFieldsStr, up))
+	}
+	where = append(where, fmt.Sprintf("(%s) >= (%s)", whereFieldsStr, whereValuesStrs[len(whereValuesStrs)-1]))
+	return where, nil
 }
 
 type metaData struct {

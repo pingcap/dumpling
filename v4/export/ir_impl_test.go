@@ -1,6 +1,7 @@
 package export
 
 import (
+	"encoding/json"
 	"strings"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -115,4 +116,40 @@ func (s *testIRImplSuite) TestChunkRowIter(c *C) {
 	rows.Close()
 	c.Assert(sqlRowIter.Decode(res), NotNil)
 	sqlRowIter.Next()
+}
+
+func (s *testIRImplSuite) TestBuildTiDBChunkByRegionWhereCondition(c *C) {
+	testCase := []struct {
+		json   []string
+		expect []string
+	}{
+		{
+			[]string{`{"handle":{"a":"10","b":"2020-01-01 00:00:00"},"table_id":49}`},
+			[]string{"(a, b) < ('10', '2020-01-01 00:00:00')", "(a, b) >= ('10', '2020-01-01 00:00:00')"},
+		},
+		{
+			[]string{`{"handle":{"a":"asdf","b":"2020-12-31","c":"6.666"},"table_id":49}`,
+				`{"handle":{"a":"xxxxx","b":"2021-12-31","c":"100.00"},"table_id":49}`},
+			[]string{"(a, b, c) < ('asdf', '2020-12-31', '6.666')",
+				"(a, b, c) < ('asdf', '2020-12-31', '6.666') AND (a, b, c) >= ('xxxxx', '2021-12-31', '100.00')",
+				"(a, b, c) >= ('xxxxx', '2021-12-31', '100.00')"},
+		},
+		{
+			[]string{`{"handle":{"a":"\"\"\"","b":"2020-12-31","c":"3.14159"},"table_id":55}`},
+			[]string{"(a, b, c) < ('\"\"\"', '2020-12-31', '3.14159')", "(a, b, c) >= ('\"\"\"', '2020-12-31', '3.14159')"},
+		},
+	}
+	for _, tc := range testCase {
+		var cutOffPoints []map[string]interface{}
+		for _, js := range tc.json {
+			var cop map[string]interface{}
+			err := json.Unmarshal([]byte(js), &cop)
+			c.Assert(err, IsNil)
+			cutOffPoints = append(cutOffPoints, cop)
+		}
+		actual, err := buildTiDBChunkByRegionWhereCondition(cutOffPoints)
+		c.Assert(err, IsNil)
+		c.Assert(actual, DeepEquals, tc.expect)
+	}
+
 }

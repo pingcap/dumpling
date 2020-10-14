@@ -322,7 +322,7 @@ func dumpTable(ctx context.Context, conf *Config, db *sql.Conn, dbName string, t
 		return nil, nil
 	}
 
-	if conf.Rows != UnspecifiedSize {
+	if conf.Rows != UnspecifiedSize || conf.ChunkByTiDBRegion {
 		finished, chunksIterArray, err := concurrentDumpTable(ctx, conf, db, dbName, tableName)
 		if err != nil || finished {
 			return chunksIterArray, err

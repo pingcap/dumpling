@@ -39,23 +39,24 @@ type Config struct {
 	LogFormat string
 	Logger    *zap.Logger `json:"-"`
 
-	FileSize      uint64
-	StatementSize uint64
-	OutputDirPath string
-	ServerInfo    ServerInfo
-	SortByPk      bool
-	Tables        DatabaseTables
-	StatusAddr    string
-	Snapshot      string
-	Consistency   string
-	NoViews       bool
-	NoHeader      bool
-	NoSchemas     bool
-	NoData        bool
-	CsvNullValue  string
-	Sql           string
-	CsvSeparator  string
-	CsvDelimiter  string
+	FileSize          uint64
+	StatementSize     uint64
+	OutputDirPath     string
+	ServerInfo        ServerInfo
+	SortByPk          bool
+	Tables            DatabaseTables
+	StatusAddr        string
+	Snapshot          string
+	Consistency       string
+	NoViews           bool
+	NoHeader          bool
+	NoSchemas         bool
+	NoData            bool
+	CsvNullValue      string
+	Sql               string
+	CsvSeparator      string
+	CsvDelimiter      string
+	ChunkByTiDBRegion bool
 
 	TableFilter        filter.Filter `json:"-"`
 	Rows               uint64

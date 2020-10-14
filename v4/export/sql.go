@@ -278,6 +278,13 @@ func buildOrderByClause(conf *Config, db *sql.Conn, database, table string) (str
 		return "", nil
 	}
 	if conf.ServerInfo.ServerType == ServerTypeTiDB {
+		if conf.ChunkByTiDBRegion {
+			allPks, err := GetAllPrimaryKeyName(db, database, table)
+			if err != nil {
+				return "", withStack(err)
+			}
+			return fmt.Sprintf("ORDER BY %s", strings.Join(allPks, ", ")), nil
+		}
 		ok, err := SelectTiDBRowID(db, database, table)
 		if err != nil {
 			return "", withStack(err)
@@ -336,6 +343,20 @@ func GetPrimaryKeyName(db *sql.Conn, database, table string) (string, error) {
 		}
 	}
 	return colName, nil
+}
+
+func GetAllPrimaryKeyName(db *sql.Conn, database, table string) ([]string, error) {
+	priKeyQuery := "SELECT column_name FROM information_schema.columns " +
+		"WHERE table_schema = ? AND table_name = ? AND column_key = 'PRI';"
+	rows, err := db.QueryContext(context.Background(), priKeyQuery, database, table)
+	if err != nil {
+		return nil, withStack(errors.WithMessage(err, priKeyQuery))
+	}
+	ret, err := GetSpecifiedColumnValue(rows, "COLUMN_NAME")
+	if err != nil {
+		return nil, withStack(errors.WithMessage(err, priKeyQuery))
+	}
+	return ret, nil
 }
 
 func GetUniqueIndexName(db *sql.Conn, database, table string) (string, error) {
@@ -443,16 +464,13 @@ func GetTiDBDDLIDs(db *sql.DB) ([]string, error) {
 }
 
 func DecodeTiDBClusteredRegionKeysToJSON(db *sql.Conn, regionKeys []string) []map[string]interface{} {
-	query := "SELECT tidb_decode_row_key(?);"
+	query := fmt.Sprintf("SELECT tidb_decode_key(?);")
 	var ret []map[string]interface{}
 	for _, key := range regionKeys {
 		var decodeResult string
-		row, err := db.QueryContext(context.Background(), query, key)
-		if err != nil {
-			log.Info("unable to decode region key, skip", zap.String("key", key))
-			continue
-		}
-		err = row.Scan(&decodeResult)
+		err := simpleQueryWithArgs(db, func(rows *sql.Rows) error {
+			return rows.Scan(&decodeResult)
+		}, query, key)
 		if err != nil || key == decodeResult {
 			log.Info("unable to decode region key, skip", zap.String("key", key))
 			continue
@@ -482,7 +500,7 @@ func DecodeTiDBClusteredRegionKeysToJSON(db *sql.Conn, regionKeys []string) []ma
 
 func GetTiDBRegionStartKeys(db *sql.Conn, dbName, tableName string) []string {
 	query := "SELECT start_key FROM information_schema.tikv_region_status s, information_schema.tables t " +
-		"WHERE s.table_id = t.tidb_table_id AND t.db_name = ? AND t.table_name = ? AND is_index = 0 ORDER BY start_key;"
+		"WHERE s.table_id = t.tidb_table_id AND s.db_name = ? AND t.table_name = ? AND is_index = 0 ORDER BY start_key;"
 	rows, err := db.QueryContext(context.Background(), query, dbName, tableName)
 	if err != nil {
 		log.Info("can't execute query from db",

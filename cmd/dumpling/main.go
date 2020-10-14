@@ -74,6 +74,7 @@ var (
 	escapeBackslash      bool
 	tidbMemQuotaQuery    uint64
 	outputFilenameFormat string
+	chunkByTiDBRegion    bool
 )
 
 var defaultOutputDir = timestampDirName()
@@ -127,6 +128,7 @@ func main() {
 	pflag.StringVar(&csvDelimiter, "csv-delimiter", "\"", "The delimiter for values in csv files, default '\"'")
 	pflag.StringVar(&outputFilenameFormat, "output-filename-template", "", "The output filename template (without file extension)")
 	pflag.BoolVar(&completeInsert, "complete-insert", false, "Use complete INSERT statements that include column names")
+	pflag.BoolVar(&chunkByTiDBRegion, "chunk-by-tidb-region", false, "Whether to dump TiDB regions by parallel. Only available when the server is TiDB.")
 
 	storage.DefineFlags(pflag.CommandLine)
 
@@ -213,6 +215,7 @@ func main() {
 	conf.CsvDelimiter = csvDelimiter
 	conf.OutputFileTemplate = tmpl
 	conf.CompleteInsert = completeInsert
+	conf.ChunkByTiDBRegion = chunkByTiDBRegion
 
 	err = conf.ParseFromFlags(pflag.CommandLine)
 	if err != nil {
