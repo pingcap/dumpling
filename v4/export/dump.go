@@ -9,8 +9,8 @@ import (
 
 	"github.com/pingcap/dumpling/v4/log"
 
-	_ "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/failpoint"
+	_ "github.com/siddontang/go-mysql/driver"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
