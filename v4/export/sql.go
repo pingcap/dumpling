@@ -194,7 +194,13 @@ func SelectAllFromTable(conf *Config, db *sql.Conn, database, table string) (Tab
 		return nil, err
 	}
 
-	colTypes, err := GetColumnTypes(db, selectedField, database, table)
+	var colTypes []*sql.ColumnType
+	// If all columns are generated
+	if selectedField == "" {
+		colTypes, err = GetColumnTypes(db, "*", database, table)
+	} else {
+		colTypes, err = GetColumnTypes(db, selectedField, database, table)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -204,7 +210,13 @@ func SelectAllFromTable(conf *Config, db *sql.Conn, database, table string) (Tab
 		return nil, err
 	}
 
-	query := buildSelectQuery(database, table, selectedField, buildWhereCondition(conf, ""), orderByClause)
+	var query string
+	// If all columns are generated
+	if selectedField == "" {
+		query = fmt.Sprintf("SELECT '' FROM `%s`.`%s`", database, table)
+	} else {
+		query = buildSelectQuery(database, table, selectedField, buildWhereCondition(conf, ""), orderByClause)
+	}
 
 	return &tableData{
 		database:        database,
