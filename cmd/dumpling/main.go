@@ -68,6 +68,7 @@ var (
 	keyPath                 string
 	csvSeparator            string
 	csvDelimiter            string
+	sessionParams           map[string]string
 
 	completeInsert       bool
 	dumpEmptyDatabase    bool
@@ -127,6 +128,7 @@ func main() {
 	pflag.StringVar(&csvDelimiter, "csv-delimiter", "\"", "The delimiter for values in csv files, default '\"'")
 	pflag.StringVar(&outputFilenameFormat, "output-filename-template", "", "The output filename template (without file extension)")
 	pflag.BoolVar(&completeInsert, "complete-insert", false, "Use complete INSERT statements that include column names")
+	pflag.StringToStringVar(&sessionParams, "params", nil, `Extra session params used in dumping process, accept format: --params "character_set_client=latin1,character_set_connection=latin1"`)
 
 	storage.DefineFlags(pflag.CommandLine)
 
@@ -177,6 +179,9 @@ func main() {
 	}
 
 	conf := export.DefaultConfig()
+	for k, v := range sessionParams {
+		conf.SessionParams[k] = v
+	}
 	conf.Databases = databases
 	conf.Host = host
 	conf.User = user
