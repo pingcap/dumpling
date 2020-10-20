@@ -481,13 +481,7 @@ func resetDBWithSessionParams(db *sql.DB, dsn string, params map[string]interfac
 	}
 
 	for k, v := range support {
-		var s string
-		if str, ok := v.(string); ok {
-			s = wrapStringWith(str, "'")
-		} else {
-			s = fmt.Sprintf("%v", v)
-		}
-		dsn += fmt.Sprintf("&%s=%s", k, url.QueryEscape(s))
+		dsn += fmt.Sprintf("&%s=%s", k, url.QueryEscape(fmt.Sprintf("%v", v)))
 	}
 
 	newDB, err := sql.Open("mysql", dsn)
