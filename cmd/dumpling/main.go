@@ -213,7 +213,7 @@ func main() {
 	conf.Security.CAPath = caPath
 	conf.Security.CertPath = certPath
 	conf.Security.KeyPath = keyPath
-	conf.SessionParams["tidb_mem_quota_query"] = tidbMemQuotaQuery
+	conf.SessionParams[export.TiDBMemQuotaQueryName] = tidbMemQuotaQuery
 	conf.CsvSeparator = csvSeparator
 	conf.CsvDelimiter = csvDelimiter
 	conf.OutputFileTemplate = tmpl
