@@ -128,7 +128,7 @@ func main() {
 	pflag.StringVar(&csvDelimiter, "csv-delimiter", "\"", "The delimiter for values in csv files, default '\"'")
 	pflag.StringVar(&outputFilenameFormat, "output-filename-template", "", "The output filename template (without file extension)")
 	pflag.BoolVar(&completeInsert, "complete-insert", false, "Use complete INSERT statements that include column names")
-	pflag.StringToStringVar(&sessionParams, "params", nil, `Extra session params used in dumping process, accept format: --params "character_set_client=latin1,character_set_connection=latin1"`)
+	pflag.StringToStringVar(&sessionParams, "params", nil, `Extra session variables used while dumping, accepted format: --params "character_set_client=latin1,character_set_connection=latin1"`)
 
 	storage.DefineFlags(pflag.CommandLine)
 
