@@ -175,13 +175,17 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, file
 		wp.AddFileSize(insertStatementPrefixLen)
 
 		for fileRowIter.HasNext() {
-			if err = fileRowIter.Decode(row); err != nil {
-				log.Error("scanning from sql.Row failed", zap.Error(err))
-				return err
-			}
 
 			lastBfSize := bf.Len()
-			row.WriteToBuffer(bf, escapeBackSlash)
+			if selectedField != "" {
+				if err = fileRowIter.Decode(row); err != nil {
+					log.Error("scanning from sql.Row failed", zap.Error(err))
+					return err
+				}
+				row.WriteToBuffer(bf, escapeBackSlash)
+			} else {
+				bf.WriteString("()")
+			}
 			counter += 1
 			wp.AddFileSize(uint64(bf.Len()-lastBfSize) + 2) // 2 is for ",\n" and ";\n"
 
