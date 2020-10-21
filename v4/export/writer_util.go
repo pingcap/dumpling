@@ -159,8 +159,9 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, file
 	)
 
 	selectedField := tblIR.SelectedField()
+
 	// if has generated column
-	if selectedField != "" {
+	if selectedField != "" && selectedField != "*" {
 		insertStatementPrefix = fmt.Sprintf("INSERT INTO %s %s VALUES\n",
 			wrapBackTicks(escapeString(tblIR.TableName())), selectedField)
 	} else {
