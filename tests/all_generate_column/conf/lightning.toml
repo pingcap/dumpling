@@ -10,7 +10,7 @@ backend="tidb"
 on-duplicate = "error"
 
 [mydumper]
-data-source-dir = "/tmp/dumpling_test_result/sql_res.ignore_generate_column"
+data-source-dir = "/tmp/dumpling_test_result/sql_res.all_generate_column"
 
 [tidb]
 host = "127.0.0.1"

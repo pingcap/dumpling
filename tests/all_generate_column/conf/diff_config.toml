@@ -16,16 +16,16 @@ fix-sql-file = "fix.sql"
 
 # tables need to check.
 [[check-tables]]
-schema = "ignore_generate"
+schema = "all_generate_column"
 tables = ["~t.*"]
 
 [[table-config]]
-schema = "ignore_generate"
+schema = "all_generate_column"
 table = "t"
 
 [[table-config.source-tables]]
 instance-id = "source-1"
-schema = "ignore_generate"
+schema = "all_generate_column"
 table  = "t"
 
 [[source-db]]
