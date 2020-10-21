@@ -20,12 +20,13 @@ import (
 type Config struct {
 	storage.BackendOptions
 
-	Databases []string
-	Host      string
-	User      string
-	Port      int
-	Password  string `json:"-"`
-	Security  struct {
+	Databases               []string
+	Host                    string
+	User                    string
+	Port                    int
+	Password                string `json:"-"`
+	AllowCleartextPasswords bool
+	Security                struct {
 		CAPath   string
 		CertPath string
 		KeyPath  string
@@ -83,7 +84,7 @@ func DefaultConfig() *Config {
 		Logger:             nil,
 		StatusAddr:         ":8281",
 		FileSize:           UnspecifiedSize,
-		StatementSize:      UnspecifiedSize,
+		StatementSize:      DefaultStatementSize,
 		OutputDirPath:      ".",
 		ServerInfo:         ServerInfoUnknown,
 		SortByPk:           true,
@@ -121,6 +122,9 @@ func (conf *Config) GetDSN(db string) string {
 	if len(conf.Security.CAPath) > 0 {
 		dsn += "&tls=dumpling-tls-target"
 	}
+	if conf.AllowCleartextPasswords {
+		dsn += "&allowCleartextPasswords=1"
+	}
 	return dsn
 }
 
@@ -133,8 +137,11 @@ func (config *Config) createExternalStorage(ctx context.Context) (storage.Extern
 }
 
 const (
-	UnspecifiedSize            = 0
-	DefaultTiDBMemQuotaQuery   = 32 * (1 << 30)
+	UnspecifiedSize          = 0
+	DefaultTiDBMemQuotaQuery = 32 * (1 << 30)
+	DefaultStatementSize     = 1000000
+	TiDBMemQuotaQueryName    = "tidb_mem_quota_query"
+
 	defaultDumpThreads         = 128
 	defaultDumpGCSafePointTTL  = 5 * 60
 	dumplingServiceSafePointID = "dumpling"

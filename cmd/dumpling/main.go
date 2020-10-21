@@ -35,38 +35,40 @@ import (
 )
 
 var (
-	databases     []string
-	tablesList    []string
-	host          string
-	user          string
-	port          int
-	password      string
-	threads       int
-	outputDir     string
-	fileSizeStr   string
-	statementSize uint64
-	logLevel      string
-	logFile       string
-	logFormat     string
-	consistency   string
-	snapshot      string
-	noViews       bool
-	statusAddr    string
-	rows          uint64
-	where         string
-	fileType      string
-	noHeader      bool
-	noSchemas     bool
-	noData        bool
-	csvNullValue  string
-	sql           string
-	filters       []string
-	caseSensitive bool
-	caPath        string
-	certPath      string
-	keyPath       string
-	csvSeparator  string
-	csvDelimiter  string
+	databases               []string
+	tablesList              []string
+	host                    string
+	user                    string
+	port                    int
+	password                string
+	allowCleartextPasswords bool
+	threads                 int
+	outputDir               string
+	fileSizeStr             string
+	statementSize           uint64
+	logLevel                string
+	logFile                 string
+	logFormat               string
+	consistency             string
+	snapshot                string
+	noViews                 bool
+	statusAddr              string
+	rows                    uint64
+	where                   string
+	fileType                string
+	noHeader                bool
+	noSchemas               bool
+	noData                  bool
+	csvNullValue            string
+	sql                     string
+	filters                 []string
+	caseSensitive           bool
+	caPath                  string
+	certPath                string
+	keyPath                 string
+	csvSeparator            string
+	csvDelimiter            string
+	sessionParams           map[string]string
 
 	completeInsert       bool
 	dumpEmptyDatabase    bool
@@ -94,9 +96,10 @@ func main() {
 	pflag.StringVarP(&user, "user", "u", "root", "Username with privileges to run the dump")
 	pflag.IntVarP(&port, "port", "P", 4000, "TCP/IP port to connect to")
 	pflag.StringVarP(&password, "password", "p", "", "User password")
+	pflag.BoolVar(&allowCleartextPasswords, "allow-cleartext-passwords", false, "Allow passwords to be sent in cleartext (warning: don't use without TLS)")
 	pflag.IntVarP(&threads, "threads", "t", 4, "Number of goroutines to use, default 4")
 	pflag.StringVarP(&fileSizeStr, "filesize", "F", "", "The approximate size of output file")
-	pflag.Uint64VarP(&statementSize, "statement-size", "s", export.UnspecifiedSize, "Attempted size of INSERT statement in bytes")
+	pflag.Uint64VarP(&statementSize, "statement-size", "s", export.DefaultStatementSize, "Attempted size of INSERT statement in bytes")
 	pflag.StringVarP(&outputDir, "output", "o", defaultOutputDir, "Output directory")
 	pflag.StringVar(&logLevel, "loglevel", "info", "Log level: {debug|info|warn|error|dpanic|panic|fatal}")
 	pflag.StringVarP(&logFile, "logfile", "L", "", "Log file `path`, leave empty to write to console")
@@ -125,6 +128,7 @@ func main() {
 	pflag.StringVar(&csvDelimiter, "csv-delimiter", "\"", "The delimiter for values in csv files, default '\"'")
 	pflag.StringVar(&outputFilenameFormat, "output-filename-template", "", "The output filename template (without file extension)")
 	pflag.BoolVar(&completeInsert, "complete-insert", false, "Use complete INSERT statements that include column names")
+	pflag.StringToStringVar(&sessionParams, "params", nil, `Extra session variables used while dumping, accepted format: --params "character_set_client=latin1,character_set_connection=latin1"`)
 
 	storage.DefineFlags(pflag.CommandLine)
 
@@ -175,11 +179,15 @@ func main() {
 	}
 
 	conf := export.DefaultConfig()
+	for k, v := range sessionParams {
+		conf.SessionParams[k] = v
+	}
 	conf.Databases = databases
 	conf.Host = host
 	conf.User = user
 	conf.Port = port
 	conf.Password = password
+	conf.AllowCleartextPasswords = allowCleartextPasswords
 	conf.Threads = threads
 	conf.FileSize = fileSize
 	conf.StatementSize = statementSize
@@ -205,7 +213,7 @@ func main() {
 	conf.Security.CAPath = caPath
 	conf.Security.CertPath = certPath
 	conf.Security.KeyPath = keyPath
-	conf.SessionParams["tidb_mem_quota_query"] = tidbMemQuotaQuery
+	conf.SessionParams[export.TiDBMemQuotaQueryName] = tidbMemQuotaQuery
 	conf.CsvSeparator = csvSeparator
 	conf.CsvDelimiter = csvDelimiter
 	conf.OutputFileTemplate = tmpl
