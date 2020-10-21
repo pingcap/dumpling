@@ -3,7 +3,7 @@
 set -eu
 cur=$(cd `dirname $0`; pwd)
 
-DB_NAME="all_generate"
+DB_NAME="all_generate_column"
 TABLE_NAME="t"
 
 # drop database on tidb
