@@ -158,8 +158,9 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, file
 	)
 
 	selectedField := tblIR.SelectedField()
+
 	// if has generated column
-	if selectedField != "" {
+	if selectedField != "" && selectedField != "*" {
 		insertStatementPrefix = fmt.Sprintf("INSERT INTO %s %s VALUES\n",
 			wrapBackTicks(escapeString(tblIR.TableName())), selectedField)
 	} else {
@@ -174,13 +175,17 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, file
 		wp.AddFileSize(insertStatementPrefixLen)
 
 		for fileRowIter.HasNext() {
-			if err = fileRowIter.Decode(row); err != nil {
-				log.Error("scanning from sql.Row failed", zap.Error(err))
-				return err
-			}
 
 			lastBfSize := bf.Len()
-			row.WriteToBuffer(bf, escapeBackSlash)
+			if selectedField != "" {
+				if err = fileRowIter.Decode(row); err != nil {
+					log.Error("scanning from sql.Row failed", zap.Error(err))
+					return err
+				}
+				row.WriteToBuffer(bf, escapeBackSlash)
+			} else {
+				bf.WriteString("()")
+			}
 			counter += 1
 			wp.AddFileSize(uint64(bf.Len()-lastBfSize) + 2) // 2 is for ",\n" and ";\n"
 
@@ -259,7 +264,7 @@ func WriteInsertInCsv(pCtx context.Context, tblIR TableDataIR, w storage.Writer,
 		err             error
 	)
 
-	if !noHeader && len(tblIR.ColumnNames()) != 0 {
+	if !noHeader && len(tblIR.ColumnNames()) != 0 && tblIR.SelectedField() != "" {
 		for i, col := range tblIR.ColumnNames() {
 			bf.Write(opt.delimiter)
 			escape([]byte(col), bf, getEscapeQuotation(escapeBackSlash, opt.delimiter))
@@ -273,13 +278,14 @@ func WriteInsertInCsv(pCtx context.Context, tblIR TableDataIR, w storage.Writer,
 	wp.currentFileSize += uint64(bf.Len())
 
 	for fileRowIter.HasNext() {
-		if err = fileRowIter.Decode(row); err != nil {
-			log.Error("scanning from sql.Row failed", zap.Error(err))
-			return err
-		}
-
 		lastBfSize := bf.Len()
-		row.WriteToBufferInCsv(bf, escapeBackSlash, opt)
+		if tblIR.SelectedField() != "" {
+			if err = fileRowIter.Decode(row); err != nil {
+				log.Error("scanning from sql.Row failed", zap.Error(err))
+				return err
+			}
+			row.WriteToBufferInCsv(bf, escapeBackSlash, opt)
+		}
 		counter += 1
 		wp.currentFileSize += uint64(bf.Len()-lastBfSize) + 1 // 1 is for "\n"
 
