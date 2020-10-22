@@ -115,9 +115,6 @@ func (m *mockTableIR) ColumnNames() []string {
 }
 
 func (m *mockTableIR) SelectedField() string {
-	if m.selectedField == "*" || m.selectedField == ""{
-		return m.selectedField
-	}
 	return m.selectedField
 }
 

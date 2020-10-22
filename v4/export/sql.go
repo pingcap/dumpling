@@ -210,13 +210,12 @@ func SelectAllFromTable(conf *Config, db *sql.Conn, database, table string) (Tab
 		return nil, err
 	}
 
-	var query string
+	queryField := selectedField
 	// If all columns are generated
-	if selectedField == "" {
-		query = fmt.Sprintf("SELECT '' FROM `%s`.`%s`", database, table)
-	} else {
-		query = buildSelectQuery(database, table, selectedField, buildWhereCondition(conf, ""), orderByClause)
+	if queryField == "" {
+		queryField = "''"
 	}
+	query := buildSelectQuery(database, table, queryField, buildWhereCondition(conf, ""), orderByClause)
 
 	return &tableData{
 		database:        database,
