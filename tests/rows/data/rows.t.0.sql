@@ -99,3 +99,8 @@ insert into `rows`.`t` (a) values
 ('78cm$y#4?S;PV]\\Oex=E'),
 ('d"h=\n\\k)8!:C?qKD(NB['),
 (' Vemr1.kpU@B|qQ=M{O#');
+
+--- add negative primary key for testing
+insert into `rows`.`t` (id,a) values
+(-1,'vr/g 8uoZ&26U+*%|(k3'),
+(-2,':v3uo7whT`Zz>tD=[,)\r');
