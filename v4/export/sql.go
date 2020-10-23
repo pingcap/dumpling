@@ -194,7 +194,13 @@ func SelectAllFromTable(conf *Config, db *sql.Conn, database, table string) (Tab
 		return nil, err
 	}
 
-	colTypes, err := GetColumnTypes(db, selectedField, database, table)
+	var colTypes []*sql.ColumnType
+	// If all columns are generated
+	if selectedField == "" {
+		colTypes, err = GetColumnTypes(db, "*", database, table)
+	} else {
+		colTypes, err = GetColumnTypes(db, selectedField, database, table)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -204,7 +210,12 @@ func SelectAllFromTable(conf *Config, db *sql.Conn, database, table string) (Tab
 		return nil, err
 	}
 
-	query := buildSelectQuery(database, table, selectedField, buildWhereCondition(conf, ""), orderByClause)
+	queryField := selectedField
+	// If all columns are generated
+	if queryField == "" {
+		queryField = "''"
+	}
+	query := buildSelectQuery(database, table, queryField, buildWhereCondition(conf, ""), orderByClause)
 
 	return &tableData{
 		database:        database,
@@ -375,13 +386,19 @@ func UseDatabase(db *sql.DB, databaseName string) error {
 	return withStack(err)
 }
 
-func ShowMasterStatus(db *sql.Conn, fieldNum int) ([]string, error) {
-	oneRow := make([]string, fieldNum)
-	addr := make([]interface{}, fieldNum)
-	for i := range oneRow {
-		addr[i] = &oneRow[i]
-	}
+func ShowMasterStatus(db *sql.Conn) ([]string, error) {
+	var oneRow []string
 	handleOneRow := func(rows *sql.Rows) error {
+		cols, err := rows.Columns()
+		if err != nil {
+			return err
+		}
+		fieldNum := len(cols)
+		oneRow = make([]string, fieldNum)
+		addr := make([]interface{}, fieldNum)
+		for i := range oneRow {
+			addr[i] = &oneRow[i]
+		}
 		return rows.Scan(addr...)
 	}
 	const showMasterStatusQuery = "SHOW MASTER STATUS"
@@ -453,7 +470,7 @@ func CheckTiDBWithTiKV(db *sql.DB) (bool, error) {
 }
 
 func getSnapshot(db *sql.Conn) (string, error) {
-	str, err := ShowMasterStatus(db, showMasterStatusFieldNum)
+	str, err := ShowMasterStatus(db)
 	if err != nil {
 		return "", err
 	}
