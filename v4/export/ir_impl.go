@@ -193,17 +193,24 @@ func splitTableDataIntoChunks(
 		return
 	}
 
-	var max uint64
-	var min uint64
-	if max, err = strconv.ParseUint(smax.String, 10, 64); err != nil {
+	var max int64
+	var min int64
+	if max, err = strconv.Parseint(smax.String, 10, 64); err != nil {
 		errCh <- errors.WithMessagef(err, "fail to convert max value %s in query %s", smax.String, query)
 		return
 	}
-	if min, err = strconv.ParseUint(smin.String, 10, 64); err != nil {
+	if min, err = strconv.Parseint(smin.String, 10, 64); err != nil {
 		errCh <- errors.WithMessagef(err, "fail to convert min value %s in query %s", smin.String, query)
 		return
 	}
-
+	if max < min {
+		errCh <- errors.WithMessagef(err, "get the min value %s bigger than max value %s in query %s",
+			smin.String,
+			smax.String,
+			query)
+		return
+	}
+	
 	count := estimateCount(dbName, tableName, db, field, conf)
 	log.Info("get estimated rows count", zap.Uint64("estimateCount", count))
 	if count < conf.Rows {
@@ -218,7 +225,7 @@ func splitTableDataIntoChunks(
 
 	// every chunk would have eventual adjustments
 	estimatedChunks := count / conf.Rows
-	estimatedStep := (max-min)/estimatedChunks + 1
+	estimatedStep := int64(uint64((max-min)/estimatedChunks + 1)
 	cutoff := min
 
 	selectedField, err := buildSelectField(db, dbName, tableName, conf.CompleteInsert)
