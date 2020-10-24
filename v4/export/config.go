@@ -453,7 +453,7 @@ func ParseTableFilter(tablesList, filters []string) (filter.Filter, error) {
 	for _, table := range tablesList {
 		parts := strings.SplitN(table, ".", 2)
 		if len(parts) < 2 {
-			return nil, fmt.Errorf("--tables-list only accepts qualified table names, but `%s` lacks a dot", table)
+			return nil, errors.Errorf("--tables-list only accepts qualified table names, but `%s` lacks a dot", table)
 		}
 		tableNames = append(tableNames, filter.Table{Schema: parts[0], Name: parts[1]})
 	}

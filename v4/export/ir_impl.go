@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/pkg/errors"
+	"github.com/pingcap/errors"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/dumpling/v4/log"
@@ -160,7 +160,7 @@ func splitTableDataIntoChunks(
 	dbName, tableName string, db *sql.Conn, conf *Config) {
 	field, err := pickupPossibleField(dbName, tableName, db, conf)
 	if err != nil {
-		errCh <- withStack(err)
+		errCh <- errors.Trace(err)
 		return
 	}
 	if field == "" {
@@ -183,7 +183,7 @@ func splitTableDataIntoChunks(
 	err = row.Scan(&smin, &smax)
 	if err != nil {
 		log.Error("split chunks - get max min failed", zap.String("query", query), zap.Error(err))
-		errCh <- withStack(err)
+		errCh <- errors.Trace(err)
 		return
 	}
 	if !smax.Valid || !smin.Valid {
@@ -196,11 +196,11 @@ func splitTableDataIntoChunks(
 	var max uint64
 	var min uint64
 	if max, err = strconv.ParseUint(smax.String, 10, 64); err != nil {
-		errCh <- errors.WithMessagef(err, "fail to convert max value %s in query %s", smax.String, query)
+		errCh <- errors.Annotatef(err, "fail to convert max value %s in query %s", smax.String, query)
 		return
 	}
 	if min, err = strconv.ParseUint(smin.String, 10, 64); err != nil {
-		errCh <- errors.WithMessagef(err, "fail to convert min value %s in query %s", smin.String, query)
+		errCh <- errors.Annotatef(err, "fail to convert min value %s in query %s", smin.String, query)
 		return
 	}
 
@@ -223,18 +223,18 @@ func splitTableDataIntoChunks(
 
 	selectedField, err := buildSelectField(db, dbName, tableName, conf.CompleteInsert)
 	if err != nil {
-		errCh <- withStack(err)
+		errCh <- errors.Trace(err)
 		return
 	}
 
 	colTypes, err := GetColumnTypes(db, selectedField, dbName, tableName)
 	if err != nil {
-		errCh <- withStack(err)
+		errCh <- errors.Trace(err)
 		return
 	}
 	orderByClause, err := buildOrderByClause(conf, db, dbName, tableName)
 	if err != nil {
-		errCh <- withStack(err)
+		errCh <- errors.Trace(err)
 		return
 	}
 
