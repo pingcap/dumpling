@@ -99,10 +99,11 @@ insert into `rows`.`t2` (a) values
 ('78cm$y#4?S;PV]\\Oex=E'),
 ('d"h=\n\\k)8!:C?qKD(NB['),
 (' Vemr1.kpU@B|qQ=M{O#');
---- add negative id
+--- add unsigned primary key
 insert into `rows`.`t2` (id,a) values
 (18446744073709551605,'vr/g 8uoZ&26U+*%|(k3'),
 (18446744073709551606,':v3uo7whT`Zz>tD=[,)\r');
 
+-- analyze table for making sure the estimateCount is correct
 analyze table rows.t;
 analyze table rows.t2;
