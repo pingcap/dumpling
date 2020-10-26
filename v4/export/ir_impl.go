@@ -4,8 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"strconv"
-	"strings"
+	//"strconv"
+	"math/big"
 
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -193,24 +193,18 @@ func splitTableDataIntoChunks(
 		return
 	}
 
-	var max int64
-	var min int64
-	if max, err = strconv.Parseint(smax.String, 10, 64); err != nil {
+	max := new(big.Int)
+	min := new(big.Int)
+	var ok bool
+	if max, ok = max.SetString(smax.String, 10); !ok {
 		errCh <- errors.WithMessagef(err, "fail to convert max value %s in query %s", smax.String, query)
 		return
 	}
-	if min, err = strconv.Parseint(smin.String, 10, 64); err != nil {
+	if min, ok = min.SetString(smin.String, 10); !ok {
 		errCh <- errors.WithMessagef(err, "fail to convert min value %s in query %s", smin.String, query)
 		return
 	}
-	if max < min {
-		errCh <- errors.WithMessagef(err, "get the min value %s bigger than max value %s in query %s",
-			smin.String,
-			smax.String,
-			query)
-		return
-	}
-	
+
 	count := estimateCount(dbName, tableName, db, field, conf)
 	log.Info("get estimated rows count", zap.Uint64("estimateCount", count))
 	if count < conf.Rows {
@@ -222,11 +216,18 @@ func splitTableDataIntoChunks(
 		linear <- struct{}{}
 		return
 	}
+	if min.Cmp(max) > 0 {
+		errCh <- errors.WithMessagef(err, "get the wrong values of min value %s and max value %s in query %s",
+			smin.String,
+			smax.String,
+			query)
+		return
+	}
 
 	// every chunk would have eventual adjustments
 	estimatedChunks := count / conf.Rows
-	estimatedStep := int64(uint64((max-min)/estimatedChunks + 1)
-	cutoff := min
+	estimatedStep := new(big.Int).Sub(max,min).Uint64() /estimatedChunks + 1
+	cutoff := new(big.Int).Set(min)
 
 	selectedField, err := buildSelectField(db, dbName, tableName, conf.CompleteInsert)
 	if err != nil {
@@ -248,9 +249,9 @@ func splitTableDataIntoChunks(
 	chunkIndex := 0
 	nullValueCondition := fmt.Sprintf("`%s` IS NULL OR ", escapeString(field))
 LOOP:
-	for cutoff <= max {
+	for max.Cmp(cutoff) >= 0 {
 		chunkIndex += 1
-		where := fmt.Sprintf("%s(`%s` >= %d AND `%s` < %d)", nullValueCondition, escapeString(field), cutoff, escapeString(field), cutoff+estimatedStep)
+		where := fmt.Sprintf("%s(`%s` >= %d AND `%s` < %d)", nullValueCondition, escapeString(field), cutoff, escapeString(field), cutoff.Add(cutoff,new(big.Int).SetUint64(estimatedStep)))
 		query = buildSelectQuery(dbName, tableName, selectedField, buildWhereCondition(conf, where), orderByClause)
 		if len(nullValueCondition) > 0 {
 			nullValueCondition = ""
@@ -268,7 +269,8 @@ LOOP:
 				"/*!40101 SET NAMES binary*/;",
 			},
 		}
-		cutoff += estimatedStep
+		cutoff = cutoff.Add(cutoff,new(big.Int).SetUint64(estimatedStep))
+		//cutoff += estimatedStep
 		select {
 		case <-ctx.Done():
 			break LOOP
