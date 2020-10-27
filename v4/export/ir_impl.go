@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/pkg/errors"
 	"math/big"
 	"strings"
 
@@ -192,8 +193,17 @@ func splitTableDataIntoChunks(
 		return
 	}
 
-	max, _ := new(big.Int).SetString(smax.String, 10)
-	min, _ := new(big.Int).SetString(smin.String, 10)
+	max := new(big.Int)
+	min := new(big.Int)
+	var ok bool
+	if max, ok = max.SetString(smax.String, 10); !ok {
+		errCh <- errors.Errorf("fail to convert max value %s in query %s", smax.String, query)
+		return
+	}
+	if min, _ = min.SetString(smin.String, 10); !ok {
+		errCh <- errors.Errorf("fail to convert min value %s in query %s", smin.String, query)
+		return
+	}
 
 	count := estimateCount(dbName, tableName, db, field, conf)
 	log.Info("get estimated rows count", zap.Uint64("estimateCount", count))
