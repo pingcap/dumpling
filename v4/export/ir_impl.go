@@ -253,7 +253,7 @@ LOOP:
 				"/*!40101 SET NAMES binary*/;",
 			},
 		}
-		cutoff.Add(cutoff,bigestmatedSetp)
+		cutoff.Set(nextCutoff)
 		select {
 		case <-ctx.Done():
 			break LOOP
