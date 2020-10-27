@@ -117,7 +117,7 @@ func (s *testDumpSuite) TestWriteTableData(c *C) {
 	err = writer.WriteTableData(ctx, tableIR)
 	c.Assert(err, IsNil)
 
-	p := path.Join(dir, "test.employee.0.sql")
+	p := path.Join(dir, "test.employee.000000000.sql")
 	_, err = os.Stat(p)
 	c.Assert(err, IsNil)
 	bytes, err := ioutil.ReadFile(p)
@@ -167,12 +167,12 @@ func (s *testDumpSuite) TestWriteTableDataWithFileSize(c *C) {
 	c.Assert(err, IsNil)
 
 	cases := map[string]string{
-		"test.employee.0.sql": "/*!40101 SET NAMES binary*/;\n" +
+		"test.employee.000000000.sql": "/*!40101 SET NAMES binary*/;\n" +
 			"/*!40014 SET FOREIGN_KEY_CHECKS=0*/;\n" +
 			"INSERT INTO `employee` VALUES\n" +
 			"(1,'male','bob@mail.com','020-1234',NULL),\n" +
 			"(2,'female','sarah@mail.com','020-1253','healthy');\n",
-		"test.employee.1.sql": "/*!40101 SET NAMES binary*/;\n" +
+		"test.employee.000000001.sql": "/*!40101 SET NAMES binary*/;\n" +
 			"/*!40014 SET FOREIGN_KEY_CHECKS=0*/;\n" +
 			"INSERT INTO `employee` VALUES\n" +
 			"(3,'male','john@mail.com','020-1256','healthy'),\n" +
@@ -260,14 +260,14 @@ func (s *testDumpSuite) TestWriteTableDataWithStatementSize(c *C) {
 	config.ExternalStorage = newStorage
 
 	cases = map[string]string{
-		"0-employee-te%25%2Fst.sql": "/*!40101 SET NAMES binary*/;\n" +
+		"000000000-employee-te%25%2Fst.sql": "/*!40101 SET NAMES binary*/;\n" +
 			"/*!40014 SET FOREIGN_KEY_CHECKS=0*/;\n" +
 			"INSERT INTO `employee` VALUES\n" +
 			"(1,'male','bob@mail.com','020-1234',NULL),\n" +
 			"(2,'female','sarah@mail.com','020-1253','healthy');\n" +
 			"INSERT INTO `employee` VALUES\n" +
 			"(3,'male','john@mail.com','020-1256','healthy');\n",
-		"1-employee-te%25%2Fst.sql": "/*!40101 SET NAMES binary*/;\n" +
+		"000000001-employee-te%25%2Fst.sql": "/*!40101 SET NAMES binary*/;\n" +
 			"/*!40014 SET FOREIGN_KEY_CHECKS=0*/;\n" +
 			"INSERT INTO `employee` VALUES\n" +
 			"(4,'female','sarah@mail.com','020-1235','healthy');\n",

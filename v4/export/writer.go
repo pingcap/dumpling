@@ -3,6 +3,8 @@ package export
 import (
 	"bytes"
 	"context"
+	"fmt"
+	"strings"
 	"text/template"
 
 	"github.com/pingcap/br/pkg/storage"
@@ -72,12 +74,12 @@ func (f SQLWriter) WriteTableData(ctx context.Context, ir TableDataIR) error {
 			fileName = fmt.Sprintf("%s.%s.%d.sql", ir.DatabaseName(), ir.TableName(), 0)
 		}
 	}*/
-	namer := newOutputFileNamer(ir)
-	fileName, err := namer.NextName(f.cfg.OutputFileTemplate)
+	namer := newOutputFileNamer(ir, f.cfg.Rows != UnspecifiedSize && f.cfg.FileSize != UnspecifiedSize)
+	fileType := strings.ToLower(f.cfg.FileType)
+	fileName, err := namer.NextName(f.cfg.OutputFileTemplate, fileType)
 	if err != nil {
 		return err
 	}
-	fileName += ".sql"
 	chunksIter := ir
 	defer chunksIter.Rows().Close()
 
@@ -96,11 +98,10 @@ func (f SQLWriter) WriteTableData(ctx context.Context, ir TableDataIR) error {
 		if f.cfg.FileSize == UnspecifiedSize {
 			break
 		}
-		fileName, err = namer.NextName(f.cfg.OutputFileTemplate)
+		fileName, err = namer.NextName(f.cfg.OutputFileTemplate, fileType)
 		if err != nil {
 			return err
 		}
-		fileName += ".sql"
 	}
 	log.Debug("dumping table successfully",
 		zap.String("table", ir.TableName()))
@@ -126,9 +127,12 @@ func writeMetaToFile(ctx context.Context, target, metaSQL string, s storage.Exte
 type CSVWriter struct{ SimpleWriter }
 
 type outputFileNamer struct {
-	Index int
+	Index string
 	DB    string
 	Table string
+
+	id       int
+	idFormat string
 }
 
 type csvOption struct {
@@ -137,12 +141,19 @@ type csvOption struct {
 	delimiter []byte
 }
 
-func newOutputFileNamer(ir TableDataIR) *outputFileNamer {
-	return &outputFileNamer{
-		Index: ir.ChunkIndex(),
+func newOutputFileNamer(ir TableDataIR, bothEnabled bool) *outputFileNamer {
+	o := &outputFileNamer{
 		DB:    ir.DatabaseName(),
 		Table: ir.TableName(),
 	}
+	if bothEnabled {
+		o.id = 0
+		o.idFormat = fmt.Sprintf("%09d", ir.ChunkIndex()) + "%04d"
+	} else {
+		o.id = ir.ChunkIndex()
+		o.idFormat = "%09d"
+	}
+	return o
 }
 
 func (namer *outputFileNamer) render(tmpl *template.Template, subName string) (string, error) {
@@ -153,21 +164,22 @@ func (namer *outputFileNamer) render(tmpl *template.Template, subName string) (s
 	return bf.String(), nil
 }
 
-func (namer *outputFileNamer) NextName(tmpl *template.Template) (string, error) {
+func (namer *outputFileNamer) NextName(tmpl *template.Template, fileType string) (string, error) {
+	namer.Index = fmt.Sprintf(namer.idFormat, namer.id)
 	res, err := namer.render(tmpl, outputFileTemplateData)
-	namer.Index++
-	return res, err
+	namer.id++
+	return res + "." + fileType, err
 }
 
 func (f CSVWriter) WriteTableData(ctx context.Context, ir TableDataIR) error {
 	log.Debug("start dumping table in csv format...", zap.String("table", ir.TableName()))
 
-	namer := newOutputFileNamer(ir)
-	fileName, err := namer.NextName(f.cfg.OutputFileTemplate)
+	namer := newOutputFileNamer(ir, f.cfg.Rows != UnspecifiedSize && f.cfg.FileSize != UnspecifiedSize)
+	fileType := strings.ToLower(f.cfg.FileType)
+	fileName, err := namer.NextName(f.cfg.OutputFileTemplate, fileType)
 	if err != nil {
 		return err
 	}
-	fileName += ".csv"
 	chunksIter := ir
 	defer chunksIter.Rows().Close()
 
@@ -192,11 +204,10 @@ func (f CSVWriter) WriteTableData(ctx context.Context, ir TableDataIR) error {
 		if f.cfg.FileSize == UnspecifiedSize {
 			break
 		}
-		fileName, err = namer.NextName(f.cfg.OutputFileTemplate)
+		fileName, err = namer.NextName(f.cfg.OutputFileTemplate, fileType)
 		if err != nil {
 			return err
 		}
-		fileName += ".csv"
 	}
 	log.Debug("dumping table in csv format successfully",
 		zap.String("table", ir.TableName()))
