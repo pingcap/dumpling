@@ -200,7 +200,7 @@ func splitTableDataIntoChunks(
 		errCh <- errors.Errorf("fail to convert max value %s in query %s", smax.String, query)
 		return
 	}
-	if min, _ = min.SetString(smin.String, 10); !ok {
+	if min, ok = min.SetString(smin.String, 10); !ok {
 		errCh <- errors.Errorf("fail to convert min value %s in query %s", smin.String, query)
 		return
 	}
