@@ -4,13 +4,14 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"github.com/pkg/errors"
+
 	"math/big"
 	"strings"
 
 	"go.uber.org/zap"
 
 	"github.com/pingcap/dumpling/v4/log"
+	"github.com/pingcap/errors"
 )
 
 // rowIter implements the SQLRowIter interface.
@@ -200,7 +201,7 @@ func splitTableDataIntoChunks(
 		errCh <- errors.Errorf("fail to convert max value %s in query %s", smax.String, query)
 		return
 	}
-	if min, ok = min.SetString(smin.String, 10); !ok {
+	if min, _ = min.SetString(smin.String, 10); !ok {
 		errCh <- errors.Errorf("fail to convert min value %s in query %s", smin.String, query)
 		return
 	}
@@ -219,7 +220,7 @@ func splitTableDataIntoChunks(
 	// every chunk would have eventual adjustments
 	estimatedChunks := count / conf.Rows
 	estimatedStep := new(big.Int).Sub(max,min).Uint64() /estimatedChunks + 1
-	bigestmatedSetp := new(big.Int).SetUint64(estimatedStep)
+	bigEstimatedStep := new(big.Int).SetUint64(estimatedStep)
 	cutoff := new(big.Int).Set(min)
 	nextCutoff := new(big.Int)
 
@@ -245,7 +246,7 @@ func splitTableDataIntoChunks(
 LOOP:
 	for max.Cmp(cutoff) >= 0 {
 		chunkIndex += 1
-		where := fmt.Sprintf("%s(`%s` >= %d AND `%s` < %d)", nullValueCondition, escapeString(field), cutoff, escapeString(field), nextCutoff.Add(cutoff,bigestmatedSetp))
+		where := fmt.Sprintf("%s(`%s` >= %d AND `%s` < %d)", nullValueCondition, escapeString(field), cutoff, escapeString(field), nextCutoff.Add(cutoff,bigEstimatedStep))
 		query = buildSelectQuery(dbName, tableName, selectedField, buildWhereCondition(conf, where), orderByClause)
 		if len(nullValueCondition) > 0 {
 			nullValueCondition = ""
