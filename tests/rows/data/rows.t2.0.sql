@@ -100,7 +100,7 @@ insert into `rows`.`t2` (a) values
 ('d"h=\n\\k)8!:C?qKD(NB['),
 (' Vemr1.kpU@B|qQ=M{O#');
 --- add unsigned primary key
-insert into `rows`.`t2` (id,a) values
+insert into `rows`.`t2` (`id`,`a`) values
 (18446744073709551605,'vr/g 8uoZ&26U+*%|(k3'),
 (18446744073709551606,':v3uo7whT`Zz>tD=[,)\r');
 
