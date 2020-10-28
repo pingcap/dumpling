@@ -101,6 +101,6 @@ insert into `rows`.`t` (a) values
 (' Vemr1.kpU@B|qQ=M{O#');
 
 --- add negative primary key for testing
-insert into `rows`.`t` (id,a) values
+insert into `rows`.`t` (`id`,`a`) values
 (-1,'vr/g 8uoZ&26U+*%|(k3'),
 (-2,':v3uo7whT`Zz>tD=[,)\r');
