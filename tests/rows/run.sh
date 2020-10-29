@@ -5,7 +5,6 @@ cur=$(cd `dirname $0`; pwd)
 
 DB_NAME="rows"
 TABLE_NAME="t"
-TABLE_NAME2="t2"
 
 # drop database on tidb
 export DUMPLING_TEST_PORT=4000
@@ -18,13 +17,9 @@ run_sql "drop database if exists \`$DB_NAME\`;"
 # build data on mysql
 run_sql "create database $DB_NAME;"
 run_sql "create table $DB_NAME.$TABLE_NAME (id int not null auto_increment primary key, a varchar(24));"
-run_sql "create table $DB_NAME.$TABLE_NAME2 (id bigint unsigned not null auto_increment primary key, a varchar(24));"
 
-# insert 102 records
+# insert 100 records
 run_sql_file "$cur/data/rows.t.0.sql"
-
-# insert 102 records
-run_sql_file "$cur/data/rows.t2.0.sql"
 
 # dumping
 export DUMPLING_TEST_DATABASE=$DB_NAME
