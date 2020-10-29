@@ -1,6 +1,4 @@
-insert into `rows`.`t` (a) values
-('vr/g 8uoZ&26U+*%|(k3'),
-(':v3uo7whT`Zz>tD=[,)\r'),
+insert into `rei`.`t2` (a) values
 ('nuq,%sl5+i/pX2''Ur-"`'),
 ("\tB>+a?]m\\9T!{2X@I:'k"),
 ('8_/GI}Oh&|YPo0k,@[FB'),
@@ -99,3 +97,7 @@ insert into `rows`.`t` (a) values
 ('78cm$y#4?S;PV]\\Oex=E'),
 ('d"h=\n\\k)8!:C?qKD(NB['),
 (' Vemr1.kpU@B|qQ=M{O#');
+-- add unsigned primary key
+insert into `rei`.`t2` (id,a) values
+(18446744073709551615,'vr/g 8uoZ&26U+*%|(k3'),
+(18446744073709551614,':v3uo7whT`Zz>tD=[,)\r');

@@ -1,8 +1,4 @@
-insert into `rows`.`t2` (a) values
-('vr/g 8uoZ&26U+*%|(k3'),
-(':v3uo7whT`Zz>tD=[,)\r'),
-('nuq,%sl5+i/pX2''Ur-"`'),
-("\tB>+a?]m\\9T!{2X@I:'k"),
+insert into `rei`.`t` (a) values
 ('8_/GI}Oh&|YPo0k,@[FB'),
 ("Lnx3WawtgN'.J)\n[C-V!"),
 ("$cislLng'V/`Ce[\\\nA4K"),
@@ -99,11 +95,9 @@ insert into `rows`.`t2` (a) values
 ('78cm$y#4?S;PV]\\Oex=E'),
 ('d"h=\n\\k)8!:C?qKD(NB['),
 (' Vemr1.kpU@B|qQ=M{O#');
---- add unsigned primary key
-insert into `rows`.`t2` (`id`,`a`) values
-(18446744073709551605,'vr/g 8uoZ&26U+*%|(k3'),
-(18446744073709551606,':v3uo7whT`Zz>tD=[,)\r');
-
--- analyze table for making sure the estimateCount is correct
-analyze table rows.t;
-analyze table rows.t2;
+-- add negative primary key
+insert into `rei`.`t` (`id`,`a`) values
+(-1,'vr/g 8uoZ&26U+*%|(k3'),
+(-2,':v3uo7whT`Zz>tD=[,)\r'),
+(2147483647,'nuq,%sl5+i/pX2''Ur-"`'),
+(2147483646,"\tB>+a?]m\\9T!{2X@I:'k");
