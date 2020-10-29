@@ -99,4 +99,3 @@ insert into `rows`.`t` (a) values
 ('78cm$y#4?S;PV]\\Oex=E'),
 ('d"h=\n\\k)8!:C?qKD(NB['),
 (' Vemr1.kpU@B|qQ=M{O#');
-
