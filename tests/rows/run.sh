@@ -52,10 +52,10 @@ if [ "$file_num" -ne 50 ]; then
   echo "obtain file number: $file_num, but expect: 50" && exit 1
 fi
 
-for i in {1..10}
+for i in `seq 1 10`
 do
   r=$(printf "%02d" $i)
-  for j in {0..4}
+  for j in `seq 0 4`
   do
     file_name="$DUMPLING_OUTPUT_DIR/$DB_NAME.$TABLE_NAME.0000000${r}000${j}.sql"
     if [ ! -f "$file_name" ]; then
