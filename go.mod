@@ -7,13 +7,14 @@ require (
 	github.com/coreos/go-semver v0.3.0
 	github.com/docker/go-units v0.4.0
 	github.com/go-sql-driver/mysql v1.5.0
-	github.com/pingcap/br v0.0.0-20200925095602-bf9cc603382e
+	github.com/pingcap/br v4.0.0-beta.2.0.20201030055809-5772a78c86dc+incompatible
 	github.com/pingcap/check v0.0.0-20200212061837-5e12011dc712
 	github.com/pingcap/errors v0.11.5-0.20200902104258-eba4f1d8f6de
 	github.com/pingcap/failpoint v0.0.0-20200702092429-9f69995143ce
-	github.com/pingcap/kvproto v0.0.0-20200910095337-6b893f12be43
+	github.com/pingcap/kvproto v0.0.0-20200910095337-6b893f12be43 // indirect
 	github.com/pingcap/log v0.0.0-20200828042413-fce0951f1463
-	github.com/pingcap/tidb-tools v4.0.5-0.20200820092506-34ea90c93237+incompatible
+	github.com/pingcap/tidb v1.1.0-beta.0.20200910052409-5d52a34b2476
+	github.com/pingcap/tidb-tools v4.0.8-0.20200927084250-e47e0e12c7f3+incompatible
 	github.com/pkg/errors v0.9.1
 	github.com/soheilhy/cmux v0.1.4
 	github.com/spf13/pflag v1.0.5

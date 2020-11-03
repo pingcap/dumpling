@@ -10,6 +10,7 @@ import (
 	"github.com/pingcap/dumpling/v4/log"
 
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/pingcap/br/pkg/utils"
 	"github.com/pingcap/failpoint"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
@@ -253,11 +254,13 @@ func dumpDatabases(ctx context.Context, conf *Config, connectPool *connectionsPo
 				g.Go(func() error {
 					conn := connectPool.getConn()
 					defer connectPool.releaseConn(conn)
-					err := tableIR.Start(ctx, conn)
-					if err != nil {
-						return err
-					}
-					return writer.WriteTableData(ctx, tableIR)
+					return utils.WithRetry(ctx, func() error {
+						err := tableIR.Start(ctx, conn)
+						if err != nil {
+							return err
+						}
+						return writer.WriteTableData(ctx, tableIR)
+					}, newDumpChunkBackoffer())
 				})
 			}
 		}
