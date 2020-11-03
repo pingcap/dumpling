@@ -222,7 +222,7 @@ func (s *SQLTypeBytes) BindAddress(arg []interface{}) {
 }
 
 func (s *SQLTypeBytes) WriteToBuffer(bf *bytes.Buffer, _ bool) {
-	if s.RawBytes != nil {
+	if s.RawBytes != nil && len(s.RawBytes) > 0 {
 		fmt.Fprintf(bf, "x'%x'", s.RawBytes)
 	} else {
 		bf.WriteString(nullValue)
