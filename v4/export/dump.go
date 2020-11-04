@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/pingcap/dumpling/v4/log"
@@ -224,9 +225,12 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 	return nil
 }
 
-func dumpDatabases(ctx context.Context, conf *Config, connectPool *connectionsPool, writer Writer) error {
+func dumpDatabases(pCtx context.Context, conf *Config, connectPool *connectionsPool, writer Writer) error {
 	allTables := conf.Tables
-	var g errgroup.Group
+	var g sync.WaitGroup
+	var globalError error
+	ctx, cancel := context.WithCancel(pCtx)
+	defer cancel()
 	for dbName, tables := range allTables {
 		conn := connectPool.getConn()
 		createDatabaseSQL, err := ShowCreateDatabase(conn, dbName)
@@ -251,24 +255,30 @@ func dumpDatabases(ctx context.Context, conf *Config, connectPool *connectionsPo
 			}
 			for _, tableIR := range tableDataIRArray {
 				tableIR := tableIR
-				g.Go(func() error {
+				g.Add(1)
+				go func() {
+					defer g.Done()
 					conn := connectPool.getConn()
 					defer connectPool.releaseConn(conn)
-					return utils.WithRetry(ctx, func() error {
+					err := utils.WithRetry(ctx, func() error {
 						err := tableIR.Start(ctx, conn)
 						if err != nil {
 							return err
 						}
 						return writer.WriteTableData(ctx, tableIR)
 					}, newDumpChunkBackoffer())
-				})
+					if err != nil {
+						if globalError != nil {
+							globalError = err
+							cancel()
+						}
+					}
+				}()
 			}
 		}
 	}
-	if err := g.Wait(); err != nil {
-		return err
-	}
-	return nil
+	g.Wait()
+	return globalError
 }
 
 func prepareTableListToDump(conf *Config, pool *sql.Conn) error {
