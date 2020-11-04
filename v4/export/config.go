@@ -136,6 +136,7 @@ func (config *Config) createExternalStorage(ctx context.Context) (storage.Extern
 		return nil, err
 	}
 	httpClient := http.DefaultClient
+	httpClient.Timeout = 30 * time.Second
 	maxIdleConnsPerHost := http.DefaultMaxIdleConnsPerHost
 	if config.Threads > maxIdleConnsPerHost {
 		maxIdleConnsPerHost = config.Threads
