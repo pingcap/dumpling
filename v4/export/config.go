@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
+	"net/http"
 	"regexp"
 	"strings"
 	"text/template"
@@ -133,7 +135,30 @@ func (config *Config) createExternalStorage(ctx context.Context) (storage.Extern
 	if err != nil {
 		return nil, err
 	}
-	return storage.Create(ctx, b, false)
+	httpClient := http.DefaultClient
+	maxIdleConnsPerHost := http.DefaultMaxIdleConnsPerHost
+	if config.Threads > maxIdleConnsPerHost {
+		maxIdleConnsPerHost = config.Threads
+	}
+	// copy from http.DefaultTransport, add maxIdleConnsPerHost
+	httpClient.Transport = &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+			DualStack: true,
+		}).DialContext,
+		ForceAttemptHTTP2:     true,
+		MaxIdleConns:          100,
+		MaxIdleConnsPerHost:   maxIdleConnsPerHost,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+	}
+
+	return storage.New(ctx, b, &storage.ExternalStorageOptions{
+		HTTPClient: httpClient,
+	})
 }
 
 const (
