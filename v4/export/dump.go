@@ -268,7 +268,7 @@ func dumpDatabases(pCtx context.Context, conf *Config, connectPool *connectionsP
 						return writer.WriteTableData(ctx, tableIR)
 					}, newDumpChunkBackoffer())
 					if err != nil {
-						if globalError != nil {
+						if globalError == nil {
 							globalError = err
 							cancel()
 						}
