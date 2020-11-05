@@ -260,7 +260,11 @@ func dumpDatabases(pCtx context.Context, conf *Config, connectPool *connectionsP
 					defer g.Done()
 					conn := connectPool.getConn()
 					defer connectPool.releaseConn(conn)
+					retryTime := 1
 					err := utils.WithRetry(ctx, func() error {
+						log.Debug("trying to dump table chunk", zap.Int("retryTime", retryTime), zap.String("db", tableIR.DatabaseName()),
+							zap.String("table", tableIR.TableName()), zap.Int("chunkIndex", tableIR.ChunkIndex()))
+						retryTime += 1
 						err := tableIR.Start(ctx, conn)
 						if err != nil {
 							return err
