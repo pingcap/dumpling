@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net"
 	"net/http"
 	"regexp"
 	"strings"
@@ -140,21 +139,6 @@ func (config *Config) createExternalStorage(ctx context.Context) (storage.Extern
 	maxIdleConnsPerHost := http.DefaultMaxIdleConnsPerHost
 	if config.Threads > maxIdleConnsPerHost {
 		maxIdleConnsPerHost = config.Threads
-	}
-	// copy from http.DefaultTransport, add maxIdleConnsPerHost
-	httpClient.Transport = &http.Transport{
-		Proxy: http.ProxyFromEnvironment,
-		DialContext: (&net.Dialer{
-			Timeout:   30 * time.Second,
-			KeepAlive: 30 * time.Second,
-			DualStack: true,
-		}).DialContext,
-		ForceAttemptHTTP2:     true,
-		MaxIdleConns:          100,
-		MaxIdleConnsPerHost:   maxIdleConnsPerHost,
-		IdleConnTimeout:       90 * time.Second,
-		TLSHandshakeTimeout:   10 * time.Second,
-		ExpectContinueTimeout: 1 * time.Second,
 	}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.MaxIdleConnsPerHost = maxIdleConnsPerHost
