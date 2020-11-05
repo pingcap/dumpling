@@ -6,10 +6,8 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/go-sql-driver/mysql"
-	"github.com/pingcap/tidb/errno"
-
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/go-sql-driver/mysql"
 	. "github.com/pingcap/check"
 )
 
@@ -218,7 +216,7 @@ func (s *testDumpSuite) TestDumpDatabaseWithRetry(c *C) {
 	rows = mock.NewRows([]string{"a"}).AddRow(1)
 	mock.ExpectQuery("SELECT (.) FROM `test`.`t` LIMIT 1").WillReturnRows(rows)
 	rows = mock.NewRows([]string{"a"}).AddRow(1).AddRow(2)
-	mock.ExpectQuery("SELECT (.) FROM `test`.`t`").WillReturnError(&mysql.MySQLError{Number: errno.ErrPDServerTimeout, Message: "pd is timeout"})
+	mock.ExpectQuery("SELECT (.) FROM `test`.`t`").WillReturnError(&mysql.MySQLError{Number: 9001, Message: "pd is timeout"})
 	mock.ExpectQuery("SELECT (.) FROM `test`.`t`").WillReturnRows(rows)
 
 	mockWriter := newMockWriter()

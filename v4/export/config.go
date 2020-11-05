@@ -156,6 +156,9 @@ func (config *Config) createExternalStorage(ctx context.Context) (storage.Extern
 		TLSHandshakeTimeout:   10 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
 	}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.MaxIdleConnsPerHost = maxIdleConnsPerHost
+	httpClient.Transport = transport
 
 	return storage.New(ctx, b, &storage.ExternalStorageOptions{
 		HTTPClient: httpClient,

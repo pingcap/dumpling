@@ -14,7 +14,6 @@ require (
 	github.com/pingcap/errors v0.11.5-0.20200917111840-a15ef68f753d
 	github.com/pingcap/failpoint v0.0.0-20200702092429-9f69995143ce
 	github.com/pingcap/log v0.0.0-20200828042413-fce0951f1463
-	github.com/pingcap/tidb v1.1.0-beta.0.20200921082409-501466fb690d
 	github.com/pingcap/tidb-tools v4.0.8-0.20200927084250-e47e0e12c7f3+incompatible
 	github.com/pkg/errors v0.9.1
 	github.com/soheilhy/cmux v0.1.4
