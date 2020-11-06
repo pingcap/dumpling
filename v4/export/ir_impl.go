@@ -95,6 +95,7 @@ func (td *tableData) Start(ctx context.Context, conn *sql.Conn) error {
 	if err != nil {
 		return err
 	}
+	td.SQLRowIter = nil
 	td.rows = rows
 	return nil
 }
@@ -188,9 +189,9 @@ func splitTableDataIntoChunks(
 		return
 	}
 	if !smax.Valid || !smin.Valid {
-		// found no data
-		log.Warn("no data to dump", zap.String("schema", dbName), zap.String("table", tableName))
-		close(tableDataIRCh)
+		// smax and smin are not valid, but there can also be data to dump, so just skip split chunk logic. 
+		log.Debug("skip concurrent dump due to no valid smax or smin", zap.String("schema", dbName), zap.String("table", tableName))
+		linear <- struct{}{}
 		return
 	}
 
@@ -219,7 +220,7 @@ func splitTableDataIntoChunks(
 	}
 	// every chunk would have eventual adjustments
 	estimatedChunks := count / conf.Rows
-	estimatedStep := new(big.Int).Sub(max,min).Uint64() /estimatedChunks + 1
+	estimatedStep := new(big.Int).Sub(max, min).Uint64()/estimatedChunks + 1
 	bigEstimatedStep := new(big.Int).SetUint64(estimatedStep)
 	cutoff := new(big.Int).Set(min)
 	nextCutoff := new(big.Int)
@@ -246,7 +247,7 @@ func splitTableDataIntoChunks(
 LOOP:
 	for max.Cmp(cutoff) >= 0 {
 		chunkIndex += 1
-		where := fmt.Sprintf("%s(`%s` >= %d AND `%s` < %d)", nullValueCondition, escapeString(field), cutoff, escapeString(field), nextCutoff.Add(cutoff,bigEstimatedStep))
+		where := fmt.Sprintf("%s(`%s` >= %d AND `%s` < %d)", nullValueCondition, escapeString(field), cutoff, escapeString(field), nextCutoff.Add(cutoff, bigEstimatedStep))
 		query = buildSelectQuery(dbName, tableName, selectedField, buildWhereCondition(conf, where), orderByClause)
 		if len(nullValueCondition) > 0 {
 			nullValueCondition = ""

@@ -4,12 +4,14 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/pingcap/dumpling/v4/log"
 
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/pingcap/br/pkg/utils"
 	"github.com/pingcap/failpoint"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
@@ -45,8 +47,11 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 	ctx, cancel := context.WithCancel(pCtx)
 	defer cancel()
 
-	var doPdGC bool
-	var pdClient pd.Client
+	var (
+		doPdGC     bool
+		pdClient   pd.Client
+		snapshotTS uint64
+	)
 	if conf.ServerInfo.ServerType == ServerTypeTiDB {
 		if conf.ServerInfo.ServerVersion.Compare(*gcSafePointVersion) >= 0 {
 			pdAddrs, err := GetPdAddrs(pool)
@@ -70,22 +75,27 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 		delete(conf.SessionParams, TiDBMemQuotaQueryName)
 	}
 
-	if conf.Snapshot == "" && (doPdGC || conf.Consistency == "snapshot") {
+	snapshot := conf.Snapshot
+	if snapshot == "" && (doPdGC || conf.Consistency == "snapshot") {
 		conn, err := pool.Conn(ctx)
 		if err != nil {
 			conn.Close()
 			return withStack(err)
 		}
-		conf.Snapshot, err = getSnapshot(conn)
+		snapshot, err = getSnapshot(conn)
 		conn.Close()
 		if err != nil {
 			return err
 		}
 	}
 
-	if conf.Snapshot != "" {
+	if snapshot != "" {
 		if conf.ServerInfo.ServerType != ServerTypeTiDB {
 			return errors.New("snapshot consistency is not supported for this server")
+		}
+		snapshotTS, err = parseSnapshotToTSO(pool, snapshot)
+		if err != nil {
+			return err
 		}
 		if conf.Consistency == "snapshot" {
 			hasTiKV, err := CheckTiDBWithTiKV(pool)
@@ -93,16 +103,17 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 				return err
 			}
 			if hasTiKV {
-				conf.SessionParams["tidb_snapshot"] = conf.Snapshot
+				conf.SessionParams["tidb_snapshot"] = snapshot
 			}
+			// convert yyyy:mm:ss type snapshot to TSO if consistency is snapshot
+			snapshot = strconv.FormatUint(snapshotTS, 10)
+		} else {
+			// clear snapshot to use current master status for metadata (consistency lock)
+			snapshot = ""
 		}
 	}
 
 	if doPdGC {
-		snapshotTS, err := parseSnapshotToTSO(pool, conf.Snapshot)
-		if err != nil {
-			return err
-		}
 		go updateServiceSafePoint(ctx, pdClient, defaultDumpGCSafePointTTL, snapshotTS)
 	} else if conf.ServerInfo.ServerType == ServerTypeTiDB {
 		log.Warn("If the amount of data to dump is large, criteria: (data more than 60GB or dumped time more than 10 minutes)\n" +
@@ -130,7 +141,7 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 			return withStack(err)
 		}
 		m.recordStartTime(time.Now())
-		err = m.recordGlobalMetaData(conn, conf.ServerInfo.ServerType, false)
+		err = m.recordGlobalMetaData(conn, conf.ServerInfo.ServerType, false, snapshot)
 		if err != nil {
 			log.Info("get global metadata failed", zap.Error(err))
 		}
@@ -159,7 +170,7 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 			return withStack(err)
 		}
 		m.recordStartTime(time.Now())
-		err = m.recordGlobalMetaData(conn, conf.ServerInfo.ServerType, false)
+		err = m.recordGlobalMetaData(conn, conf.ServerInfo.ServerType, false, snapshot)
 		if err != nil {
 			log.Info("get global metadata failed", zap.Error(err))
 		}
@@ -174,7 +185,7 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 
 	if conf.PosAfterConnect {
 		// record again, to provide a location to exit safe mode for DM
-		err = m.recordGlobalMetaData(connectPool.extraConn(), conf.ServerInfo.ServerType, true)
+		err = m.recordGlobalMetaData(connectPool.extraConn(), conf.ServerInfo.ServerType, true, snapshot)
 		if err != nil {
 			log.Info("get global metadata (after connection pool established) failed", zap.Error(err))
 		}
@@ -218,9 +229,9 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 	return nil
 }
 
-func dumpDatabases(ctx context.Context, conf *Config, connectPool *connectionsPool, writer Writer) error {
+func dumpDatabases(pCtx context.Context, conf *Config, connectPool *connectionsPool, writer Writer) error {
 	allTables := conf.Tables
-	var g errgroup.Group
+	g, ctx := errgroup.WithContext(pCtx)
 	for dbName, tables := range allTables {
 		createDatabaseSQL, err := ShowCreateDatabase(connectPool.extraConn(), dbName)
 		if err != nil {
@@ -242,21 +253,24 @@ func dumpDatabases(ctx context.Context, conf *Config, connectPool *connectionsPo
 			for _, tableIR := range tableDataIRArray {
 				tableIR := tableIR
 				g.Go(func() error {
-					conn := connectPool.getConn()
-					defer connectPool.releaseConn(conn)
-					err := tableIR.Start(ctx, conn)
-					if err != nil {
-						return err
-					}
-					return writer.WriteTableData(ctx, tableIR)
+					retryTime := 1
+					return utils.WithRetry(ctx, func() error {
+						log.Debug("trying to dump table chunk", zap.Int("retryTime", retryTime), zap.String("db", tableIR.DatabaseName()),
+							zap.String("table", tableIR.TableName()), zap.Int("chunkIndex", tableIR.ChunkIndex()))
+						conn := connectPool.getConn()
+						defer connectPool.releaseConn(conn)
+						retryTime += 1
+						err := tableIR.Start(ctx, conn)
+						if err != nil {
+							return err
+						}
+						return writer.WriteTableData(ctx, tableIR)
+					}, newDumpChunkBackoffer())
 				})
 			}
 		}
 	}
-	if err := g.Wait(); err != nil {
-		return err
-	}
-	return nil
+	return g.Wait()
 }
 
 func prepareTableListToDump(conf *Config, pool *sql.Conn) error {
