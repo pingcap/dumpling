@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/pingcap/dumpling/v4/log"
@@ -227,10 +226,7 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 
 func dumpDatabases(pCtx context.Context, conf *Config, connectPool *connectionsPool, writer Writer) error {
 	allTables := conf.Tables
-	var g sync.WaitGroup
-	var globalError error
-	ctx, cancel := context.WithCancel(pCtx)
-	defer cancel()
+	g, ctx := errgroup.WithContext(pCtx)
 	for dbName, tables := range allTables {
 		conn := connectPool.getConn()
 		createDatabaseSQL, err := ShowCreateDatabase(conn, dbName)
@@ -255,11 +251,9 @@ func dumpDatabases(pCtx context.Context, conf *Config, connectPool *connectionsP
 			}
 			for _, tableIR := range tableDataIRArray {
 				tableIR := tableIR
-				g.Add(1)
-				go func() {
-					defer g.Done()
+				g.Go(func() error {
 					retryTime := 1
-					err := utils.WithRetry(ctx, func() error {
+					return utils.WithRetry(ctx, func() error {
 						log.Debug("trying to dump table chunk", zap.Int("retryTime", retryTime), zap.String("db", tableIR.DatabaseName()),
 							zap.String("table", tableIR.TableName()), zap.Int("chunkIndex", tableIR.ChunkIndex()))
 						conn := connectPool.getConn()
@@ -271,18 +265,11 @@ func dumpDatabases(pCtx context.Context, conf *Config, connectPool *connectionsP
 						}
 						return writer.WriteTableData(ctx, tableIR)
 					}, newDumpChunkBackoffer())
-					if err != nil {
-						if globalError == nil {
-							globalError = err
-							cancel()
-						}
-					}
-				}()
+				})
 			}
 		}
 	}
-	g.Wait()
-	return globalError
+	return g.Wait()
 }
 
 func prepareTableListToDump(conf *Config, pool *sql.Conn) error {
