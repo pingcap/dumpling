@@ -119,7 +119,10 @@ func (config *Config) String() string {
 
 // GetDSN generates DSN from Config
 func (conf *Config) GetDSN(db string) string {
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4", conf.User, conf.Password, conf.Host, conf.Port, db)
+	// maxAllowedPacket=0 can be used to automatically fetch the max_allowed_packet variable from server on every connection.
+	// https://github.com/go-sql-driver/mysql#maxallowedpacket
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&readTimeout=30s&writeTimeout=30s&interpolateParams=true&maxAllowedPacket=0",
+		conf.User, conf.Password, conf.Host, conf.Port, db)
 	if len(conf.Security.CAPath) > 0 {
 		dsn += "&tls=dumpling-tls-target"
 	}
