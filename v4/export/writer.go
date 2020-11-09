@@ -127,11 +127,11 @@ func writeMetaToFile(ctx context.Context, target, metaSQL string, s storage.Exte
 type CSVWriter struct{ SimpleWriter }
 
 type outputFileNamer struct {
-	Index1 int
-	Index2 int
-	DB     string
-	Table  string
-	format string
+	ChunkIndex int
+	FileIndex  int
+	DB         string
+	Table      string
+	format     string
 }
 
 type csvOption struct {
@@ -145,8 +145,8 @@ func newOutputFileNamer(ir TableDataIR, rows, fileSize bool) *outputFileNamer {
 		DB:    ir.DatabaseName(),
 		Table: ir.TableName(),
 	}
-	o.Index1 = ir.ChunkIndex()
-	o.Index2 = 0
+	o.ChunkIndex = ir.ChunkIndex()
+	o.FileIndex = 0
 	if rows && fileSize {
 		o.format = "%09d%04d"
 	} else if fileSize {
@@ -166,12 +166,12 @@ func (namer *outputFileNamer) render(tmpl *template.Template, subName string) (s
 }
 
 func (namer *outputFileNamer) Index() string {
-	return fmt.Sprintf(namer.format, namer.Index1, namer.Index2)
+	return fmt.Sprintf(namer.format, namer.ChunkIndex, namer.FileIndex)
 }
 
 func (namer *outputFileNamer) NextName(tmpl *template.Template, fileType string) (string, error) {
 	res, err := namer.render(tmpl, outputFileTemplateData)
-	namer.Index2++
+	namer.FileIndex++
 	return res + "." + fileType, err
 }
 
