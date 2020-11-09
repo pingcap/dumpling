@@ -487,7 +487,7 @@ const (
 	DefaultStatementSize  = 1000000
 	TiDBMemQuotaQueryName = "tidb_mem_quota_query"
 
-	DefaultTiDBMemQuotaQuery uint64 = 32 * (1 << 30)
+	DefaultTiDBMemQuotaQuery uint64 = 32 << 30
 
 	defaultDumpThreads         = 128
 	defaultDumpGCSafePointTTL  = 5 * 60
