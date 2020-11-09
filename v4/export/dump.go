@@ -3,7 +3,6 @@ package export
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"strconv"
 	"strings"
 	"time"
@@ -12,6 +11,7 @@ import (
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/br/pkg/utils"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
@@ -20,7 +20,7 @@ import (
 
 func Dump(pCtx context.Context, conf *Config) (err error) {
 	if err = adjustConfig(pCtx, conf); err != nil {
-		return withStack(err)
+		return errors.Trace(err)
 	}
 
 	go func() {
@@ -34,13 +34,13 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 
 	pool, err := sql.Open("mysql", conf.GetDSN(""))
 	if err != nil {
-		return withStack(err)
+		return errors.Trace(err)
 	}
 	defer pool.Close()
 
 	conf.ServerInfo, err = detectServerInfo(pool)
 	if err != nil {
-		return withStack(err)
+		return errors.Trace(err)
 	}
 	resolveAutoConsistency(conf)
 
@@ -80,7 +80,7 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 		conn, err := pool.Conn(ctx)
 		if err != nil {
 			conn.Close()
-			return withStack(err)
+			return errors.Trace(err)
 		}
 		snapshot, err = getSnapshot(conn)
 		conn.Close()
@@ -123,7 +123,7 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 	}
 
 	if newPool, err := resetDBWithSessionParams(pool, conf.GetDSN(""), conf.SessionParams); err != nil {
-		return withStack(err)
+		return errors.Trace(err)
 	} else {
 		pool = newPool
 		defer newPool.Close()
@@ -138,7 +138,7 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 	if conf.Consistency == "lock" {
 		conn, err := createConnWithConsistency(ctx, pool)
 		if err != nil {
-			return withStack(err)
+			return errors.Trace(err)
 		}
 		m.recordStartTime(time.Now())
 		err = m.recordGlobalMetaData(conn, conf.ServerInfo.ServerType, false, snapshot)
@@ -167,7 +167,7 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 	if conf.Consistency != "lock" {
 		conn, err := pool.Conn(ctx)
 		if err != nil {
-			return withStack(err)
+			return errors.Trace(err)
 		}
 		m.recordStartTime(time.Now())
 		err = m.recordGlobalMetaData(conn, conf.ServerInfo.ServerType, false, snapshot)
@@ -213,6 +213,8 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 		writer = SQLWriter{SimpleWriter: simpleWriter}
 	case "csv":
 		writer = CSVWriter{SimpleWriter: simpleWriter}
+	default:
+		return errors.Errorf("unsupported filetype %s", conf.FileType)
 	}
 
 	if conf.Sql == "" {
