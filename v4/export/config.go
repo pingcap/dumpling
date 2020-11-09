@@ -446,7 +446,7 @@ func ParseTableFilter(tablesList, filters []string) (filter.Filter, error) {
 	}
 
 	// only parse -T when -f is default value. otherwise bail out.
-	if !(len(filters) == 2 && filters[0] == "*.*" && filters[1] == DefaultTableFilter) {
+	if !sameStringArray(filters, []string{"*.*", DefaultTableFilter}) {
 		return nil, errors.New("cannot pass --tables-list and --filter together")
 	}
 
