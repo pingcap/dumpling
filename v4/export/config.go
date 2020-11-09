@@ -154,6 +154,7 @@ const (
 	DefaultTiDBMemQuotaQuery = 32 * (1 << 30)
 	DefaultStatementSize     = 1000000
 	TiDBMemQuotaQueryName    = "tidb_mem_quota_query"
+	DefaultTableFilter       = "!/^(mysql|test|INFORMATION_SCHEMA|PERFORMANCE_SCHEMA|METRICS_SCHEMA|INSPECTION_SCHEMA)$/.*"
 
 	defaultDumpThreads         = 128
 	defaultDumpGCSafePointTTL  = 5 * 60

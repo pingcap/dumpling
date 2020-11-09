@@ -117,7 +117,7 @@ func main() {
 	pflag.BoolVarP(&noData, "no-data", "d", false, "Do not dump table data")
 	pflag.StringVar(&csvNullValue, "csv-null-value", "\\N", "The null value used when export to csv")
 	pflag.StringVarP(&sql, "sql", "S", "", "Dump data with given sql. This argument doesn't support concurrent dump")
-	pflag.StringArrayVarP(&filters, "filter", "f", []string{"*.*"}, "filter to select which tables to dump")
+	pflag.StringArrayVarP(&filters, "filter", "f", []string{"*.*", export.DefaultTableFilter}, "filter to select which tables to dump. Default: dump all data excluding system databases.")
 	pflag.BoolVar(&caseSensitive, "case-sensitive", false, "whether the filter should be case-sensitive")
 	pflag.BoolVar(&dumpEmptyDatabase, "dump-empty-database", true, "whether to dump empty database")
 	pflag.Uint64Var(&tidbMemQuotaQuery, "tidb-mem-quota-query", export.DefaultTiDBMemQuotaQuery, "The maximum memory limit for a single SQL statement, in bytes. Default: 32GB")
