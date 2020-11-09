@@ -20,6 +20,7 @@ type TableDataIR interface {
 
 	SpecialComments() StringIter
 	Rows() SQLRowIter
+	Close() error
 }
 
 // SQLRowIter is the iterator on a collection of sql.Row.

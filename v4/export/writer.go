@@ -61,29 +61,20 @@ func (f SimpleWriter) WriteViewMeta(ctx context.Context, db, view, createTableSQ
 
 type SQLWriter struct{ SimpleWriter }
 
-func (f SQLWriter) WriteTableData(ctx context.Context, ir TableDataIR) error {
+func (f SQLWriter) WriteTableData(ctx context.Context, ir TableDataIR) (err error) {
 	log.Debug("start dumping table...", zap.String("table", ir.TableName()))
 
-	// just let `database.table.sql` be `database.table.0.sql`
-	/*if fileName == "" {
-		// set initial file name
-		fileName = fmt.Sprintf("%s.%s.sql", ir.DatabaseName(), ir.TableName())
-		if f.cfg.FileSize != UnspecifiedSize {
-			fileName = fmt.Sprintf("%s.%s.%d.sql", ir.DatabaseName(), ir.TableName(), 0)
-		}
-	}*/
+	defer ir.Close()
 	namer := newOutputFileNamer(ir)
 	fileName, err := namer.NextName(f.cfg.OutputFileTemplate)
 	if err != nil {
 		return err
 	}
 	fileName += ".sql"
-	chunksIter := ir
-	defer chunksIter.Rows().Close()
 
 	for {
 		fileWriter, tearDown := buildInterceptFileWriter(f.cfg.ExternalStorage, fileName)
-		err = WriteInsert(ctx, chunksIter, fileWriter, f.cfg.FileSize, f.cfg.StatementSize)
+		err = WriteInsert(ctx, ir, fileWriter, f.cfg.FileSize, f.cfg.StatementSize)
 		tearDown(ctx)
 		if err != nil {
 			return err
@@ -159,17 +150,16 @@ func (namer *outputFileNamer) NextName(tmpl *template.Template) (string, error) 
 	return res, err
 }
 
-func (f CSVWriter) WriteTableData(ctx context.Context, ir TableDataIR) error {
+func (f CSVWriter) WriteTableData(ctx context.Context, ir TableDataIR) (err error) {
 	log.Debug("start dumping table in csv format...", zap.String("table", ir.TableName()))
 
+	defer ir.Close()
 	namer := newOutputFileNamer(ir)
 	fileName, err := namer.NextName(f.cfg.OutputFileTemplate)
 	if err != nil {
 		return err
 	}
 	fileName += ".csv"
-	chunksIter := ir
-	defer chunksIter.Rows().Close()
 
 	opt := &csvOption{
 		nullValue: f.cfg.CsvNullValue,
@@ -179,7 +169,7 @@ func (f CSVWriter) WriteTableData(ctx context.Context, ir TableDataIR) error {
 
 	for {
 		fileWriter, tearDown := buildInterceptFileWriter(f.cfg.ExternalStorage, fileName)
-		err = WriteInsertInCsv(ctx, chunksIter, fileWriter, f.cfg.NoHeader, opt, f.cfg.FileSize)
+		err = WriteInsertInCsv(ctx, ir, fileWriter, f.cfg.NoHeader, opt, f.cfg.FileSize)
 		tearDown(ctx)
 		if err != nil {
 			return err
