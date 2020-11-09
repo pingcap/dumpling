@@ -218,6 +218,8 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 		writer = SQLWriter{SimpleWriter: simpleWriter}
 	case "csv":
 		writer = CSVWriter{SimpleWriter: simpleWriter}
+	default:
+		return errors.Errorf("unsupported filetype %s", conf.FileType)
 	}
 
 	if conf.Sql == "" {

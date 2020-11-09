@@ -141,7 +141,7 @@ func DefaultConfig() *Config {
 		NoViews:            true,
 		Rows:               UnspecifiedSize,
 		Where:              "",
-		FileType:           "SQL",
+		FileType:           "sql",
 		NoHeader:           false,
 		NoSchemas:          false,
 		NoData:             false,
