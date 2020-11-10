@@ -335,6 +335,9 @@ func GetPrimaryKeyColumns(db *sql.Conn, database, table string) ([]string, error
 		}
 		cols = append(cols, col)
 	}
+	if err = rows.Err(); err != nil {
+		return nil, errors.Annotatef(err, "sql: %s", priKeyColsQuery)
+	}
 	return cols, nil
 }
 
