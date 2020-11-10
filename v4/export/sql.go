@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -423,15 +424,17 @@ func resetDBWithSessionParams(db *sql.DB, dsn string, params map[string]interfac
 
 		support[k] = v
 	}
-	//for k, v := range support {
-	//	var s string
-	//	if str, ok := v.(string); ok {
-	//		s = wrapStringWith(str, "'")
-	//	} else {
-	//		s = fmt.Sprintf("%v", v)
-	//	}
-	//	dsn += fmt.Sprintf("&%s=%s", k, url.QueryEscape(s))
-	//}
+
+	for k, v := range support {
+		var s string
+		if str, ok := v.(string); ok {
+			s = wrapStringWith(str, "'")
+		} else {
+			s = fmt.Sprintf("%v", v)
+		}
+		dsn += fmt.Sprintf("&%s=%s", k, url.QueryEscape(s))
+	}
+
 	newDB, err := sql.Open("mysql", dsn)
 	if err != nil {
 		return nil, withStack(err)

@@ -117,12 +117,10 @@ func (config *Config) String() string {
 
 // GetDSN generates DSN from Config
 func (conf *Config) GetDSN(db string) string {
-	// etid by yuguocong
-	//dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4", conf.User, conf.Password, conf.Host, conf.Port, db)
-	//if len(conf.Security.CAPath) > 0 {
-	//	dsn += "&tls=dumpling-tls-target"
-	//}
-	dsn := fmt.Sprintf("%s:%s@%s:%d?%s", conf.User, conf.Password, conf.Host, conf.Port, db)
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4", conf.User, conf.Password, conf.Host, conf.Port, db)
+	if len(conf.Security.CAPath) > 0 {
+		dsn += "&tls=dumpling-tls-target"
+	}
 	return dsn
 }
 

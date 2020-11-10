@@ -3,7 +3,10 @@ package export
 import (
 	"bytes"
 	"context"
+	"database/sql"
+	_ "database/sql"
 	"fmt"
+	"github.com/lichunzhu/go-mysql/mysql"
 	"io"
 	"strings"
 	"sync"
@@ -225,6 +228,174 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, file
 	close(wp.input)
 	<-wp.closed
 	if err = fileRowIter.Error(); err != nil {
+		return err
+	}
+	return wp.Error()
+}
+
+func WriteInsertNew(pCtx context.Context, tblIR TableDataIR, w storage.Writer, fileSizeLimit, statementSizeLimit uint64) error {
+	rows := tblIR.RowsNew()
+
+	val := make([]sql.RawBytes, len(rows.Fields))
+	var err error
+	go func() {
+		err = rows.Start()
+	}()
+
+	bf := pool.Get().(*bytes.Buffer)
+	if bfCap := bf.Cap(); bfCap < lengthLimit {
+		bf.Grow(lengthLimit - bfCap)
+	}
+
+	wp := newWriterPipe(w, fileSizeLimit, statementSizeLimit)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		wp.Run(ctx)
+		wg.Done()
+	}()
+	defer func() {
+		cancel()
+		wg.Wait()
+	}()
+
+	specCmtIter := tblIR.SpecialComments()
+	for specCmtIter.HasNext() {
+		bf.WriteString(specCmtIter.Next())
+		bf.WriteByte('\n')
+	}
+	wp.currentFileSize += uint64(bf.Len())
+
+	var (
+		insertStatementPrefix string
+		//row                   = MakeRowReceiver(tblIR.ColumnTypes())
+		counter = 0
+		//escapeBackSlash       = tblIR.EscapeBackSlash()
+	)
+
+	selectedField := tblIR.SelectedField()
+	// if has generated column
+	if selectedField != "" {
+		insertStatementPrefix = fmt.Sprintf("INSERT INTO %s %s VALUES\n",
+			wrapBackTicks(escapeString(tblIR.TableName())), selectedField)
+	} else {
+		insertStatementPrefix = fmt.Sprintf("INSERT INTO %s VALUES\n",
+			wrapBackTicks(escapeString(tblIR.TableName())))
+	}
+	//insertStatementPrefixLen := uint64(len(insertStatementPrefix))
+	bf.WriteString(insertStatementPrefix)
+	for value := range rows.OutputValueChan {
+		bf.WriteByte('(')
+		for i := range value.FieldResultArr {
+			val[i] = value.FieldResultArr[i].AsString()
+
+			if value.FieldResultArr[i].Type == mysql.FieldValueTypeNull {
+				bf.WriteString(nullValue)
+			} else if value.FieldResultArr[i].Type == mysql.FieldValueTypeString {
+				bf.Write(quotationMark)
+				escape(val[i], bf, nil)
+				bf.Write(quotationMark)
+			} else {
+				bf.Write(val[i])
+			}
+
+			if i != len(value.FieldResultArr)-1 {
+				bf.WriteByte(',')
+			}
+		}
+		bf.WriteByte(')')
+		if (wp.fileSizeLimit != UnspecifiedSize && wp.currentFileSize >= wp.fileSizeLimit) ||
+			(wp.statementSizeLimit != UnspecifiedSize && wp.currentStatementSize >= wp.statementSizeLimit) {
+			bf.WriteString(";\n")
+		} else {
+			bf.WriteString(",\n")
+		}
+		//nextFile := uint64(bf.Len())+wp.currentFileSize >= lengthLimit
+		//if nextFile || bf.Len() >= lengthLimit {
+		if bf.Len() >= lengthLimit {
+			wp.input <- bf
+			bf = pool.Get().(*bytes.Buffer)
+			if bfCap := bf.Cap(); bfCap < lengthLimit {
+				bf.Grow(lengthLimit - bfCap)
+			}
+			//if nextFile {
+			//	bf.WriteString(insertStatementPrefix)
+			//}
+		}
+
+		//fmt.Printf("%s,%s,%s\n", val[0], val[1], val[2])
+		rows.FinishReading(value)
+		//select {
+		//case <-ctx.Done():
+		//	return ctx.Err()
+		//case err := <-wp.errCh:
+		//	return err
+		//default:
+		//}
+	}
+	// 修改
+	//for fileRowIter.HasNext() {
+	//	wp.currentStatementSize = 0
+	//	bf.WriteString(insertStatementPrefix)
+	//	wp.AddFileSize(insertStatementPrefixLen)
+	//
+	//	for fileRowIter.HasNext() {
+	//		if err = fileRowIter.Decode(row); err != nil {
+	//			log.Error("scanning from sql.Row failed", zap.Error(err))
+	//			return err
+	//		}
+	//
+	//		lastBfSize := bf.Len()
+	//		row.WriteToBuffer(bf, escapeBackSlash)
+	//		counter += 1
+	//		wp.AddFileSize(uint64(bf.Len()-lastBfSize) + 2) // 2 is for ",\n" and ";\n"
+	//
+	//		fileRowIter.Next()
+	//		shouldSwitch := wp.ShouldSwitchStatement()
+	//		if fileRowIter.HasNext() && !shouldSwitch {
+	//			bf.WriteString(",\n")
+	//		} else {
+	//			bf.WriteString(";\n")
+	//		}
+	//		if bf.Len() >= lengthLimit {
+	//			wp.input <- bf
+	//			bf = pool.Get().(*bytes.Buffer)
+	//			if bfCap := bf.Cap(); bfCap < lengthLimit {
+	//				bf.Grow(lengthLimit - bfCap)
+	//			}
+	//		}
+	//
+	//		select {
+	//		case <-pCtx.Done():
+	//			return pCtx.Err()
+	//		case err := <-wp.errCh:
+	//			return err
+	//		default:
+	//		}
+	//
+	//		if shouldSwitch {
+	//			break
+	//		}
+	//	}
+	//	if wp.ShouldSwitchFile() {
+	//		break
+	//	}
+	//}
+
+	log.Debug("dumping table",
+		zap.String("table", tblIR.TableName()),
+		zap.Int("record counts", counter))
+	if bf.Len() > 0 {
+		wp.input <- bf
+	}
+	close(wp.input)
+	<-wp.closed
+	//if err = fileRowIter.Error(); err != nil {
+	//	return err
+	//}
+	if err != nil {
 		return err
 	}
 	return wp.Error()

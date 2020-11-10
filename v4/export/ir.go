@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"github.com/lichunzhu/go-mysql/client"
 )
 
 // TableDataIR is table data intermediate representation.
 type TableDataIR interface {
 	Start(context.Context, *sql.Conn) error
+	StartNew(context.Context, *client.Conn) error
 	DatabaseName() string
 	TableName() string
 	ChunkIndex() int
@@ -20,6 +22,7 @@ type TableDataIR interface {
 
 	SpecialComments() StringIter
 	Rows() SQLRowIter
+	RowsNew() *client.Rows
 }
 
 // SQLRowIter is the iterator on a collection of sql.Row.

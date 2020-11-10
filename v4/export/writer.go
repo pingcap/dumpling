@@ -15,6 +15,7 @@ type Writer interface {
 	WriteDatabaseMeta(ctx context.Context, db, createSQL string) error
 	WriteTableMeta(ctx context.Context, db, table, createSQL string) error
 	WriteTableData(ctx context.Context, ir TableDataIR) error
+	WriteTableDataNew(ctx context.Context, ir TableDataIR) error
 }
 
 type SimpleWriter struct {
@@ -67,6 +68,53 @@ func (f SQLWriter) WriteTableData(ctx context.Context, ir TableDataIR) error {
 	for {
 		fileWriter, tearDown := buildInterceptFileWriter(f.cfg.ExternalStorage, fileName)
 		err = WriteInsert(ctx, chunksIter, fileWriter, f.cfg.FileSize, f.cfg.StatementSize)
+		tearDown(ctx)
+		if err != nil {
+			return err
+		}
+
+		if w, ok := fileWriter.(*InterceptFileWriter); ok && !w.SomethingIsWritten {
+			break
+		}
+
+		if f.cfg.FileSize == UnspecifiedSize {
+			break
+		}
+		fileName, err = namer.NextName(f.cfg.OutputFileTemplate)
+		if err != nil {
+			return err
+		}
+		fileName += ".sql"
+	}
+	log.Debug("dumping table successfully",
+		zap.String("table", ir.TableName()))
+	return nil
+}
+
+func (f SQLWriter) WriteTableDataNew(ctx context.Context, ir TableDataIR) error {
+	log.Debug("start dumping table...", zap.String("table", ir.TableName()))
+	// just let `database.table.sql` be `database.table.0.sql`
+	/*if fileName == "" {
+		// set initial file name
+		fileName = fmt.Sprintf("%s.%s.sql", ir.DatabaseName(), ir.TableName())
+		if f.cfg.FileSize != UnspecifiedSize {
+			fileName = fmt.Sprintf("%s.%s.%d.sql", ir.DatabaseName(), ir.TableName(), 0)
+		}
+	}*/
+	namer := newOutputFileNamer(ir)
+	fileName, err := namer.NextName(f.cfg.OutputFileTemplate)
+	if err != nil {
+		return err
+	}
+	fileName += ".sql"
+	chunksIter := ir
+	//defer chunksIter.Rows().Close()
+
+	for {
+		fileWriter, tearDown := buildInterceptFileWriter(f.cfg.ExternalStorage, fileName)
+
+		//err = WriteInsert(ctx, chunksIter, fileWriter, f.cfg.FileSize, f.cfg.StatementSize)
+		err = WriteInsertNew(ctx, chunksIter, fileWriter, f.cfg.FileSize, f.cfg.StatementSize)
 		tearDown(ctx)
 		if err != nil {
 			return err
