@@ -363,6 +363,10 @@ func (conf *Config) ParseFromFlags(flags *pflag.FlagSet) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+	conf.ReadTimeout, err = flags.GetString(flagReadTimeout)
+	if err != nil {
+		return errors.Trace(err)
+	}
 
 	if conf.Threads <= 0 {
 		return errors.Errorf("--threads is set to %d. It should be greater than 0", conf.Threads)
