@@ -62,7 +62,9 @@ const (
 	flagOutputFilenameTemplate  = "output-filename-template"
 	flagCompleteInsert          = "complete-insert"
 	flagParams                  = "params"
-	FlagHelp                    = "help"
+	flagReadTimeout             = "read-timeout"
+
+	FlagHelp = "help"
 )
 
 type Config struct {
@@ -104,6 +106,7 @@ type Config struct {
 	Sql           string
 	CsvSeparator  string
 	CsvDelimiter  string
+	ReadTimeout   string
 
 	TableFilter        filter.Filter `json:"-"`
 	Rows               uint64
@@ -168,8 +171,8 @@ func (config *Config) String() string {
 func (conf *Config) GetDSN(db string) string {
 	// maxAllowedPacket=0 can be used to automatically fetch the max_allowed_packet variable from server on every connection.
 	// https://github.com/go-sql-driver/mysql#maxallowedpacket
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&readTimeout=30s&writeTimeout=30s&interpolateParams=true&maxAllowedPacket=0",
-		conf.User, conf.Password, conf.Host, conf.Port, db)
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&readTimeout=%s&writeTimeout=30s&interpolateParams=true&maxAllowedPacket=0",
+		conf.User, conf.Password, conf.Host, conf.Port, db, conf.ReadTimeout)
 	if len(conf.Security.CAPath) > 0 {
 		dsn += "&tls=dumpling-tls-target"
 	}
@@ -225,6 +228,8 @@ func (conf *Config) DefineFlags(flags *pflag.FlagSet) {
 	flags.Bool(flagCompleteInsert, false, "Use complete INSERT statements that include column names")
 	flags.StringToString(flagParams, nil, `Extra session variables used while dumping, accepted format: --params "character_set_client=latin1,character_set_connection=latin1"`)
 	flags.Bool(FlagHelp, false, "Print help message and quit")
+	flags.String(flagReadTimeout, "15m", "I/O read timeout for db connection. Should be a decimal number with a unit suffix, such as '30s', '1m30s'")
+	flags.MarkHidden(flagReadTimeout)
 }
 
 // GetDSN generates DSN from Config
