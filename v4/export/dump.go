@@ -131,7 +131,11 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 
 	m := newGlobalMetadata(conf.ExternalStorage)
 	// write metadata even if dump failed
-	defer m.writeGlobalMetaData(ctx)
+	defer func() {
+		if err == nil {
+			m.writeGlobalMetaData(ctx)
+		}
+	}()
 
 	// for consistency lock, we should lock tables at first to get the tables we want to lock & dump
 	// for consistency lock, record meta pos before lock tables because other tables may still be modified while locking tables
