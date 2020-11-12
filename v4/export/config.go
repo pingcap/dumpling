@@ -522,7 +522,7 @@ var ServerInfoUnknown = ServerInfo{
 }
 
 var versionRegex = regexp.MustCompile(`^\d+\.\d+\.\d+([0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?`)
-var tidbVersionRegex = regexp.MustCompile(`v\d+\.\d+\.\d+([0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?`)
+var tidbVersionRegex = regexp.MustCompile(`-[v]?\d+\.\d+\.\d+([0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?`)
 
 func ParseServerInfo(src string) ServerInfo {
 	log.Debug("parse server info", zap.String("server info string", src))
@@ -544,6 +544,7 @@ func ParseServerInfo(src string) ServerInfo {
 	var versionStr string
 	if serverInfo.ServerType == ServerTypeTiDB {
 		versionStr = tidbVersionRegex.FindString(src)[1:]
+		versionStr = strings.TrimPrefix(versionStr, "v")
 	} else {
 		versionStr = versionRegex.FindString(src)
 	}
