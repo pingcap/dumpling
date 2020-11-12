@@ -7,6 +7,14 @@ import (
 	"github.com/pingcap/errors"
 )
 
+const (
+	consistencyTypeAuto     = "auto"
+	consistencyTypeFlush    = "flush"
+	consistencyTypeLock     = "lock"
+	consistencyTypeSnapshot = "snapshot"
+	consistencyTypeNone     = "none"
+)
+
 func NewConsistencyController(ctx context.Context, conf *Config, session *sql.DB) (ConsistencyController, error) {
 	resolveAutoConsistency(conf)
 	conn, err := session.Conn(ctx)
@@ -14,22 +22,22 @@ func NewConsistencyController(ctx context.Context, conf *Config, session *sql.DB
 		return nil, err
 	}
 	switch conf.Consistency {
-	case "flush":
+	case consistencyTypeFlush:
 		return &ConsistencyFlushTableWithReadLock{
 			serverType: conf.ServerInfo.ServerType,
 			conn:       conn,
 		}, nil
-	case "lock":
+	case consistencyTypeLock:
 		return &ConsistencyLockDumpingTables{
 			conn:      conn,
 			allTables: conf.Tables,
 		}, nil
-	case "snapshot":
+	case consistencyTypeSnapshot:
 		if conf.ServerInfo.ServerType != ServerTypeTiDB {
 			return nil, errors.New("snapshot consistency is not supported for this server")
 		}
 		return &ConsistencyNone{}, nil
-	case "none":
+	case consistencyTypeNone:
 		return &ConsistencyNone{}, nil
 	default:
 		return nil, errors.Errorf("invalid consistency option %s", conf.Consistency)
@@ -105,15 +113,15 @@ func (c *ConsistencyLockDumpingTables) TearDown(ctx context.Context) error {
 const snapshotFieldIndex = 1
 
 func resolveAutoConsistency(conf *Config) {
-	if conf.Consistency != "auto" {
+	if conf.Consistency != consistencyTypeAuto {
 		return
 	}
 	switch conf.ServerInfo.ServerType {
 	case ServerTypeTiDB:
-		conf.Consistency = "snapshot"
+		conf.Consistency = consistencyTypeSnapshot
 	case ServerTypeMySQL, ServerTypeMariaDB:
-		conf.Consistency = "flush"
+		conf.Consistency = consistencyTypeFlush
 	default:
-		conf.Consistency = "none"
+		conf.Consistency = consistencyTypeNone
 	}
 }

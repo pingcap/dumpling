@@ -76,7 +76,7 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 	}
 
 	snapshot := conf.Snapshot
-	if snapshot == "" && (doPdGC || conf.Consistency == "snapshot") {
+	if snapshot == "" && (doPdGC || conf.Consistency == consistencyTypeLock) {
 		conn, err := pool.Conn(ctx)
 		if err != nil {
 			conn.Close()
@@ -97,7 +97,7 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 		if err != nil {
 			return err
 		}
-		if conf.Consistency == "snapshot" {
+		if conf.Consistency == consistencyTypeLock {
 			hasTiKV, err := CheckTiDBWithTiKV(pool)
 			if err != nil {
 				return err
@@ -135,7 +135,7 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 
 	// for consistency lock, we should lock tables at first to get the tables we want to lock & dump
 	// for consistency lock, record meta pos before lock tables because other tables may still be modified while locking tables
-	if conf.Consistency == "lock" {
+	if conf.Consistency == consistencyTypeLock {
 		conn, err := createConnWithConsistency(ctx, pool)
 		if err != nil {
 			return errors.Trace(err)
@@ -164,7 +164,7 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 
 	// for other consistencies, we should get table list after consistency is set up and GlobalMetaData is cached
 	// for other consistencies, record snapshot after whole tables are locked. The recorded meta info is exactly the locked snapshot.
-	if conf.Consistency != "lock" {
+	if conf.Consistency != consistencyTypeLock {
 		conn, err := pool.Conn(ctx)
 		if err != nil {
 			return errors.Trace(err)
@@ -193,7 +193,7 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 		connectPool.releaseConn(conn)
 	}
 
-	if conf.Consistency != "lock" {
+	if conf.Consistency != consistencyTypeLock {
 		conn := connectPool.getConn()
 		if err = prepareTableListToDump(conf, conn); err != nil {
 			connectPool.releaseConn(conn)
@@ -301,7 +301,7 @@ func dumpDatabases(pCtx context.Context, conf *Config, connectPool *connectionsP
 							return
 						}
 						return writer.WriteTableData(ctx, tableIR)
-					}, newDumpChunkBackoffer(conf.Consistency == "none" || conf.Consistency == "snapshot"))
+					}, newDumpChunkBackoffer(conf.Consistency == consistencyTypeNone || conf.Consistency == consistencyTypeLock))
 				})
 			}
 		}

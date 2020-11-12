@@ -204,7 +204,7 @@ func (s *testDumpSuite) TestDumpDatabaseWithRetry(c *C) {
 	mockConfig.SortByPk = false
 	mockConfig.Databases = []string{"test"}
 	mockConfig.Tables = NewDatabaseTables().AppendTables("test", "t")
-	mockConfig.Consistency = "none"
+	mockConfig.Consistency = consistencyTypeNone
 	db, mock, err := sqlmock.New()
 	c.Assert(err, IsNil)
 
