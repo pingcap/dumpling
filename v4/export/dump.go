@@ -129,7 +129,7 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 		defer newPool.Close()
 	}
 
-	m := newGlobalMetadata(conf.ExternalStorage)
+	m := newGlobalMetadata(conf.ExternalStorage, snapshot)
 	// write metadata even if dump failed
 	defer m.writeGlobalMetaData(ctx)
 
@@ -141,7 +141,7 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 			return errors.Trace(err)
 		}
 		m.recordStartTime(time.Now())
-		err = m.recordGlobalMetaData(conn, conf.ServerInfo.ServerType, false, snapshot)
+		err = m.recordGlobalMetaData(conn, conf.ServerInfo.ServerType, false)
 		if err != nil {
 			log.Info("get global metadata failed", zap.Error(err))
 		}
@@ -170,7 +170,7 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 			return errors.Trace(err)
 		}
 		m.recordStartTime(time.Now())
-		err = m.recordGlobalMetaData(conn, conf.ServerInfo.ServerType, false, snapshot)
+		err = m.recordGlobalMetaData(conn, conf.ServerInfo.ServerType, false)
 		if err != nil {
 			log.Info("get global metadata failed", zap.Error(err))
 		}
@@ -186,7 +186,7 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 	if conf.PosAfterConnect {
 		conn := connectPool.getConn()
 		// record again, to provide a location to exit safe mode for DM
-		err = m.recordGlobalMetaData(conn, conf.ServerInfo.ServerType, true, snapshot)
+		err = m.recordGlobalMetaData(conn, conf.ServerInfo.ServerType, true)
 		if err != nil {
 			log.Info("get global metadata (after connection pool established) failed", zap.Error(err))
 		}
@@ -223,7 +223,20 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 	}
 
 	if conf.Sql == "" {
-		if err = dumpDatabases(ctx, conf, connectPool, writer); err != nil {
+		if err = dumpDatabases(ctx, conf, connectPool, writer, func(conn *sql.Conn) (*sql.Conn, error) {
+			conn.Close()
+			conn, err = createConnWithConsistency(ctx, pool)
+			if err != nil {
+				return nil, err
+			}
+			if conf.PosAfterConnect {
+				err = m.recordGlobalMetaData(conn, conf.ServerInfo.ServerType, true)
+				if err != nil {
+					return nil, err
+				}
+			}
+			return conn, nil
+		}); err != nil {
 			return err
 		}
 	} else {
@@ -236,7 +249,7 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 	return nil
 }
 
-func dumpDatabases(pCtx context.Context, conf *Config, connectPool *connectionsPool, writer Writer) error {
+func dumpDatabases(pCtx context.Context, conf *Config, connectPool *connectionsPool, writer Writer, rebuildConnFunc func(*sql.Conn) (*sql.Conn, error)) error {
 	allTables := conf.Tables
 	g, ctx := errgroup.WithContext(pCtx)
 	for dbName, tables := range allTables {
@@ -264,19 +277,31 @@ func dumpDatabases(pCtx context.Context, conf *Config, connectPool *connectionsP
 			for _, tableIR := range tableDataIRArray {
 				tableIR := tableIR
 				g.Go(func() error {
-					retryTime := 1
-					return utils.WithRetry(ctx, func() error {
-						log.Debug("trying to dump table chunk", zap.Int("retryTime", retryTime), zap.String("db", tableIR.DatabaseName()),
-							zap.String("table", tableIR.TableName()), zap.Int("chunkIndex", tableIR.ChunkIndex()))
-						conn := connectPool.getConn()
-						defer connectPool.releaseConn(conn)
+					conn := connectPool.getConn()
+					defer func() {
+						connectPool.releaseConn(conn)
+					}()
+					retryTime := 0
+					var lastErr error
+					return utils.WithRetry(ctx, func() (err error) {
+						defer func() {
+							lastErr = err
+						}()
 						retryTime += 1
-						err := tableIR.Start(ctx, conn)
+						log.Debug("trying to dump table chunk", zap.Int("retryTime", retryTime), zap.String("db", tableIR.DatabaseName()),
+							zap.String("table", tableIR.TableName()), zap.Int("chunkIndex", tableIR.ChunkIndex()), zap.NamedError("lastError", lastErr))
+						if retryTime > 1 {
+							conn, err = rebuildConnFunc(conn)
+							if err != nil {
+								return
+							}
+						}
+						err = tableIR.Start(ctx, conn)
 						if err != nil {
-							return err
+							return
 						}
 						return writer.WriteTableData(ctx, tableIR)
-					}, newDumpChunkBackoffer())
+					}, newDumpChunkBackoffer(conf.Consistency == "none" || conf.Consistency == "snapshot"))
 				})
 			}
 		}
