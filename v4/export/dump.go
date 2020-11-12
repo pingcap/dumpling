@@ -202,8 +202,13 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 		connectPool.releaseConn(conn)
 	}
 
-	if err = conCtrl.TearDown(ctx); err != nil {
-		return err
+	if conf.TrxConsistencyOnly {
+		if conf.Consistency == consistencyTypeFlush || conf.Consistency == consistencyTypeLock {
+			log.Info("All the dumping transactions have started. Start to unlock tables")
+		}
+		if err = conCtrl.TearDown(ctx); err != nil {
+			return err
+		}
 	}
 
 	failpoint.Inject("ConsistencyCheck", nil)
@@ -224,15 +229,23 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 
 	if conf.Sql == "" {
 		if err = dumpDatabases(ctx, conf, connectPool, writer, func(conn *sql.Conn) (*sql.Conn, error) {
-			conn.Close()
-			conn, err = createConnWithConsistency(ctx, pool)
+			// make sure that the lock connection is still alive
+			err := conCtrl.PingContext(ctx)
 			if err != nil {
-				return nil, err
+				return conn, err
 			}
+			// give up the last broken connection
+			conn.Close()
+			newConn, err := createConnWithConsistency(ctx, pool)
+			if err != nil {
+				return conn, err
+			}
+			conn = newConn
+			// renew the master status after connection. dm can't close safe-mode until current pos
 			if conf.PosAfterConnect {
 				err = m.recordGlobalMetaData(conn, conf.ServerInfo.ServerType, true)
 				if err != nil {
-					return nil, err
+					return conn, err
 				}
 			}
 			return conn, nil
@@ -301,7 +314,7 @@ func dumpDatabases(pCtx context.Context, conf *Config, connectPool *connectionsP
 							return
 						}
 						return writer.WriteTableData(ctx, tableIR)
-					}, newDumpChunkBackoffer(conf.Consistency == consistencyTypeNone || conf.Consistency == consistencyTypeLock))
+					}, newDumpChunkBackoffer(canRebuildConn(conf.Consistency, conf.TrxConsistencyOnly)))
 				})
 			}
 		}
@@ -443,5 +456,16 @@ func updateServiceSafePoint(ctx context.Context, pdClient pd.Client, ttl int64, 
 			return
 		case <-tick.C:
 		}
+	}
+}
+
+func canRebuildConn(consistency string, trxConsistencyOnly bool) bool {
+	switch consistency {
+	case consistencyTypeLock, consistencyTypeFlush:
+		return !trxConsistencyOnly
+	case consistencyTypeSnapshot, consistencyTypeNone:
+		return true
+	default:
+		return false
 	}
 }

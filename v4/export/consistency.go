@@ -47,6 +47,7 @@ func NewConsistencyController(ctx context.Context, conf *Config, session *sql.DB
 type ConsistencyController interface {
 	Setup(context.Context) error
 	TearDown(context.Context) error
+	PingContext(context.Context) error
 }
 
 type ConsistencyNone struct{}
@@ -56,6 +57,10 @@ func (c *ConsistencyNone) Setup(_ context.Context) error {
 }
 
 func (c *ConsistencyNone) TearDown(_ context.Context) error {
+	return nil
+}
+
+func (c *ConsistencyNone) PingContext(_ context.Context) error {
 	return nil
 }
 
@@ -80,6 +85,13 @@ func (c *ConsistencyFlushTableWithReadLock) TearDown(ctx context.Context) error 
 		c.conn = nil
 	}()
 	return UnlockTables(ctx, c.conn)
+}
+
+func (c *ConsistencyFlushTableWithReadLock) PingContext(ctx context.Context) error {
+	if c.conn == nil {
+		return errors.New("connection has already closed!")
+	}
+	return c.conn.PingContext(ctx)
 }
 
 type ConsistencyLockDumpingTables struct {
@@ -108,6 +120,13 @@ func (c *ConsistencyLockDumpingTables) TearDown(ctx context.Context) error {
 		c.conn = nil
 	}()
 	return UnlockTables(ctx, c.conn)
+}
+
+func (c *ConsistencyLockDumpingTables) PingContext(ctx context.Context) error {
+	if c.conn == nil {
+		return errors.New("connection has already closed!")
+	}
+	return c.conn.PingContext(ctx)
 }
 
 const snapshotFieldIndex = 1

@@ -62,7 +62,9 @@ const (
 	flagOutputFilenameTemplate  = "output-filename-template"
 	flagCompleteInsert          = "complete-insert"
 	flagParams                  = "params"
-	FlagHelp                    = "help"
+	flagTrxConsistencyOnly      = "trx-consistency-only"
+
+	FlagHelp = "help"
 )
 
 type Config struct {
@@ -110,6 +112,7 @@ type Config struct {
 	Where              string
 	FileType           string
 	CompleteInsert     bool
+	TrxConsistencyOnly bool
 	EscapeBackslash    bool
 	DumpEmptyDatabase  bool
 	OutputFileTemplate *template.Template `json:"-"`
@@ -222,6 +225,7 @@ func (conf *Config) DefineFlags(flags *pflag.FlagSet) {
 	flags.Bool(flagCompleteInsert, false, "Use complete INSERT statements that include column names")
 	flags.StringToString(flagParams, nil, `Extra session variables used while dumping, accepted format: --params "character_set_client=latin1,character_set_connection=latin1"`)
 	flags.Bool(FlagHelp, false, "Print help message and quit")
+	flags.Bool(flagTrxConsistencyOnly, true, "Only support transactional consistency")
 }
 
 // GetDSN generates DSN from Config
@@ -352,6 +356,10 @@ func (conf *Config) ParseFromFlags(flags *pflag.FlagSet) error {
 		return errors.Trace(err)
 	}
 	conf.CompleteInsert, err = flags.GetBool(flagCompleteInsert)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	conf.TrxConsistencyOnly, err = flags.GetBool(flagTrxConsistencyOnly)
 	if err != nil {
 		return errors.Trace(err)
 	}
