@@ -380,7 +380,16 @@ func tryDecodeRowKey(ctx context.Context, db *sql.Conn, key string) ([]string, e
 		return keys, nil
 	} else if p = strings.Index(decodedRowKey, tidbRowID); p != -1 {
 		p += len(tidbRowID)
-		return []string{decodedRowKey[p:]}, nil
+		s := decodedRowKey[p:]
+		if strings.HasPrefix(s, "-") {
+			val, err := strconv.ParseInt(s, 10, 64)
+			if err != nil {
+				return nil, err
+			}
+			uval := uint64(val)
+			s = strconv.FormatUint(uval, 10)
+		}
+		return []string{s}, nil
 	} else if p = strings.Index(decodedRowKey, indexID); p != -1 {
 		return nil, nil
 	}
