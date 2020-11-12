@@ -106,7 +106,7 @@ type Config struct {
 	Sql           string
 	CsvSeparator  string
 	CsvDelimiter  string
-	ReadTimeout   string
+	ReadTimeout   time.Duration
 
 	TableFilter        filter.Filter `json:"-"`
 	Rows               uint64
@@ -228,7 +228,7 @@ func (conf *Config) DefineFlags(flags *pflag.FlagSet) {
 	flags.Bool(flagCompleteInsert, false, "Use complete INSERT statements that include column names")
 	flags.StringToString(flagParams, nil, `Extra session variables used while dumping, accepted format: --params "character_set_client=latin1,character_set_connection=latin1"`)
 	flags.Bool(FlagHelp, false, "Print help message and quit")
-	flags.String(flagReadTimeout, "15m", "I/O read timeout for db connection. Should be a decimal number with a unit suffix, such as '30s', '1m30s'")
+	flags.Duration(flagReadTimeout, 15*time.Minute, "I/O read timeout for db connection.")
 	flags.MarkHidden(flagReadTimeout)
 }
 
@@ -363,7 +363,7 @@ func (conf *Config) ParseFromFlags(flags *pflag.FlagSet) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	conf.ReadTimeout, err = flags.GetString(flagReadTimeout)
+	conf.ReadTimeout, err = flags.GetDuration(flagReadTimeout)
 	if err != nil {
 		return errors.Trace(err)
 	}
