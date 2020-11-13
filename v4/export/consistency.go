@@ -89,7 +89,7 @@ func (c *ConsistencyFlushTableWithReadLock) TearDown(ctx context.Context) error 
 
 func (c *ConsistencyFlushTableWithReadLock) PingContext(ctx context.Context) error {
 	if c.conn == nil {
-		return errors.New("connection has already closed!")
+		return errors.New("consistency connection has already been closed!")
 	}
 	return c.conn.PingContext(ctx)
 }
@@ -124,7 +124,7 @@ func (c *ConsistencyLockDumpingTables) TearDown(ctx context.Context) error {
 
 func (c *ConsistencyLockDumpingTables) PingContext(ctx context.Context) error {
 	if c.conn == nil {
-		return errors.New("connection has already closed!")
+		return errors.New("consistency connection has already been closed!")
 	}
 	return c.conn.PingContext(ctx)
 }
