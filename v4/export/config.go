@@ -62,6 +62,7 @@ const (
 	flagOutputFilenameTemplate  = "output-filename-template"
 	flagCompleteInsert          = "complete-insert"
 	flagParams                  = "params"
+	flagReadTimeout             = "read-timeout"
 	flagTrxConsistencyOnly      = "trx-consistency-only"
 
 	FlagHelp = "help"
@@ -106,6 +107,7 @@ type Config struct {
 	Sql           string
 	CsvSeparator  string
 	CsvDelimiter  string
+	ReadTimeout   time.Duration
 
 	TableFilter        filter.Filter `json:"-"`
 	Rows               uint64
@@ -169,7 +171,10 @@ func (config *Config) String() string {
 
 // GetDSN generates DSN from Config
 func (conf *Config) GetDSN(db string) string {
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4", conf.User, conf.Password, conf.Host, conf.Port, db)
+	// maxAllowedPacket=0 can be used to automatically fetch the max_allowed_packet variable from server on every connection.
+	// https://github.com/go-sql-driver/mysql#maxallowedpacket
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&readTimeout=%s&writeTimeout=30s&interpolateParams=true&maxAllowedPacket=0",
+		conf.User, conf.Password, conf.Host, conf.Port, db, conf.ReadTimeout)
 	if len(conf.Security.CAPath) > 0 {
 		dsn += "&tls=dumpling-tls-target"
 	}
@@ -225,6 +230,8 @@ func (conf *Config) DefineFlags(flags *pflag.FlagSet) {
 	flags.Bool(flagCompleteInsert, false, "Use complete INSERT statements that include column names")
 	flags.StringToString(flagParams, nil, `Extra session variables used while dumping, accepted format: --params "character_set_client=latin1,character_set_connection=latin1"`)
 	flags.Bool(FlagHelp, false, "Print help message and quit")
+	flags.Duration(flagReadTimeout, 15*time.Minute, "I/O read timeout for db connection.")
+	flags.MarkHidden(flagReadTimeout)
 	flags.Bool(flagTrxConsistencyOnly, true, "Only support transactional consistency")
 }
 
@@ -356,6 +363,10 @@ func (conf *Config) ParseFromFlags(flags *pflag.FlagSet) error {
 		return errors.Trace(err)
 	}
 	conf.CompleteInsert, err = flags.GetBool(flagCompleteInsert)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	conf.ReadTimeout, err = flags.GetDuration(flagReadTimeout)
 	if err != nil {
 		return errors.Trace(err)
 	}
