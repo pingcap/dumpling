@@ -76,7 +76,7 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 	}
 
 	snapshot := conf.Snapshot
-	if snapshot == "" && (doPdGC || conf.Consistency == consistencyTypeLock) {
+	if snapshot == "" && (doPdGC || conf.Consistency == consistencyTypeSnapshot) {
 		conn, err := pool.Conn(ctx)
 		if err != nil {
 			conn.Close()
@@ -97,7 +97,7 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 		if err != nil {
 			return err
 		}
-		if conf.Consistency == consistencyTypeLock {
+		if conf.Consistency == consistencyTypeSnapshot {
 			hasTiKV, err := CheckTiDBWithTiKV(pool)
 			if err != nil {
 				return err
@@ -240,7 +240,7 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 				return conn, err
 			}
 			conn = newConn
-			// renew the master status after connection. dm can't close safe-mode until current pos
+			// renew the master status after connection. dm can't close safe-mode until dm reaches current pos
 			if conf.PosAfterConnect {
 				err = m.recordGlobalMetaData(conn, conf.ServerInfo.ServerType, true)
 				if err != nil {
