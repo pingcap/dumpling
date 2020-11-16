@@ -23,47 +23,47 @@ import (
 )
 
 const (
-	flagDatabase                = "database"
-	flagTablesList              = "tables-list"
-	flagHost                    = "host"
-	flagUser                    = "user"
-	flagPort                    = "port"
-	flagPassword                = "password"
-	flagAllowCleartextPasswords = "allow-cleartext-passwords"
-	flagThreads                 = "threads"
-	flagFilesize                = "filesize"
-	flagStatementSize           = "statement-size"
-	flagOutput                  = "output"
-	flagLoglevel                = "loglevel"
-	flagLogfile                 = "logfile"
-	flagLogfmt                  = "logfmt"
-	flagConsistency             = "consistency"
-	flagSnapshot                = "snapshot"
-	flagNoViews                 = "no-views"
-	flagStatusAddr              = "status-addr"
-	flagRows                    = "rows"
-	flagWhere                   = "where"
-	flagEscapeBackslash         = "escape-backslash"
-	flagFiletype                = "filetype"
-	flagNoHeader                = "no-header"
-	flagNoSchemas               = "no-schemas"
-	flagNoData                  = "no-data"
-	flagCsvNullValue            = "csv-null-value"
-	flagSql                     = "sql"
-	flagFilter                  = "filter"
-	flagCaseSensitive           = "case-sensitive"
-	flagDumpEmptyDatabase       = "dump-empty-database"
-	flagTidbMemQuotaQuery       = "tidb-mem-quota-query"
-	flagCA                      = "ca"
-	flagCert                    = "cert"
-	flagKey                     = "key"
-	flagCsvSeparator            = "csv-separator"
-	flagCsvDelimiter            = "csv-delimiter"
-	flagOutputFilenameTemplate  = "output-filename-template"
-	flagCompleteInsert          = "complete-insert"
-	flagParams                  = "params"
-	flagReadTimeout             = "read-timeout"
-	flagTrxConsistencyOnly      = "trx-consistency-only"
+	flagDatabase                 = "database"
+	flagTablesList               = "tables-list"
+	flagHost                     = "host"
+	flagUser                     = "user"
+	flagPort                     = "port"
+	flagPassword                 = "password"
+	flagAllowCleartextPasswords  = "allow-cleartext-passwords"
+	flagThreads                  = "threads"
+	flagFilesize                 = "filesize"
+	flagStatementSize            = "statement-size"
+	flagOutput                   = "output"
+	flagLoglevel                 = "loglevel"
+	flagLogfile                  = "logfile"
+	flagLogfmt                   = "logfmt"
+	flagConsistency              = "consistency"
+	flagSnapshot                 = "snapshot"
+	flagNoViews                  = "no-views"
+	flagStatusAddr               = "status-addr"
+	flagRows                     = "rows"
+	flagWhere                    = "where"
+	flagEscapeBackslash          = "escape-backslash"
+	flagFiletype                 = "filetype"
+	flagNoHeader                 = "no-header"
+	flagNoSchemas                = "no-schemas"
+	flagNoData                   = "no-data"
+	flagCsvNullValue             = "csv-null-value"
+	flagSql                      = "sql"
+	flagFilter                   = "filter"
+	flagCaseSensitive            = "case-sensitive"
+	flagDumpEmptyDatabase        = "dump-empty-database"
+	flagTidbMemQuotaQuery        = "tidb-mem-quota-query"
+	flagCA                       = "ca"
+	flagCert                     = "cert"
+	flagKey                      = "key"
+	flagCsvSeparator             = "csv-separator"
+	flagCsvDelimiter             = "csv-delimiter"
+	flagOutputFilenameTemplate   = "output-filename-template"
+	flagCompleteInsert           = "complete-insert"
+	flagParams                   = "params"
+	flagReadTimeout              = "read-timeout"
+	flagTransactionalConsistency = "transactional-consistency"
 
 	FlagHelp = "help"
 )
@@ -109,16 +109,16 @@ type Config struct {
 	CsvDelimiter  string
 	ReadTimeout   time.Duration
 
-	TableFilter        filter.Filter `json:"-"`
-	Rows               uint64
-	Where              string
-	FileType           string
-	CompleteInsert     bool
-	TrxConsistencyOnly bool
-	EscapeBackslash    bool
-	DumpEmptyDatabase  bool
-	OutputFileTemplate *template.Template `json:"-"`
-	SessionParams      map[string]interface{}
+	TableFilter              filter.Filter `json:"-"`
+	Rows                     uint64
+	Where                    string
+	FileType                 string
+	CompleteInsert           bool
+	TransactionalConsistency bool
+	EscapeBackslash          bool
+	DumpEmptyDatabase        bool
+	OutputFileTemplate       *template.Template `json:"-"`
+	SessionParams            map[string]interface{}
 
 	PosAfterConnect bool
 
@@ -232,7 +232,7 @@ func (conf *Config) DefineFlags(flags *pflag.FlagSet) {
 	flags.Bool(FlagHelp, false, "Print help message and quit")
 	flags.Duration(flagReadTimeout, 15*time.Minute, "I/O read timeout for db connection.")
 	flags.MarkHidden(flagReadTimeout)
-	flags.Bool(flagTrxConsistencyOnly, true, "Only support transactional consistency")
+	flags.Bool(flagTransactionalConsistency, true, "Only support transactional consistency")
 }
 
 // GetDSN generates DSN from Config
@@ -370,7 +370,7 @@ func (conf *Config) ParseFromFlags(flags *pflag.FlagSet) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	conf.TrxConsistencyOnly, err = flags.GetBool(flagTrxConsistencyOnly)
+	conf.TransactionalConsistency, err = flags.GetBool(flagTransactionalConsistency)
 	if err != nil {
 		return errors.Trace(err)
 	}

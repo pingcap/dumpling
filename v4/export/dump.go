@@ -201,7 +201,7 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 		}
 	}
 
-	if conf.TrxConsistencyOnly {
+	if conf.TransactionalConsistency {
 		if conf.Consistency == consistencyTypeFlush || conf.Consistency == consistencyTypeLock {
 			log.Info("All the dumping transactions have started. Start to unlock tables")
 		}
@@ -309,7 +309,7 @@ func dumpDatabases(pCtx context.Context, conf *Config, connectPool *connectionsP
 							return
 						}
 						return writer.WriteTableData(ctx, tableIR)
-					}, newDumpChunkBackoffer(canRebuildConn(conf.Consistency, conf.TrxConsistencyOnly)))
+					}, newDumpChunkBackoffer(canRebuildConn(conf.Consistency, conf.TransactionalConsistency)))
 				})
 			}
 		}
