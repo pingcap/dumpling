@@ -20,7 +20,7 @@ run_sql "insert into $DB_NAME.$TABLE_NAME values $(seq -s, 100 | sed 's/,*$//g' 
 export DUMPLING_TEST_DATABASE=$DB_NAME
 broken_point=$((RANDOM % 100 + 1))
 export GO_FAILPOINTS="github.com/pingcap/dumpling/v4/export/ChaosBrokenMySQLConn=return($broken_point)"
-run_dumpling --consistency=none
+run_dumpling --consistency=none --loglevel debug
 
 # check data record count
 cnt=`grep -o "(1)" ${DUMPLING_OUTPUT_DIR}/${DB_NAME}.${TABLE_NAME}.000000000.sql|wc -l`

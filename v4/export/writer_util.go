@@ -25,6 +25,9 @@ var pool = sync.Pool{New: func() interface{} {
 	return &bytes.Buffer{}
 }}
 
+// this variable will only be used for chaos test
+var doOnce sync.Once
+
 type writerPipe struct {
 	input  chan *bytes.Buffer
 	closed chan struct{}
@@ -193,8 +196,14 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, file
 			failpoint.Inject("ChaosBrokenMySQLConn", func(val failpoint.Value) {
 				brokenPoint := val.(int)
 				if counter >= brokenPoint {
-					tblIR.Close()
-					failpoint.Return(errors.New("connection is closed"))
+					var err error
+					doOnce.Do(func() {
+						tblIR.Close()
+						err = errors.New("connection is closed")
+					})
+					if err != nil {
+						failpoint.Return(err)
+					}
 				}
 			})
 
