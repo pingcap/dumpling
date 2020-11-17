@@ -43,6 +43,7 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 		return errors.Trace(err)
 	}
 	resolveAutoConsistency(conf)
+	log.Info("finish config adjustment", zap.String("config", conf.String()))
 
 	ctx, cancel := context.WithCancel(pCtx)
 	defer cancel()
@@ -264,6 +265,7 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 func dumpDatabases(pCtx context.Context, conf *Config, connectPool *connectionsPool, writer Writer, rebuildConnFunc func(*sql.Conn) (*sql.Conn, error)) error {
 	allTables := conf.Tables
 	g, ctx := errgroup.WithContext(pCtx)
+	tableDataIRTotal := make([]TableDataIR, 0, len(allTables))
 	for dbName, tables := range allTables {
 		createDatabaseSQL, err := ShowCreateDatabase(connectPool.extraConn(), dbName)
 		if err != nil {
@@ -282,37 +284,43 @@ func dumpDatabases(pCtx context.Context, conf *Config, connectPool *connectionsP
 			if err != nil {
 				return err
 			}
-			for _, tableIR := range tableDataIRArray {
-				tableIR := tableIR
-				g.Go(func() error {
-					conn := connectPool.getConn()
-					defer func() {
-						connectPool.releaseConn(conn)
-					}()
-					retryTime := 0
-					var lastErr error
-					return utils.WithRetry(ctx, func() (err error) {
-						defer func() {
-							lastErr = err
-						}()
-						retryTime += 1
-						log.Debug("trying to dump table chunk", zap.Int("retryTime", retryTime), zap.String("db", tableIR.DatabaseName()),
-							zap.String("table", tableIR.TableName()), zap.Int("chunkIndex", tableIR.ChunkIndex()), zap.NamedError("lastError", lastErr))
-						if retryTime > 1 {
-							conn, err = rebuildConnFunc(conn)
-							if err != nil {
-								return
-							}
-						}
-						err = tableIR.Start(ctx, conn)
-						if err != nil {
-							return
-						}
-						return writer.WriteTableData(ctx, tableIR)
-					}, newDumpChunkBackoffer(canRebuildConn(conf.Consistency, conf.TransactionalConsistency)))
-				})
-			}
+			tableDataIRTotal = append(tableDataIRTotal, tableDataIRArray...)
 		}
+	}
+	progressPrinter := utils.StartProgress(ctx, "dumpling", int64(len(tableDataIRTotal)), false)
+	defer progressPrinter.Close()
+	for _, tableIR := range tableDataIRTotal {
+		tableIR := tableIR
+		g.Go(func() error {
+			conn := connectPool.getConn()
+			defer func() {
+				connectPool.releaseConn(conn)
+			}()
+			retryTime := 0
+			var lastErr error
+			return utils.WithRetry(ctx, func() (err error) {
+				defer func() {
+					lastErr = err
+					if err == nil {
+						progressPrinter.Inc()
+					}
+				}()
+				retryTime += 1
+				log.Debug("trying to dump table chunk", zap.Int("retryTime", retryTime), zap.String("db", tableIR.DatabaseName()),
+					zap.String("table", tableIR.TableName()), zap.Int("chunkIndex", tableIR.ChunkIndex()), zap.NamedError("lastError", lastErr))
+				if retryTime > 1 {
+					conn, err = rebuildConnFunc(conn)
+					if err != nil {
+						return
+					}
+				}
+				err = tableIR.Start(ctx, conn)
+				if err != nil {
+					return
+				}
+				return writer.WriteTableData(ctx, tableIR)
+			}, newDumpChunkBackoffer(canRebuildConn(conf.Consistency, conf.TransactionalConsistency)))
+		})
 	}
 	return g.Wait()
 }
