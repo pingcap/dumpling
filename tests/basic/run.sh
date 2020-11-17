@@ -25,8 +25,8 @@ run_sql "create table \`$DB_NAME\`.\`$TABLE_NAME\` (a int);"
 
 seq 10 | xargs -I_ run_sql "insert into \`$DB_NAME\`.\`$TABLE_NAME\` values (_);"
 
-run_dumpling --where "a > 3 and a < 9" -f "$DB_NAME.$TABLE_NAME"
+run_dumpling --where "a >= 3 and a <= 9" -f "$DB_NAME.$TABLE_NAME"
 
-cnt=`grep -w "(.*)" ${DUMPLING_OUTPUT_DIR}/${DB_NAME}.${TABLE_NAME}.000000000.sql|wc -l`
-echo "records count is ${cnt}"
-[ "$cnt" = 5 ]
+actual=$(grep -w "(.*)" ${DUMPLING_OUTPUT_DIR}/${DB_NAME}.${TABLE_NAME}.000000000.sql | cut -c2-2)
+expected=$(seq 3 9)
+[ "$actual" = "$expected" ]
