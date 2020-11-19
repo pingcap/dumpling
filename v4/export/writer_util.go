@@ -364,7 +364,10 @@ func writeBytes(ctx context.Context, writer storage.Writer, p []byte) error {
 	return err
 }
 
-func buildFileWriter(ctx context.Context, s storage.ExternalStorage, path string) (storage.Writer, func(ctx context.Context), error) {
+func buildFileWriter(ctx context.Context, s storage.ExternalStorage, path string, compress bool) (storage.Writer, func(ctx context.Context), error) {
+	if compress {
+		path += ".gz"
+	}
 	fullPath := s.URI() + path
 	uploader, err := s.CreateUploader(ctx, path)
 	if err != nil {
@@ -373,7 +376,11 @@ func buildFileWriter(ctx context.Context, s storage.ExternalStorage, path string
 			zap.Error(err))
 		return nil, nil, err
 	}
-	writer := storage.NewUploaderWriter(uploader, hardcodedS3ChunkSize, storage.NoCompression)
+	compressType := storage.NoCompression
+	if compress {
+		compressType = storage.Gzip
+	}
+	writer := storage.NewUploaderWriter(uploader, hardcodedS3ChunkSize, compressType)
 	log.Debug("opened file", zap.String("path", fullPath))
 	tearDownRoutine := func(ctx context.Context) {
 		err := writer.Close(ctx)
@@ -387,7 +394,10 @@ func buildFileWriter(ctx context.Context, s storage.ExternalStorage, path string
 	return writer, tearDownRoutine, nil
 }
 
-func buildInterceptFileWriter(s storage.ExternalStorage, path string) (storage.Writer, func(context.Context)) {
+func buildInterceptFileWriter(s storage.ExternalStorage, path string, compress bool) (storage.Writer, func(context.Context)) {
+	if compress {
+		path += ".gz"
+	}
 	var writer storage.Writer
 	fullPath := s.URI() + path
 	fileWriter := &InterceptFileWriter{}
@@ -399,7 +409,11 @@ func buildInterceptFileWriter(s storage.ExternalStorage, path string) (storage.W
 				zap.Error(err))
 			return newWriterError(err)
 		}
-		w := storage.NewUploaderWriter(uploader, hardcodedS3ChunkSize, storage.NoCompression)
+		compressType := storage.NoCompression
+		if compress {
+			compressType = storage.Gzip
+		}
+		w := storage.NewUploaderWriter(uploader, hardcodedS3ChunkSize, compressType)
 		writer = w
 		log.Debug("opened file", zap.String("path", fullPath))
 		fileWriter.Writer = writer

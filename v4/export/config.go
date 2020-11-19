@@ -64,6 +64,7 @@ const (
 	flagParams                   = "params"
 	flagReadTimeout              = "read-timeout"
 	flagTransactionalConsistency = "transactional-consistency"
+	flagCompress                 = "compress"
 
 	FlagHelp = "help"
 )
@@ -108,6 +109,7 @@ type Config struct {
 	CsvSeparator  string
 	CsvDelimiter  string
 	ReadTimeout   time.Duration
+	Compress      bool
 
 	TableFilter              filter.Filter `json:"-"`
 	Rows                     uint64
@@ -233,6 +235,7 @@ func (conf *Config) DefineFlags(flags *pflag.FlagSet) {
 	flags.Duration(flagReadTimeout, 15*time.Minute, "I/O read timeout for db connection.")
 	flags.MarkHidden(flagReadTimeout)
 	flags.Bool(flagTransactionalConsistency, true, "Only support transactional consistency")
+	flags.BoolP(flagCompress, "c", false, "Compress output files")
 }
 
 // GetDSN generates DSN from Config
@@ -371,6 +374,10 @@ func (conf *Config) ParseFromFlags(flags *pflag.FlagSet) error {
 		return errors.Trace(err)
 	}
 	conf.TransactionalConsistency, err = flags.GetBool(flagTransactionalConsistency)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	conf.Compress, err = flags.GetBool(flagCompress)
 	if err != nil {
 		return errors.Trace(err)
 	}
