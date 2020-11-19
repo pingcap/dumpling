@@ -373,7 +373,7 @@ func buildFileWriter(ctx context.Context, s storage.ExternalStorage, path string
 			zap.Error(err))
 		return nil, nil, err
 	}
-	writer := storage.NewUploaderWriter(uploader, hardcodedS3ChunkSize)
+	writer := storage.NewUploaderWriter(uploader, hardcodedS3ChunkSize, storage.NoCompression)
 	log.Debug("opened file", zap.String("path", fullPath))
 	tearDownRoutine := func(ctx context.Context) {
 		err := writer.Close(ctx)
@@ -399,7 +399,7 @@ func buildInterceptFileWriter(s storage.ExternalStorage, path string) (storage.W
 				zap.Error(err))
 			return newWriterError(err)
 		}
-		w := storage.NewUploaderWriter(uploader, hardcodedS3ChunkSize)
+		w := storage.NewUploaderWriter(uploader, hardcodedS3ChunkSize, storage.NoCompression)
 		writer = w
 		log.Debug("opened file", zap.String("path", fullPath))
 		fileWriter.Writer = writer

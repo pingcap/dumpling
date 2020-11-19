@@ -228,6 +228,7 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 		return errors.Errorf("unsupported filetype %s", conf.FileType)
 	}
 
+	summary.SetLogCollector(summary.NewLogCollector(log.Info))
 	summary.SetUnit(summary.BackupUnit)
 	defer summary.Summary(summary.BackupUnit)
 	if conf.Sql == "" {
@@ -293,7 +294,7 @@ func dumpDatabases(pCtx context.Context, conf *Config, connectPool *connectionsP
 		}
 	}
 	summary.CollectDuration("split chunks", time.Since(splitChunkStart))
-	progressPrinter := utils.StartProgress(ctx, "dumpling", int64(len(tableDataIRTotal)), shouldRedirectLog(conf))
+	progressPrinter := utils.StartProgress(ctx, "dumpling", int64(len(tableDataIRTotal)), shouldRedirectLog(conf), log.Info)
 	defer progressPrinter.Close()
 	tableDataStartTime := time.Now()
 	for _, tableIR := range tableDataIRTotal {
