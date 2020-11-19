@@ -350,24 +350,17 @@ func GetUniqueIndexName(db *sql.Conn, database, table string) (string, error) {
 }
 
 func getNumericIndex(db *sql.Conn, database, table, indexType string) (string, error) {
-	keyQuery := "SELECT column_name, data_type FROM information_schema.columns " +
-		"WHERE table_schema = ? AND table_name = ? AND column_key = ?;"
-	var colName, dataType string
-	rows, err := db.QueryContext(context.Background(), keyQuery, database, table, indexType)
-	if err != nil {
+	keyQuery := "SELECT column_name FROM information_schema.columns " +
+		"WHERE table_schema = ? AND table_name = ? AND column_key = ? AND data_type IN ('int', 'bigint');"
+	var colName string
+	row := db.QueryRowContext(context.Background(), keyQuery, database, table, indexType)
+	err := row.Scan(&colName)
+	if err == sql.ErrNoRows {
+		return "", nil
+	} else if err != nil {
 		return "", errors.Annotatef(err, "sql: %s, indexType: %s", keyQuery, indexType)
 	}
-	defer rows.Close()
-	for rows.Next() {
-		if err := rows.Scan(&colName, &dataType); err != nil {
-			return "", errors.Annotatef(err, "sql: %s, indexType: %s", keyQuery, indexType)
-		}
-		switch strings.ToLower(dataType) {
-		case "int", "bigint":
-			return colName, nil
-		}
-	}
-	return "", nil
+	return colName, nil
 }
 
 func FlushTableWithReadLock(ctx context.Context, db *sql.Conn) error {
