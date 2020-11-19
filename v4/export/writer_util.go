@@ -190,12 +190,9 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, file
 			}
 			counter += 1
 			wp.AddFileSize(uint64(bf.Len()-lastBfSize) + 2) // 2 is for ",\n" and ";\n"
-			failpoint.Inject("ChaosBrokenMySQLConn", func(val failpoint.Value) {
-				brokenPoint := val.(int)
-				if counter >= brokenPoint {
-					tblIR.Close()
-					failpoint.Return(errors.New("connection is closed"))
-				}
+			failpoint.Inject("ChaosBrokenMySQLConn", func(_ failpoint.Value) {
+				tblIR.Close()
+				failpoint.Return(errors.New("connection is closed"))
 			})
 
 			fileRowIter.Next()
