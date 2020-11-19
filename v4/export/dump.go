@@ -10,6 +10,7 @@ import (
 	"github.com/pingcap/dumpling/v4/log"
 
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/pingcap/br/pkg/summary"
 	"github.com/pingcap/br/pkg/utils"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -227,6 +228,8 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 		return errors.Errorf("unsupported filetype %s", conf.FileType)
 	}
 
+	summary.SetUnit(summary.BackupUnit)
+	defer summary.Summary(summary.BackupUnit)
 	if conf.Sql == "" {
 		if err = dumpDatabases(ctx, conf, connectPool, writer, func(conn *sql.Conn) (*sql.Conn, error) {
 			// make sure that the lock connection is still alive
@@ -258,6 +261,7 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 		}
 	}
 
+	summary.SetSuccessStatus(true)
 	m.recordFinishTime(time.Now())
 	return nil
 }
@@ -266,6 +270,7 @@ func dumpDatabases(pCtx context.Context, conf *Config, connectPool *connectionsP
 	allTables := conf.Tables
 	g, ctx := errgroup.WithContext(pCtx)
 	tableDataIRTotal := make([]TableDataIR, 0, len(allTables))
+	splitChunkStart := time.Now()
 	for dbName, tables := range allTables {
 		createDatabaseSQL, err := ShowCreateDatabase(connectPool.extraConn(), dbName)
 		if err != nil {
@@ -287,8 +292,10 @@ func dumpDatabases(pCtx context.Context, conf *Config, connectPool *connectionsP
 			tableDataIRTotal = append(tableDataIRTotal, tableDataIRArray...)
 		}
 	}
-	progressPrinter := utils.StartProgress(ctx, "dumpling", int64(len(tableDataIRTotal)), false)
+	summary.CollectDuration("split chunks", time.Since(splitChunkStart))
+	progressPrinter := utils.StartProgress(ctx, "dumpling", int64(len(tableDataIRTotal)), shouldRedirectLog(conf))
 	defer progressPrinter.Close()
+	tableDataStartTime := time.Now()
 	for _, tableIR := range tableDataIRTotal {
 		tableIR := tableIR
 		g.Go(func() error {
@@ -322,7 +329,13 @@ func dumpDatabases(pCtx context.Context, conf *Config, connectPool *connectionsP
 			}, newDumpChunkBackoffer(canRebuildConn(conf.Consistency, conf.TransactionalConsistency)))
 		})
 	}
-	return g.Wait()
+	if err := g.Wait(); err != nil {
+		summary.CollectFailureUnit("dump", err)
+		return err
+	} else {
+		summary.CollectSuccessUnit("dump cost", len(tableDataIRTotal), time.Since(tableDataStartTime))
+	}
+	return nil
 }
 
 func prepareTableListToDump(conf *Config, pool *sql.Conn) error {
@@ -354,7 +367,15 @@ func dumpSql(ctx context.Context, conf *Config, connectPool *connectionsPool, wr
 		return err
 	}
 
-	return writer.WriteTableData(ctx, tableIR)
+	tableDataStartTime := time.Now()
+	err = writer.WriteTableData(ctx, tableIR)
+	if err != nil {
+		summary.CollectFailureUnit("dump", err)
+		return err
+	} else {
+		summary.CollectSuccessUnit("dump cost", 1, time.Since(tableDataStartTime))
+	}
+	return nil
 }
 
 func dumpTable(ctx context.Context, conf *Config, db *sql.Conn, dbName string, table *TableInfo, writer Writer) ([]TableDataIR, error) {
@@ -469,4 +490,8 @@ func canRebuildConn(consistency string, trxConsistencyOnly bool) bool {
 	default:
 		return false
 	}
+}
+
+func shouldRedirectLog(conf *Config) bool {
+	return conf.Logger != nil || conf.LogFile != ""
 }

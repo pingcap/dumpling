@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/pingcap/br/pkg/storage"
+	"github.com/pingcap/br/pkg/summary"
 	"github.com/pingcap/errors"
 	"go.uber.org/zap"
 
@@ -29,6 +30,7 @@ type writerPipe struct {
 	closed chan struct{}
 	errCh  chan error
 
+	finishedFileSize     uint64
 	currentFileSize      uint64
 	currentStatementSize uint64
 
@@ -65,6 +67,7 @@ func (b *writerPipe) Run(ctx context.Context) {
 				continue
 			}
 			err := writeBytes(ctx, b.w, s.Bytes())
+			b.finishedFileSize += uint64(s.Len())
 			s.Reset()
 			pool.Put(s)
 			if err != nil {
@@ -153,7 +156,7 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, file
 	var (
 		insertStatementPrefix string
 		row                   = MakeRowReceiver(tblIR.ColumnTypes())
-		counter               = 0
+		counter               uint64
 		escapeBackSlash       = tblIR.EscapeBackSlash()
 		err                   error
 	)
@@ -221,12 +224,14 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, file
 	}
 	log.Debug("dumping table",
 		zap.String("table", tblIR.TableName()),
-		zap.Int("record counts", counter))
+		zap.Uint64("record counts", counter))
 	if bf.Len() > 0 {
 		wp.input <- bf
 	}
 	close(wp.input)
 	<-wp.closed
+	summary.CollectSuccessUnit(summary.TotalBytes, 1, wp.finishedFileSize)
+	summary.CollectSuccessUnit("total rows", 1, counter)
 	if err = fileRowIter.Error(); err != nil {
 		return err
 	}
@@ -260,7 +265,7 @@ func WriteInsertInCsv(pCtx context.Context, tblIR TableDataIR, w storage.Writer,
 
 	var (
 		row             = MakeRowReceiver(tblIR.ColumnTypes())
-		counter         = 0
+		counter         uint64
 		escapeBackSlash = tblIR.EscapeBackSlash()
 		err             error
 	)
@@ -314,12 +319,14 @@ func WriteInsertInCsv(pCtx context.Context, tblIR TableDataIR, w storage.Writer,
 	log.Debug("dumping table",
 		zap.String("table", tblIR.TableName()),
 		zap.Int("chunkIndex", tblIR.ChunkIndex()),
-		zap.Int("record counts", counter))
+		zap.Uint64("record counts", counter))
 	if bf.Len() > 0 {
 		wp.input <- bf
 	}
 	close(wp.input)
 	<-wp.closed
+	summary.CollectSuccessUnit(summary.TotalBytes, 1, wp.finishedFileSize)
+	summary.CollectSuccessUnit("total rows", 1, counter)
 	if err = fileRowIter.Error(); err != nil {
 		return err
 	}
