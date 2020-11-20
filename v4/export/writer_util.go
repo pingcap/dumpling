@@ -12,6 +12,7 @@ import (
 	"github.com/pingcap/br/pkg/storage"
 	"github.com/pingcap/br/pkg/summary"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 
@@ -203,6 +204,10 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, cfg 
 			}
 			counter += 1
 			wp.AddFileSize(uint64(bf.Len()-lastBfSize) + 2) // 2 is for ",\n" and ";\n"
+			failpoint.Inject("ChaosBrokenMySQLConn", func(_ failpoint.Value) {
+				tblIR.Close()
+				failpoint.Return(errors.New("connection is closed"))
+			})
 
 			fileRowIter.Next()
 			shouldSwitch := wp.ShouldSwitchStatement()
