@@ -7,10 +7,12 @@ import (
 	"io"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/pingcap/br/pkg/storage"
 	"github.com/pingcap/br/pkg/summary"
 	"github.com/pingcap/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/dumpling/v4/log"
@@ -29,6 +31,7 @@ type writerPipe struct {
 	input  chan *bytes.Buffer
 	closed chan struct{}
 	errCh  chan error
+	labels prometheus.Labels
 
 	finishedFileSize     uint64
 	currentFileSize      uint64
@@ -40,12 +43,13 @@ type writerPipe struct {
 	w storage.Writer
 }
 
-func newWriterPipe(w storage.Writer, fileSizeLimit, statementSizeLimit uint64) *writerPipe {
+func newWriterPipe(w storage.Writer, fileSizeLimit, statementSizeLimit uint64, labels prometheus.Labels) *writerPipe {
 	return &writerPipe{
 		input:  make(chan *bytes.Buffer, 8),
 		closed: make(chan struct{}),
 		errCh:  make(chan error, 1),
 		w:      w,
+		labels: labels,
 
 		currentFileSize:      0,
 		currentStatementSize: 0,
@@ -57,6 +61,7 @@ func newWriterPipe(w storage.Writer, fileSizeLimit, statementSizeLimit uint64) *
 func (b *writerPipe) Run(ctx context.Context) {
 	defer close(b.closed)
 	var errOccurs bool
+	receiveChunkTime := time.Now()
 	for {
 		select {
 		case s, ok := <-b.input:
@@ -66,7 +71,11 @@ func (b *writerPipe) Run(ctx context.Context) {
 			if errOccurs {
 				continue
 			}
+			receiveWriteChunkTimeHistogram.With(b.labels).Observe(time.Since(receiveChunkTime).Seconds())
+			receiveChunkTime = time.Now()
 			err := writeBytes(ctx, b.w, s.Bytes())
+			writeTimeHistogram.With(b.labels).Observe(time.Since(receiveChunkTime).Seconds())
+			finishedSizeCounter.With(b.labels).Add(float64(s.Len()))
 			b.finishedFileSize += uint64(s.Len())
 			s.Reset()
 			pool.Put(s)
@@ -74,6 +83,7 @@ func (b *writerPipe) Run(ctx context.Context) {
 				errOccurs = true
 				b.errCh <- err
 			}
+			receiveChunkTime = time.Now()
 		case <-ctx.Done():
 			return
 		}
@@ -121,7 +131,7 @@ func WriteMeta(ctx context.Context, meta MetaIR, w storage.Writer) error {
 	return nil
 }
 
-func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, fileSizeLimit, statementSizeLimit uint64) error {
+func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, cfg *Config) error {
 	fileRowIter := tblIR.Rows()
 	if !fileRowIter.HasNext() {
 		return nil
@@ -132,7 +142,7 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, file
 		bf.Grow(lengthLimit - bfCap)
 	}
 
-	wp := newWriterPipe(w, fileSizeLimit, statementSizeLimit)
+	wp := newWriterPipe(w, cfg.FileSize, cfg.StatementSize, cfg.Labels)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	var wg sync.WaitGroup
@@ -157,6 +167,7 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, file
 		insertStatementPrefix string
 		row                   = MakeRowReceiver(tblIR.ColumnTypes())
 		counter               uint64
+		lastCounter           uint64
 		escapeBackSlash       = tblIR.EscapeBackSlash()
 		err                   error
 	)
@@ -211,6 +222,8 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, file
 					if bfCap := bf.Cap(); bfCap < lengthLimit {
 						bf.Grow(lengthLimit - bfCap)
 					}
+					finishedRowsCounter.With(cfg.Labels).Add(float64(counter - lastCounter))
+					lastCounter = counter
 				}
 			}
 
@@ -232,13 +245,14 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, file
 	<-wp.closed
 	summary.CollectSuccessUnit(summary.TotalBytes, 1, wp.finishedFileSize)
 	summary.CollectSuccessUnit("total rows", 1, counter)
+	finishedRowsCounter.With(cfg.Labels).Add(float64(counter - lastCounter))
 	if err = fileRowIter.Error(); err != nil {
 		return err
 	}
 	return wp.Error()
 }
 
-func WriteInsertInCsv(pCtx context.Context, tblIR TableDataIR, w storage.Writer, noHeader bool, opt *csvOption, fileSizeLimit uint64) error {
+func WriteInsertInCsv(pCtx context.Context, tblIR TableDataIR, w storage.Writer, cfg *Config) error {
 	fileRowIter := tblIR.Rows()
 	if !fileRowIter.HasNext() {
 		return nil
@@ -249,7 +263,12 @@ func WriteInsertInCsv(pCtx context.Context, tblIR TableDataIR, w storage.Writer,
 		bf.Grow(lengthLimit - bfCap)
 	}
 
-	wp := newWriterPipe(w, fileSizeLimit, UnspecifiedSize)
+	wp := newWriterPipe(w, cfg.FileSize, UnspecifiedSize, cfg.Labels)
+	opt := &csvOption{
+		nullValue: cfg.CsvNullValue,
+		separator: []byte(cfg.CsvSeparator),
+		delimiter: []byte(cfg.CsvDelimiter),
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	var wg sync.WaitGroup
@@ -266,11 +285,12 @@ func WriteInsertInCsv(pCtx context.Context, tblIR TableDataIR, w storage.Writer,
 	var (
 		row             = MakeRowReceiver(tblIR.ColumnTypes())
 		counter         uint64
+		lastCounter     uint64
 		escapeBackSlash = tblIR.EscapeBackSlash()
 		err             error
 	)
 
-	if !noHeader && len(tblIR.ColumnNames()) != 0 && tblIR.SelectedField() != "" {
+	if !cfg.NoHeader && len(tblIR.ColumnNames()) != 0 && tblIR.SelectedField() != "" {
 		for i, col := range tblIR.ColumnNames() {
 			bf.Write(opt.delimiter)
 			escape([]byte(col), bf, getEscapeQuotation(escapeBackSlash, opt.delimiter))
@@ -307,6 +327,8 @@ func WriteInsertInCsv(pCtx context.Context, tblIR TableDataIR, w storage.Writer,
 				if bfCap := bf.Cap(); bfCap < lengthLimit {
 					bf.Grow(lengthLimit - bfCap)
 				}
+				finishedRowsCounter.With(cfg.Labels).Add(float64(counter - lastCounter))
+				lastCounter = counter
 			}
 		}
 
@@ -327,6 +349,7 @@ func WriteInsertInCsv(pCtx context.Context, tblIR TableDataIR, w storage.Writer,
 	<-wp.closed
 	summary.CollectSuccessUnit(summary.TotalBytes, 1, wp.finishedFileSize)
 	summary.CollectSuccessUnit("total rows", 1, counter)
+	finishedRowsCounter.With(cfg.Labels).Add(float64(counter - lastCounter))
 	if err = fileRowIter.Error(); err != nil {
 		return err
 	}

@@ -16,6 +16,7 @@ import (
 	"github.com/pingcap/br/pkg/storage"
 	"github.com/pingcap/errors"
 	filter "github.com/pingcap/tidb-tools/pkg/table-filter"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/spf13/pflag"
 	"go.uber.org/zap"
 
@@ -123,6 +124,7 @@ type Config struct {
 	SessionParams            map[string]interface{}
 
 	PosAfterConnect bool
+	Labels          prometheus.Labels
 
 	ExternalStorage storage.ExternalStorage `json:"-"`
 }

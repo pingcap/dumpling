@@ -311,6 +311,8 @@ func dumpDatabases(pCtx context.Context, conf *Config, connectPool *connectionsP
 					lastErr = err
 					if err == nil {
 						progressPrinter.Inc()
+					} else {
+						errorCount.With(conf.Labels).Inc()
 					}
 				}()
 				retryTime += 1

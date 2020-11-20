@@ -76,7 +76,7 @@ func (f SQLWriter) WriteTableData(ctx context.Context, ir TableDataIR) (err erro
 
 	for {
 		fileWriter, tearDown := buildInterceptFileWriter(f.cfg.ExternalStorage, fileName, f.cfg.Compress)
-		err = WriteInsert(ctx, ir, fileWriter, f.cfg.FileSize, f.cfg.StatementSize)
+		err = WriteInsert(ctx, ir, fileWriter, f.cfg)
 		tearDown(ctx)
 		if err != nil {
 			return err
@@ -177,15 +177,9 @@ func (f CSVWriter) WriteTableData(ctx context.Context, ir TableDataIR) (err erro
 		return err
 	}
 
-	opt := &csvOption{
-		nullValue: f.cfg.CsvNullValue,
-		separator: []byte(f.cfg.CsvSeparator),
-		delimiter: []byte(f.cfg.CsvDelimiter),
-	}
-
 	for {
 		fileWriter, tearDown := buildInterceptFileWriter(f.cfg.ExternalStorage, fileName, f.cfg.Compress)
-		err = WriteInsertInCsv(ctx, ir, fileWriter, f.cfg.NoHeader, opt, f.cfg.FileSize)
+		err = WriteInsertInCsv(ctx, ir, fileWriter, f.cfg)
 		tearDown(ctx)
 		if err != nil {
 			return err
