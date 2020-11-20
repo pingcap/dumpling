@@ -392,10 +392,8 @@ func writeBytes(ctx context.Context, writer storage.Writer, p []byte) error {
 	return err
 }
 
-func buildFileWriter(ctx context.Context, s storage.ExternalStorage, path string, compress bool) (storage.Writer, func(ctx context.Context), error) {
-	if compress {
-		path += ".gz"
-	}
+func buildFileWriter(ctx context.Context, s storage.ExternalStorage, path string, compressType storage.CompressType) (storage.Writer, func(ctx context.Context), error) {
+	path += compressFileSuffix(compressType)
 	fullPath := s.URI() + path
 	uploader, err := s.CreateUploader(ctx, path)
 	if err != nil {
@@ -403,10 +401,6 @@ func buildFileWriter(ctx context.Context, s storage.ExternalStorage, path string
 			zap.String("path", fullPath),
 			zap.Error(err))
 		return nil, nil, err
-	}
-	compressType := storage.NoCompression
-	if compress {
-		compressType = storage.Gzip
 	}
 	writer := storage.NewUploaderWriter(uploader, hardcodedS3ChunkSize, compressType)
 	log.Debug("opened file", zap.String("path", fullPath))
@@ -422,10 +416,8 @@ func buildFileWriter(ctx context.Context, s storage.ExternalStorage, path string
 	return writer, tearDownRoutine, nil
 }
 
-func buildInterceptFileWriter(s storage.ExternalStorage, path string, compress bool) (storage.Writer, func(context.Context)) {
-	if compress {
-		path += ".gz"
-	}
+func buildInterceptFileWriter(s storage.ExternalStorage, path string, compressType storage.CompressType) (storage.Writer, func(context.Context)) {
+	path += compressFileSuffix(compressType)
 	var writer storage.Writer
 	fullPath := s.URI() + path
 	fileWriter := &InterceptFileWriter{}
@@ -436,10 +428,6 @@ func buildInterceptFileWriter(s storage.ExternalStorage, path string, compress b
 				zap.String("path", fullPath),
 				zap.Error(err))
 			return newWriterError(err)
-		}
-		compressType := storage.NoCompression
-		if compress {
-			compressType = storage.Gzip
 		}
 		w := storage.NewUploaderWriter(uploader, hardcodedS3ChunkSize, compressType)
 		writer = w
@@ -528,4 +516,15 @@ func wrapBackTicks(identifier string) string {
 
 func wrapStringWith(str string, wrapper string) string {
 	return fmt.Sprintf("%s%s%s", wrapper, str, wrapper)
+}
+
+func compressFileSuffix(compressType storage.CompressType) string {
+	switch compressType {
+	case storage.NoCompression:
+		return ""
+	case storage.Gzip:
+		return ".gz"
+	default:
+		return ""
+	}
 }

@@ -13,7 +13,7 @@ diff "$DUMPLING_BASE_NAME/expect/naughty_strings.t.sql" "$DUMPLING_OUTPUT_DIR/na
 
 # run with compress option
 rm "$DUMPLING_OUTPUT_DIR/naughty_strings.t.000000000.sql"
-run_dumpling --escape-backslash=false --compress
+run_dumpling --escape-backslash=false --compress "gzip"
 file_should_exist "$DUMPLING_OUTPUT_DIR/naughty_strings.t.000000000.sql.gz"
 gzip "$DUMPLING_OUTPUT_DIR/naughty_strings.t.000000000.sql.gz" -d
 diff "$DUMPLING_BASE_NAME/expect/naughty_strings.t.sql" "$DUMPLING_OUTPUT_DIR/naughty_strings.t.000000000.sql"

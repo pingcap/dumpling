@@ -110,7 +110,7 @@ type Config struct {
 	CsvSeparator  string
 	CsvDelimiter  string
 	ReadTimeout   time.Duration
-	Compress      bool
+	CompressType  storage.CompressType
 
 	TableFilter              filter.Filter `json:"-"`
 	Rows                     uint64
@@ -124,7 +124,7 @@ type Config struct {
 	SessionParams            map[string]interface{}
 
 	PosAfterConnect bool
-	Labels          prometheus.Labels
+	Labels          prometheus.Labels `json:"-"`
 
 	ExternalStorage storage.ExternalStorage `json:"-"`
 }
@@ -237,7 +237,7 @@ func (conf *Config) DefineFlags(flags *pflag.FlagSet) {
 	flags.Duration(flagReadTimeout, 15*time.Minute, "I/O read timeout for db connection.")
 	flags.MarkHidden(flagReadTimeout)
 	flags.Bool(flagTransactionalConsistency, true, "Only support transactional consistency")
-	flags.BoolP(flagCompress, "c", false, "Compress output files")
+	flags.StringP(flagCompress, "c", "", "Compress output file type, support 'gzip', 'no-compression' now")
 }
 
 // GetDSN generates DSN from Config
@@ -379,10 +379,6 @@ func (conf *Config) ParseFromFlags(flags *pflag.FlagSet) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	conf.Compress, err = flags.GetBool(flagCompress)
-	if err != nil {
-		return errors.Trace(err)
-	}
 
 	if conf.Threads <= 0 {
 		return errors.Errorf("--threads is set to %d. It should be greater than 0", conf.Threads)
@@ -446,6 +442,15 @@ func (conf *Config) ParseFromFlags(flags *pflag.FlagSet) error {
 	}
 	conf.OutputFileTemplate = tmpl
 
+	compressType, err := flags.GetString(flagCompress)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	conf.CompressType, err = ParseCompressType(compressType)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
 	for k, v := range params {
 		conf.SessionParams[k] = v
 	}
@@ -490,6 +495,17 @@ func ParseTableFilter(tablesList, filters []string) (filter.Filter, error) {
 	}
 
 	return filter.NewTablesFilter(tableNames...), nil
+}
+
+func ParseCompressType(compressType string) (storage.CompressType, error) {
+	switch compressType {
+	case "", "no-compression":
+		return storage.NoCompression, nil
+	case "gzip", "gz":
+		return storage.Gzip, nil
+	default:
+		return storage.NoCompression, errors.Errorf("unknown compress type %s", compressType)
+	}
 }
 
 func (config *Config) createExternalStorage(ctx context.Context) (storage.ExternalStorage, error) {

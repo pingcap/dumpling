@@ -208,7 +208,7 @@ func recordGlobalMetaData(db *sql.Conn, buffer *bytes.Buffer, serverType ServerT
 
 func (m *globalMetadata) writeGlobalMetaData(ctx context.Context) error {
 	// keep consistent with mydumper. Never compress metadata
-	fileWriter, tearDown, err := buildFileWriter(ctx, m.storage, metadataPath, false)
+	fileWriter, tearDown, err := buildFileWriter(ctx, m.storage, metadataPath, storage.NoCompression)
 	if err != nil {
 		return err
 	}
