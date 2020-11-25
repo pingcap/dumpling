@@ -123,7 +123,7 @@ type Config struct {
 	EscapeBackslash          bool
 	DumpEmptyDatabase        bool
 	OutputFileTemplate       *template.Template `json:"-"`
-	MemQuotaQuery            uint64
+	TiDBMemQuotaQuery        uint64
 	SessionParams            map[string]interface{}
 
 	PosAfterConnect bool
@@ -380,6 +380,10 @@ func (conf *Config) ParseFromFlags(flags *pflag.FlagSet) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+	conf.TiDBMemQuotaQuery, err = flags.GetUint64(flagTidbMemQuotaQuery)
+	if err != nil {
+		return errors.Trace(err)
+	}
 
 	if conf.Threads <= 0 {
 		return errors.Errorf("--threads is set to %d. It should be greater than 0", conf.Threads)
@@ -405,10 +409,6 @@ func (conf *Config) ParseFromFlags(flags *pflag.FlagSet) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	tidbMemQuotaQuery, err := flags.GetUint64(flagTidbMemQuotaQuery)
-	if err != nil {
-		return errors.Trace(err)
-	}
 	outputFilenameFormat, err := flags.GetString(flagOutputFilenameTemplate)
 	if err != nil {
 		return errors.Trace(err)
@@ -427,9 +427,6 @@ func (conf *Config) ParseFromFlags(flags *pflag.FlagSet) error {
 		conf.TableFilter = filter.CaseInsensitive(conf.TableFilter)
 	}
 
-	if tidbMemQuotaQuery != 0 {
-		conf.MemQuotaQuery = tidbMemQuotaQuery
-	}
 	conf.FileSize, err = ParseFileSize(fileSizeStr)
 	if err != nil {
 		return errors.Trace(err)

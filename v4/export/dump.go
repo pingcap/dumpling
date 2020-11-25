@@ -62,7 +62,6 @@ func NewDumper(ctx context.Context, conf *Config) (*Dumper, error) {
 func (d *Dumper) Dump() (err error) {
 	ctx, conf, pool := d.ctx, d.conf, d.dbHandle
 	m := newGlobalMetadata(d.extStore, conf.Snapshot)
-	// write metadata even if dump failed
 	defer func() {
 		if err == nil {
 			_ = m.writeGlobalMetaData(ctx)
@@ -398,7 +397,7 @@ func canRebuildConn(consistency string, trxConsistencyOnly bool) bool {
 }
 
 func (d *Dumper) Close() error {
-	defer d.cancelCtx()
+	d.cancelCtx()
 	return d.dbHandle.Close()
 }
 
@@ -430,11 +429,11 @@ func createExternalStore(d *Dumper) error {
 // startHttpService is an initialization step of Dumper.
 func startHttpService(d *Dumper) error {
 	conf := d.conf
-	if d.conf.StatusAddr != "" {
+	if conf.StatusAddr != "" {
 		go func() {
-			err1 := startDumplingService(conf.StatusAddr)
-			if err1 != nil {
-				log.Error("dumpling stops to serving service", zap.Error(err1))
+			err := startDumplingService(conf.StatusAddr)
+			if err != nil {
+				log.Error("dumpling stops to serving service", zap.Error(err))
 			}
 		}()
 	}
@@ -585,7 +584,7 @@ func setSessionParam(d *Dumper) error {
 	consistency, snapshot := conf.Consistency, conf.Snapshot
 	sessionParam := conf.SessionParams
 	if si.ServerType == ServerTypeTiDB {
-		sessionParam[TiDBMemQuotaQueryName] = conf.MemQuotaQuery
+		sessionParam[TiDBMemQuotaQueryName] = conf.TiDBMemQuotaQuery
 	}
 	if snapshot != "" {
 		if si.ServerType != ServerTypeTiDB {
