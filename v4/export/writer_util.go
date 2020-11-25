@@ -132,7 +132,7 @@ func WriteMeta(ctx context.Context, meta MetaIR, w storage.Writer) error {
 	return nil
 }
 
-func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, cfg *Config) error {
+func WriteInsert(pCtx context.Context, cfg *Config, meta TableMeta, tblIR TableDataIR, w storage.Writer) error {
 	fileRowIter := tblIR.Rows()
 	if !fileRowIter.HasNext() {
 		return nil
@@ -157,7 +157,7 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, cfg 
 		wg.Wait()
 	}()
 
-	specCmtIter := tblIR.SpecialComments()
+	specCmtIter := meta.SpecialComments()
 	for specCmtIter.HasNext() {
 		bf.WriteString(specCmtIter.Next())
 		bf.WriteByte('\n')
@@ -166,22 +166,22 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, cfg 
 
 	var (
 		insertStatementPrefix string
-		row                   = MakeRowReceiver(tblIR.ColumnTypes())
+		row                   = MakeRowReceiver(meta.ColumnTypes())
 		counter               uint64
 		lastCounter           uint64
-		escapeBackSlash       = tblIR.EscapeBackSlash()
+		escapeBackSlash       = cfg.EscapeBackslash
 		err                   error
 	)
 
-	selectedField := tblIR.SelectedField()
+	selectedField := meta.SelectedField()
 
 	// if has generated column
 	if selectedField != "" && selectedField != "*" {
 		insertStatementPrefix = fmt.Sprintf("INSERT INTO %s %s VALUES\n",
-			wrapBackTicks(escapeString(tblIR.TableName())), selectedField)
+			wrapBackTicks(escapeString(meta.TableName())), selectedField)
 	} else {
 		insertStatementPrefix = fmt.Sprintf("INSERT INTO %s VALUES\n",
-			wrapBackTicks(escapeString(tblIR.TableName())))
+			wrapBackTicks(escapeString(meta.TableName())))
 	}
 	insertStatementPrefixLen := uint64(len(insertStatementPrefix))
 
@@ -205,7 +205,6 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, cfg 
 			counter += 1
 			wp.AddFileSize(uint64(bf.Len()-lastBfSize) + 2) // 2 is for ",\n" and ";\n"
 			failpoint.Inject("ChaosBrokenMySQLConn", func(_ failpoint.Value) {
-				tblIR.Close()
 				failpoint.Return(errors.New("connection is closed"))
 			})
 
@@ -241,7 +240,7 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, cfg 
 		}
 	}
 	log.Debug("dumping table",
-		zap.String("table", tblIR.TableName()),
+		zap.String("table", meta.TableName()),
 		zap.Uint64("record counts", counter))
 	if bf.Len() > 0 {
 		wp.input <- bf
@@ -257,7 +256,7 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, cfg 
 	return wp.Error()
 }
 
-func WriteInsertInCsv(pCtx context.Context, tblIR TableDataIR, w storage.Writer, cfg *Config) error {
+func WriteInsertInCsv(pCtx context.Context, cfg *Config, meta TableMeta, tblIR TableDataIR, w storage.Writer) error {
 	fileRowIter := tblIR.Rows()
 	if !fileRowIter.HasNext() {
 		return nil
@@ -288,19 +287,19 @@ func WriteInsertInCsv(pCtx context.Context, tblIR TableDataIR, w storage.Writer,
 	}()
 
 	var (
-		row             = MakeRowReceiver(tblIR.ColumnTypes())
+		row             = MakeRowReceiver(meta.ColumnTypes())
 		counter         uint64
 		lastCounter     uint64
-		escapeBackSlash = tblIR.EscapeBackSlash()
+		escapeBackSlash = cfg.EscapeBackslash
 		err             error
 	)
 
-	if !cfg.NoHeader && len(tblIR.ColumnNames()) != 0 && tblIR.SelectedField() != "" {
-		for i, col := range tblIR.ColumnNames() {
+	if !cfg.NoHeader && len(meta.ColumnNames()) != 0 && meta.SelectedField() != "" {
+		for i, col := range meta.ColumnNames() {
 			bf.Write(opt.delimiter)
 			escape([]byte(col), bf, getEscapeQuotation(escapeBackSlash, opt.delimiter))
 			bf.Write(opt.delimiter)
-			if i != len(tblIR.ColumnTypes())-1 {
+			if i != len(meta.ColumnTypes())-1 {
 				bf.Write(opt.separator)
 			}
 		}
@@ -310,7 +309,7 @@ func WriteInsertInCsv(pCtx context.Context, tblIR TableDataIR, w storage.Writer,
 
 	for fileRowIter.HasNext() {
 		lastBfSize := bf.Len()
-		if tblIR.SelectedField() != "" {
+		if meta.SelectedField() != "" {
 			if err = fileRowIter.Decode(row); err != nil {
 				log.Error("scanning from sql.Row failed", zap.Error(err))
 				return err
@@ -344,8 +343,7 @@ func WriteInsertInCsv(pCtx context.Context, tblIR TableDataIR, w storage.Writer,
 	}
 
 	log.Debug("dumping table",
-		zap.String("table", tblIR.TableName()),
-		zap.Int("chunkIndex", tblIR.ChunkIndex()),
+		zap.String("table", meta.TableName()),
 		zap.Uint64("record counts", counter))
 	if bf.Len() > 0 {
 		wp.input <- bf
@@ -526,5 +524,51 @@ func compressFileSuffix(compressType storage.CompressType) string {
 		return ".gz"
 	default:
 		return ""
+	}
+}
+
+// FileFormat is the format that output to file. Currently we support SQL text and CSV file format.
+type FileFormat int32
+
+const (
+	FileFormatUnknown FileFormat = iota
+	FileFormatSQLText
+	FileFormatCSV
+)
+
+// String implement Stringer.String method.
+func (f FileFormat) String() string {
+	switch f {
+	case FileFormatSQLText:
+		return "text"
+	case FileFormatCSV:
+		return "CSV"
+	default:
+		return "unknown"
+	}
+}
+
+// Extension returns the extension for specific format.
+//  text -> "sql"
+//  csv  -> "csv"
+func (f FileFormat) Extension() string {
+	switch f {
+	case FileFormatSQLText:
+		return "sql"
+	case FileFormatCSV:
+		return "csv"
+	default:
+		return "unknown_format"
+	}
+}
+
+func (f FileFormat) WriteInsert(pCtx context.Context, cfg *Config, meta TableMeta, tblIR TableDataIR, w storage.Writer) error {
+	switch f {
+	case FileFormatSQLText:
+		return WriteInsert(pCtx, cfg, meta, tblIR, w)
+	case FileFormatCSV:
+		return WriteInsertInCsv(pCtx, cfg, meta, tblIR, w)
+	default:
+		return errors.Errorf("unknown file format")
 	}
 }

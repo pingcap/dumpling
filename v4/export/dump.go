@@ -3,15 +3,15 @@ package export
 import (
 	"context"
 	"database/sql"
-	"strconv"
-	"strings"
+	"fmt"
+	"math/big"
 	"time"
 
 	"github.com/pingcap/dumpling/v4/log"
 
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/pingcap/br/pkg/storage"
 	"github.com/pingcap/br/pkg/summary"
-	"github.com/pingcap/br/pkg/utils"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	pd "github.com/tikv/pd/client"
@@ -19,123 +19,53 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func Dump(pCtx context.Context, conf *Config) (err error) {
-	if err = adjustConfig(pCtx, conf); err != nil {
-		return errors.Trace(err)
+type Dumper struct {
+	ctx       context.Context
+	conf      *Config
+	cancelCtx context.CancelFunc
+
+	extStore storage.ExternalStorage
+	dbHandle *sql.DB
+
+	tidbPDClientForGC pd.Client
+}
+
+func NewDumper(ctx context.Context, conf *Config) (*Dumper, error) {
+	ctx, cancelFn := context.WithCancel(ctx)
+	d := &Dumper{
+		ctx:       ctx,
+		conf:      conf,
+		cancelCtx: cancelFn,
 	}
-
-	go func() {
-		if conf.StatusAddr != "" {
-			err1 := startDumplingService(conf.StatusAddr)
-			if err1 != nil {
-				log.Error("dumpling stops to serving service", zap.Error(err1))
-			}
-		}
-	}()
-
-	pool, err := sql.Open("mysql", conf.GetDSN(""))
+	err := adjustConfig(conf,
+		initLogger,
+		registerTLSConfig,
+		validateSpecifiedSQL,
+		validateFileFormat)
 	if err != nil {
-		return errors.Trace(err)
+		return nil, err
 	}
-	defer pool.Close()
+	err = runSteps(d,
+		createExternalStore,
+		startHttpService,
+		openSQLDB,
+		detectServerInfo,
+		resolveAutoConsistency,
 
-	conf.ServerInfo, err = detectServerInfo(pool)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	resolveAutoConsistency(conf)
-	log.Info("finish config adjustment", zap.String("config", conf.String()))
+		tidbSetPDClientForGC,
+		tidbGetSnapshot,
+		tidbStartGCSavepointUpdateService,
 
-	ctx, cancel := context.WithCancel(pCtx)
-	defer cancel()
+		setSessionParam)
+	return d, err
+}
 
-	var (
-		doPdGC     bool
-		pdClient   pd.Client
-		snapshotTS uint64
-	)
-	if conf.ServerInfo.ServerType == ServerTypeTiDB {
-		if conf.ServerInfo.ServerVersion.Compare(*gcSafePointVersion) >= 0 {
-			pdAddrs, err := GetPdAddrs(pool)
-			if err != nil {
-				return err
-			}
-			if len(pdAddrs) > 0 {
-				doPdGC, err = checkSameCluster(ctx, pool, pdAddrs)
-				if err != nil {
-					log.Warn("meet error while check whether fetched pd addr and TiDB belongs to one cluster", zap.Error(err), zap.Strings("pdAddrs", pdAddrs))
-				} else if doPdGC {
-					pdClient, err = pd.NewClientWithContext(ctx, pdAddrs, pd.SecurityOption{})
-					if err != nil {
-						log.Warn("create pd client to control GC failed", zap.Error(err), zap.Strings("pdAddrs", pdAddrs))
-						doPdGC = false
-					}
-				}
-			}
-		}
-	} else {
-		delete(conf.SessionParams, TiDBMemQuotaQueryName)
-	}
-
-	snapshot := conf.Snapshot
-	if snapshot == "" && (doPdGC || conf.Consistency == consistencyTypeSnapshot) {
-		conn, err := pool.Conn(ctx)
-		if err != nil {
-			conn.Close()
-			return errors.Trace(err)
-		}
-		snapshot, err = getSnapshot(conn)
-		conn.Close()
-		if err != nil {
-			return err
-		}
-	}
-
-	if snapshot != "" {
-		if conf.ServerInfo.ServerType != ServerTypeTiDB {
-			return errors.New("snapshot consistency is not supported for this server")
-		}
-		snapshotTS, err = parseSnapshotToTSO(pool, snapshot)
-		if err != nil {
-			return err
-		}
-		if conf.Consistency == consistencyTypeSnapshot {
-			hasTiKV, err := CheckTiDBWithTiKV(pool)
-			if err != nil {
-				return err
-			}
-			if hasTiKV {
-				conf.SessionParams["tidb_snapshot"] = snapshot
-			}
-			// convert yyyy:mm:ss type snapshot to TSO if consistency is snapshot
-			snapshot = strconv.FormatUint(snapshotTS, 10)
-		} else {
-			// clear snapshot to use current master status for metadata (consistency lock)
-			snapshot = ""
-		}
-	}
-
-	if doPdGC {
-		go updateServiceSafePoint(ctx, pdClient, defaultDumpGCSafePointTTL, snapshotTS)
-	} else if conf.ServerInfo.ServerType == ServerTypeTiDB {
-		log.Warn("If the amount of data to dump is large, criteria: (data more than 60GB or dumped time more than 10 minutes)\n" +
-			"you'd better adjust the tikv_gc_life_time to avoid export failure due to TiDB GC during the dump process.\n" +
-			"Before dumping: run sql `update mysql.tidb set VARIABLE_VALUE = '720h' where VARIABLE_NAME = 'tikv_gc_life_time';` in tidb.\n" +
-			"After dumping: run sql `update mysql.tidb set VARIABLE_VALUE = '10m' where VARIABLE_NAME = 'tikv_gc_life_time';` in tidb.\n")
-	}
-
-	if newPool, err := resetDBWithSessionParams(pool, conf.GetDSN(""), conf.SessionParams); err != nil {
-		return errors.Trace(err)
-	} else {
-		pool = newPool
-		defer newPool.Close()
-	}
-
-	m := newGlobalMetadata(conf.ExternalStorage, snapshot)
-	// write metadata even if dump failed
+func (d *Dumper) Dump() (err error) {
+	ctx, conf, pool := d.ctx, d.conf, d.dbHandle
+	m := newGlobalMetadata(d.extStore, conf.Snapshot)
 	defer func() {
 		if err == nil {
-			m.writeGlobalMetaData(ctx)
+			_ = m.writeGlobalMetaData(ctx)
 		}
 	}()
 
@@ -188,6 +118,11 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 		return err
 	}
 	defer connectPool.Close()
+	writerConnPool, err := newConnectionsPool(ctx, conf.Threads, pool)
+	if err != nil {
+		return err
+	}
+	defer writerConnPool.Close()
 
 	if conf.PosAfterConnect {
 		// record again, to provide a location to exit safe mode for DM
@@ -214,50 +149,39 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 
 	failpoint.Inject("ConsistencyCheck", nil)
 
-	simpleWriter, err := NewSimpleWriter(conf)
-	if err != nil {
-		return err
-	}
-	var writer Writer
-	switch strings.ToLower(conf.FileType) {
-	case "sql":
-		writer = SQLWriter{SimpleWriter: simpleWriter}
-	case "csv":
-		writer = CSVWriter{SimpleWriter: simpleWriter}
-	default:
-		return errors.Errorf("unsupported filetype %s", conf.FileType)
+	writer := NewWriter(conf, writerConnPool, d.extStore)
+	writer.rebuildConnFn = func(conn *sql.Conn) (*sql.Conn, error) {
+		// make sure that the lock connection is still alive
+		err := conCtrl.PingContext(ctx)
+		if err != nil {
+			return conn, err
+		}
+		// give up the last broken connection
+		conn.Close()
+		newConn, err := createConnWithConsistency(ctx, pool)
+		if err != nil {
+			return conn, err
+		}
+		conn = newConn
+		// renew the master status after connection. dm can't close safe-mode until dm reaches current pos
+		if conf.PosAfterConnect {
+			err = m.recordGlobalMetaData(conn, conf.ServerInfo.ServerType, true)
+			if err != nil {
+				return conn, err
+			}
+		}
+		return conn, nil
 	}
 
 	summary.SetLogCollector(summary.NewLogCollector(log.Info))
 	summary.SetUnit(summary.BackupUnit)
 	defer summary.Summary(summary.BackupUnit)
 	if conf.Sql == "" {
-		if err = dumpDatabases(ctx, conf, connectPool, writer, func(conn *sql.Conn) (*sql.Conn, error) {
-			// make sure that the lock connection is still alive
-			err := conCtrl.PingContext(ctx)
-			if err != nil {
-				return conn, err
-			}
-			// give up the last broken connection
-			conn.Close()
-			newConn, err := createConnWithConsistency(ctx, pool)
-			if err != nil {
-				return conn, err
-			}
-			conn = newConn
-			// renew the master status after connection. dm can't close safe-mode until dm reaches current pos
-			if conf.PosAfterConnect {
-				err = m.recordGlobalMetaData(conn, conf.ServerInfo.ServerType, true)
-				if err != nil {
-					return conn, err
-				}
-			}
-			return conn, nil
-		}); err != nil {
+		if err = d.dumpDatabases(connectPool, writer); err != nil {
 			return err
 		}
 	} else {
-		if err = dumpSql(ctx, conf, connectPool, writer); err != nil {
+		if err = d.dumpSql(connectPool, writer); err != nil {
 			return err
 		}
 	}
@@ -267,17 +191,23 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 	return nil
 }
 
-func dumpDatabases(pCtx context.Context, conf *Config, connectPool *connectionsPool, writer Writer, rebuildConnFunc func(*sql.Conn) (*sql.Conn, error)) error {
+func (d *Dumper) dumpDatabases(connectPool *connectionsPool, writer *Writer) error {
+	ctx, conf := d.ctx, d.conf
 	allTables := conf.Tables
-	g, ctx := errgroup.WithContext(pCtx)
-	tableDataIRTotal := make([]TableDataIR, 0, len(allTables))
-	splitChunkStart := time.Now()
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithCancel(ctx)
+	defer cancel()
+	var dumpingGroup, writingGroup errgroup.Group
+	tableDataStartTime := time.Now()
 	for dbName, tables := range allTables {
-		createDatabaseSQL, err := ShowCreateDatabase(connectPool.extraConn(), dbName)
+		conn := connectPool.getConn()
+		createDatabaseSQL, err := ShowCreateDatabase(conn, dbName)
+		connectPool.releaseConn(conn)
 		if err != nil {
 			return err
 		}
-		if err := writer.WriteDatabaseMeta(ctx, dbName, createDatabaseSQL); err != nil {
+		err = writer.WriteDatabaseMeta(ctx, dbName, createDatabaseSQL)
+		if err != nil {
 			return err
 		}
 
@@ -285,58 +215,213 @@ func dumpDatabases(pCtx context.Context, conf *Config, connectPool *connectionsP
 			continue
 		}
 		for _, table := range tables {
-			table := table
-			tableDataIRArray, err := dumpTable(ctx, conf, connectPool.extraConn(), dbName, table, writer)
+			conn := connectPool.getConn()
+			meta, err := dumpTableMeta(conf, conn, dbName, table)
 			if err != nil {
 				return err
 			}
-			tableDataIRTotal = append(tableDataIRTotal, tableDataIRArray...)
+			connectPool.releaseConn(conn)
+
+			if table.Type == TableTypeView {
+				err = writer.WriteViewMeta(ctx, dbName, table.Name, meta.ShowCreateTable(), meta.ShowCreateView())
+			} else {
+				err = writer.WriteTableMeta(ctx, dbName, table.Name, meta.ShowCreateTable())
+			}
+			if err != nil {
+				return err
+			}
+
+			tableIRStream := make(chan TableDataIR, defaultDumpThreads)
+			dumpingGroup.Go(func() error {
+				conn := connectPool.getConn()
+				err := d.dumpTableData(conn, meta, tableIRStream)
+				connectPool.releaseConn(conn)
+				return err
+			})
+
+			writingGroup.Go(func() error {
+				return writer.WriteTableData(ctx, meta, tableIRStream)
+			})
 		}
 	}
-	summary.CollectDuration("split chunks", time.Since(splitChunkStart))
-	progressPrinter := utils.StartProgress(ctx, "dumpling", int64(len(tableDataIRTotal)), shouldRedirectLog(conf), log.Info)
-	defer progressPrinter.Close()
-	tableDataStartTime := time.Now()
-	for _, tableIR := range tableDataIRTotal {
-		tableIR := tableIR
-		g.Go(func() error {
-			conn := connectPool.getConn()
-			defer func() {
-				connectPool.releaseConn(conn)
-			}()
-			retryTime := 0
-			var lastErr error
-			return utils.WithRetry(ctx, func() (err error) {
-				defer func() {
-					lastErr = err
-					if err == nil {
-						progressPrinter.Inc()
-					} else {
-						errorCount.With(conf.Labels).Inc()
-					}
-				}()
-				retryTime += 1
-				log.Debug("trying to dump table chunk", zap.Int("retryTime", retryTime), zap.String("db", tableIR.DatabaseName()),
-					zap.String("table", tableIR.TableName()), zap.Int("chunkIndex", tableIR.ChunkIndex()), zap.NamedError("lastError", lastErr))
-				if retryTime > 1 {
-					conn, err = rebuildConnFunc(conn)
-					if err != nil {
-						return
-					}
-				}
-				err = tableIR.Start(ctx, conn)
-				if err != nil {
-					return
-				}
-				return writer.WriteTableData(ctx, tableIR)
-			}, newDumpChunkBackoffer(canRebuildConn(conf.Consistency, conf.TransactionalConsistency)))
-		})
-	}
-	if err := g.Wait(); err != nil {
+	if err := dumpingGroup.Wait(); err != nil {
 		summary.CollectFailureUnit("dump", err)
 		return err
+	}
+	if err := writingGroup.Wait(); err != nil {
+		summary.CollectFailureUnit("dump", err)
+		return err
+	}
+	summary.CollectSuccessUnit("dump cost", writer.receivedIRCount, time.Since(tableDataStartTime))
+	return nil
+}
+
+func (d *Dumper) dumpTableData(conn *sql.Conn, meta TableMeta, ir chan<- TableDataIR) error {
+	conf := d.conf
+	defer close(ir)
+	if conf.NoData {
+		return nil
+	}
+	if conf.Rows == UnspecifiedSize {
+		return d.sequentialDumpTable(conn, meta, ir)
+	}
+	return d.concurrentDumpTable(conn, meta, ir)
+}
+
+func (d *Dumper) sequentialDumpTable(conn *sql.Conn, meta TableMeta, ir chan<- TableDataIR) error {
+	conf := d.conf
+	db, tbl := meta.DatabaseName(), meta.TableName()
+	tableIR, err := SelectAllFromTable(conf, conn, db, tbl)
+	if err != nil {
+		return err
+	}
+	ir <- tableIR
+	return nil
+}
+
+func (d *Dumper) concurrentDumpTable(conn *sql.Conn, meta TableMeta, ir chan<- TableDataIR) error {
+	ctx, conf := d.ctx, d.conf
+	db, tbl := meta.DatabaseName(), meta.TableName()
+	if conf.ServerInfo.ServerType == ServerTypeTiDB &&
+		conf.ServerInfo.ServerVersion != nil &&
+		conf.ServerInfo.ServerVersion.Compare(*tableSampleVersion) > 0 {
+		log.Debug("dumping TiDB tables with TABLESAMPLE",
+			zap.String("database", db), zap.String("table", tbl))
+		return d.concurrentDumpTiDBTables(conn, meta, ir)
+	}
+	field, err := pickupPossibleField(db, tbl, conn, conf)
+	if err != nil {
+		return nil
+	}
+	if field == "" {
+		// skip split chunk logic if not found proper field
+		log.Debug("skip concurrent dump due to no proper field", zap.String("field", field))
+		return d.sequentialDumpTable(conn, meta, ir)
+	}
+
+	min, max, err := d.selectMinAndMaxIntValue(conn, db, tbl, field)
+	if err != nil {
+		return err
+	}
+
+	count := estimateCount(db, tbl, conn, field, conf)
+	log.Info("get estimated rows count", zap.Uint64("estimateCount", count))
+	if count < conf.Rows {
+		// skip chunk logic if estimates are low
+		log.Debug("skip concurrent dump due to estimate count < rows",
+			zap.Uint64("estimate count", count),
+			zap.Uint64("conf.rows", conf.Rows),
+		)
+		return d.sequentialDumpTable(conn, meta, ir)
+	}
+
+	// every chunk would have eventual adjustments
+	estimatedChunks := count / conf.Rows
+	estimatedStep := new(big.Int).Sub(max, min).Uint64()/estimatedChunks + 1
+	bigEstimatedStep := new(big.Int).SetUint64(estimatedStep)
+	cutoff := new(big.Int).Set(min)
+	nextCutoff := new(big.Int)
+
+	selectField, selectLen, err := buildSelectField(conn, db, tbl, conf.CompleteInsert)
+	if err != nil {
+		return err
+	}
+
+	orderByClause, err := buildOrderByClause(conf, conn, db, tbl)
+	if err != nil {
+		return err
+	}
+
+	nullValueCondition := fmt.Sprintf("`%s` IS NULL OR ", escapeString(field))
+	for max.Cmp(cutoff) >= 0 {
+		where := fmt.Sprintf("%s(`%s` >= %d AND `%s` < %d)", nullValueCondition, escapeString(field), cutoff, escapeString(field), nextCutoff.Add(cutoff, bigEstimatedStep))
+		query := buildSelectQuery(db, tbl, selectField, buildWhereCondition(conf, where), orderByClause)
+		if len(nullValueCondition) > 0 {
+			nullValueCondition = ""
+		}
+		select {
+		case <-ctx.Done():
+			return nil
+		case ir <- newTableData(query, selectLen):
+		}
+	}
+	return nil
+}
+
+var z = &big.Int{}
+
+func (d *Dumper) selectMinAndMaxIntValue(conn *sql.Conn, db, tbl, field string) (*big.Int, *big.Int, error) {
+	ctx, conf := d.ctx, d.conf
+	query := fmt.Sprintf("SELECT MIN(`%s`),MAX(`%s`) FROM `%s`.`%s`",
+		escapeString(field), escapeString(field), escapeString(db), escapeString(tbl))
+	if conf.Where != "" {
+		query = fmt.Sprintf("%s WHERE %s", query, conf.Where)
+	}
+	log.Debug("split chunks", zap.String("query", query))
+
+	var smin sql.NullString
+	var smax sql.NullString
+	row := conn.QueryRowContext(ctx, query)
+	err := row.Scan(&smin, &smax)
+	if err != nil {
+		log.Error("split chunks - get max min failed", zap.String("query", query), zap.Error(err))
+		return z, z, err
+	}
+	if !smax.Valid || !smin.Valid {
+		// found no data
+		log.Warn("no data to dump", zap.String("schema", db), zap.String("table", tbl))
+		return z, z, nil
+	}
+
+	max := new(big.Int)
+	min := new(big.Int)
+	var ok bool
+	if max, ok = max.SetString(smax.String, 10); !ok {
+		return z, z, errors.Errorf("fail to convert max value %s in query %s", smax.String, query)
+	}
+	if min, ok = min.SetString(smin.String, 10); !ok {
+		return z, z, errors.Errorf("fail to convert min value %s in query %s", smin.String, query)
+	}
+	return min, max, nil
+}
+
+func (d *Dumper) concurrentDumpTiDBTables(conn *sql.Conn, meta TableMeta, ir chan<- TableDataIR) error {
+	ctx, conf := d.ctx, d.conf
+	db, tbl := meta.DatabaseName(), meta.TableName()
+
+	pkNames, pkVals, err := selectTiDBTableSample(db, tbl, conn)
+
+	selectField, selectLen, err := buildSelectField(conn, db, tbl, conf.CompleteInsert)
+	if err != nil {
+		return err
+	}
+
+	where := make([]string, 0, len(pkVals)+1)
+	where = append(where, fmt.Sprintf("(%s) < (%s)", pkNames, pkVals[0]))
+	for i := 1; i < len(pkVals); i++ {
+		low, up := pkVals[i-1], pkVals[i]
+		where = append(where, fmt.Sprintf("(%s) < (%s) AND (%s) >= (%s)", pkNames, low, pkNames, up))
+	}
+	where = append(where, fmt.Sprintf("(%s) >= (%s)", pkNames, pkVals[len(pkVals)-1]))
+
+	var orderByClause string
+	if pkNames == "_tidb_rowid" {
+		orderByClause = "ORDER BY _tidb_rowid"
 	} else {
-		summary.CollectSuccessUnit("dump cost", len(tableDataIRTotal), time.Since(tableDataStartTime))
+		orderByClause = fmt.Sprintf("ORDER BY %s", pkNames)
+	}
+
+	for _, w := range where {
+		query := buildSelectQuery(db, tbl, selectField, buildWhereCondition(conf, w), orderByClause)
+		contextDone := false
+		select {
+		case <-ctx.Done():
+			contextDone = true
+		case ir <- newTableData(query, selectLen):
+		}
+		if contextDone {
+			break
+		}
 	}
 	return nil
 }
@@ -364,14 +449,58 @@ func prepareTableListToDump(conf *Config, pool *sql.Conn) error {
 	return nil
 }
 
-func dumpSql(ctx context.Context, conf *Config, connectPool *connectionsPool, writer Writer) error {
-	tableIR, err := SelectFromSql(conf, connectPool.extraConn())
+func dumpTableMeta(conf *Config, conn *sql.Conn, db string, table *TableInfo) (TableMeta, error) {
+	tbl := table.Name
+	selectField, _, err := buildSelectField(conn, db, tbl, conf.CompleteInsert)
+	if err != nil {
+		return nil, err
+	}
+
+	var colTypes []*sql.ColumnType
+	// If all columns are generated
+	if selectField == "" {
+		colTypes, err = GetColumnTypes(conn, "*", db, tbl)
+	} else {
+		colTypes, err = GetColumnTypes(conn, selectField, db, tbl)
+	}
+
+	meta := &tableMeta{
+		database:      db,
+		table:         tbl,
+		colTypes:      colTypes,
+		selectedField: selectField,
+		specCmts: []string{
+			"/*!40101 SET NAMES binary*/;",
+		},
+	}
+
+	if conf.NoSchemas {
+		return meta, nil
+	}
+	if table.Type == TableTypeView {
+		viewName := table.Name
+		createTableSQL, createViewSQL, err := ShowCreateView(conn, db, viewName)
+		if err != nil {
+			return meta, err
+		}
+		meta.showCreateTable = createTableSQL
+		meta.showCreateView = createViewSQL
+		return meta, nil
+	}
+	createTableSQL, err := ShowCreateTable(conn, db, tbl)
+	meta.showCreateTable = createTableSQL
+	return meta, nil
+}
+
+func (d *Dumper) dumpSql(connectPool *connectionsPool, writer *Writer) error {
+	ctx, conf := d.ctx, d.conf
+	meta, tableIR, err := SelectFromSql(conf, connectPool.extraConn())
 	if err != nil {
 		return err
 	}
 
 	tableDataStartTime := time.Now()
-	err = writer.WriteTableData(ctx, tableIR)
+	err = writer.WriteTableData(ctx, meta, makeOneTimeChan(tableIR))
 	if err != nil {
 		summary.CollectFailureUnit("dump", err)
 		return err
@@ -381,79 +510,175 @@ func dumpSql(ctx context.Context, conf *Config, connectPool *connectionsPool, wr
 	return nil
 }
 
-func dumpTable(ctx context.Context, conf *Config, db *sql.Conn, dbName string, table *TableInfo, writer Writer) ([]TableDataIR, error) {
-	tableName := table.Name
-	if !conf.NoSchemas {
-		if table.Type == TableTypeView {
-			viewName := table.Name
-			createTableSQL, createViewSQL, err := ShowCreateView(db, dbName, viewName)
-			if err != nil {
-				return nil, err
-			}
-			return nil, writer.WriteViewMeta(ctx, dbName, viewName, createTableSQL, createViewSQL)
-		}
-		createTableSQL, err := ShowCreateTable(db, dbName, tableName)
-		if err != nil {
-			return nil, err
-		}
-		if err := writer.WriteTableMeta(ctx, dbName, tableName, createTableSQL); err != nil {
-			return nil, err
-		}
-	}
-	// Do not dump table data and return nil
-	if conf.NoData {
-		return nil, nil
-	}
-
-	if conf.Rows != UnspecifiedSize {
-		finished, chunksIterArray, err := concurrentDumpTable(ctx, conf, db, dbName, tableName)
-		if err != nil || finished {
-			return chunksIterArray, err
-		}
-	}
-	tableIR, err := SelectAllFromTable(conf, db, dbName, tableName)
-	if err != nil {
-		return nil, err
-	}
-
-	return []TableDataIR{tableIR}, nil
+func makeOneTimeChan(ir TableDataIR) <-chan TableDataIR {
+	oneTimeChan := make(chan TableDataIR, 1)
+	oneTimeChan <- ir
+	close(oneTimeChan)
+	return oneTimeChan
 }
 
-func concurrentDumpTable(ctx context.Context, conf *Config, db *sql.Conn, dbName string, tableName string) (bool, []TableDataIR, error) {
-	// try dump table concurrently by split table to chunks
-	chunksIterCh := make(chan TableDataIR, defaultDumpThreads)
-	errCh := make(chan error, defaultDumpThreads)
-	linear := make(chan struct{})
+func canRebuildConn(consistency string, trxConsistencyOnly bool) bool {
+	switch consistency {
+	case consistencyTypeLock, consistencyTypeFlush:
+		return !trxConsistencyOnly
+	case consistencyTypeSnapshot, consistencyTypeNone:
+		return true
+	default:
+		return false
+	}
+}
 
-	ctx1, cancel1 := context.WithCancel(ctx)
-	defer cancel1()
-	var g errgroup.Group
-	chunksIterArray := make([]TableDataIR, 0)
-	g.Go(func() error {
-		splitTableDataIntoChunks(ctx1, chunksIterCh, errCh, linear, dbName, tableName, db, conf)
-		return nil
-	})
+func (d *Dumper) Close() error {
+	d.cancelCtx()
+	return d.dbHandle.Close()
+}
 
-Loop:
-	for {
-		select {
-		case <-ctx.Done():
-			return true, chunksIterArray, nil
-		case <-linear:
-			return false, chunksIterArray, nil
-		case chunksIter, ok := <-chunksIterCh:
-			if !ok {
-				break Loop
-			}
-			chunksIterArray = append(chunksIterArray, chunksIter)
-		case err := <-errCh:
-			return false, chunksIterArray, err
+func runSteps(d *Dumper, steps ...func(*Dumper) error) error {
+	for _, st := range steps {
+		err := st(d)
+		if err != nil {
+			return err
 		}
 	}
-	if err := g.Wait(); err != nil {
-		return true, chunksIterArray, err
+	return nil
+}
+
+// createExternalStore is an initialization step of Dumper.
+func createExternalStore(d *Dumper) error {
+	ctx, conf := d.ctx, d.conf
+	b, err := storage.ParseBackend(conf.OutputDirPath, &conf.BackendOptions)
+	if err != nil {
+		return err
 	}
-	return true, chunksIterArray, nil
+	extStore, err := storage.Create(ctx, b, false)
+	if err != nil {
+		return err
+	}
+	d.extStore = extStore
+	return nil
+}
+
+// startHttpService is an initialization step of Dumper.
+func startHttpService(d *Dumper) error {
+	conf := d.conf
+	if conf.StatusAddr != "" {
+		go func() {
+			err := startDumplingService(conf.StatusAddr)
+			if err != nil {
+				log.Error("dumpling stops to serving service", zap.Error(err))
+			}
+		}()
+	}
+	return nil
+}
+
+// openSQLDB is an initialization step of Dumper.
+func openSQLDB(d *Dumper) error {
+	conf := d.conf
+	pool, err := sql.Open("mysql", conf.GetDSN(""))
+	if err != nil {
+		return errors.Trace(err)
+	}
+	d.dbHandle = pool
+	return nil
+}
+
+// detectServerInfo is an initialization step of Dumper.
+func detectServerInfo(d *Dumper) error {
+	db, conf := d.dbHandle, d.conf
+	versionStr, err := SelectVersion(db)
+	if err != nil {
+		conf.ServerInfo = ServerInfoUnknown
+		return err
+	}
+	conf.ServerInfo = ParseServerInfo(versionStr)
+	return nil
+}
+
+// resolveAutoConsistency is an initialization step of Dumper.
+func resolveAutoConsistency(d *Dumper) error {
+	conf := d.conf
+	if conf.Consistency != "auto" {
+		return nil
+	}
+	switch conf.ServerInfo.ServerType {
+	case ServerTypeTiDB:
+		conf.Consistency = "snapshot"
+	case ServerTypeMySQL, ServerTypeMariaDB:
+		conf.Consistency = "flush"
+	default:
+		conf.Consistency = "none"
+	}
+	return nil
+}
+
+// tidbSetPDClientForGC is an initialization step of Dumper.
+func tidbSetPDClientForGC(d *Dumper) error {
+	ctx, si, pool := d.ctx, d.conf.ServerInfo, d.dbHandle
+	if si.ServerType != ServerTypeTiDB ||
+		si.ServerVersion == nil ||
+		si.ServerVersion.Compare(*gcSafePointVersion) < 0 {
+		return nil
+	}
+	pdAddrs, err := GetPdAddrs(pool)
+	if err != nil {
+		return err
+	}
+	if len(pdAddrs) > 0 {
+		doPdGC, err := checkSameCluster(ctx, pool, pdAddrs)
+		if err != nil {
+			log.Warn("meet error while check whether fetched pd addr and TiDB belongs to one cluster", zap.Error(err), zap.Strings("pdAddrs", pdAddrs))
+		} else if doPdGC {
+			pdClient, err := pd.NewClientWithContext(ctx, pdAddrs, pd.SecurityOption{})
+			if err != nil {
+				log.Warn("create pd client to control GC failed", zap.Error(err), zap.Strings("pdAddrs", pdAddrs))
+			}
+			d.tidbPDClientForGC = pdClient
+		}
+	}
+	return nil
+}
+
+// tidbGetSnapshot is an initialization step of Dumper.
+func tidbGetSnapshot(d *Dumper) error {
+	conf, doPdGC := d.conf, d.tidbPDClientForGC != nil
+	consistency := conf.Consistency
+	pool, ctx := d.dbHandle, d.ctx
+	if conf.Snapshot == "" && (doPdGC || consistency == "snapshot") {
+		conn, err := pool.Conn(ctx)
+		if err != nil {
+			log.Warn("cannot get snapshot from TiDB", zap.Error(err))
+			return nil
+		}
+		snapshot, err := getSnapshot(conn)
+		_ = conn.Close()
+		if err != nil {
+			log.Warn("cannot get snapshot from TiDB", zap.Error(err))
+			return nil
+		}
+		conf.Snapshot = snapshot
+		return nil
+	}
+	return nil
+}
+
+// tidbStartGCSavepointUpdateService is an initialization step of Dumper.
+func tidbStartGCSavepointUpdateService(d *Dumper) error {
+	ctx, pool, conf := d.ctx, d.dbHandle, d.conf
+	snapshot, si := conf.Snapshot, conf.ServerInfo
+	if d.tidbPDClientForGC != nil {
+		snapshotTS, err := parseSnapshotToTSO(pool, snapshot)
+		if err != nil {
+			return err
+		}
+		go updateServiceSafePoint(ctx, d.tidbPDClientForGC, defaultDumpGCSafePointTTL, snapshotTS)
+	} else if si.ServerType == ServerTypeTiDB {
+		log.Warn("If the amount of data to dump is large, criteria: (data more than 60GB or dumped time more than 10 minutes)\n" +
+			"you'd better adjust the tikv_gc_life_time to avoid export failure due to TiDB GC during the dump process.\n" +
+			"Before dumping: run sql `update mysql.tidb set VARIABLE_VALUE = '720h' where VARIABLE_NAME = 'tikv_gc_life_time';` in tidb.\n" +
+			"After dumping: run sql `update mysql.tidb set VARIABLE_VALUE = '10m' where VARIABLE_NAME = 'tikv_gc_life_time';` in tidb.\n")
+	}
+	return nil
 }
 
 func updateServiceSafePoint(ctx context.Context, pdClient pd.Client, ttl int64, snapshotTS uint64) {
@@ -484,15 +709,35 @@ func updateServiceSafePoint(ctx context.Context, pdClient pd.Client, ttl int64, 
 	}
 }
 
-func canRebuildConn(consistency string, trxConsistencyOnly bool) bool {
-	switch consistency {
-	case consistencyTypeLock, consistencyTypeFlush:
-		return !trxConsistencyOnly
-	case consistencyTypeSnapshot, consistencyTypeNone:
-		return true
-	default:
-		return false
+// setSessionParam is an initialization step of Dumper.
+func setSessionParam(d *Dumper) error {
+	conf, pool := d.conf, d.dbHandle
+	si := conf.ServerInfo
+	consistency, snapshot := conf.Consistency, conf.Snapshot
+	sessionParam := conf.SessionParams
+	if si.ServerType == ServerTypeTiDB {
+		sessionParam[TiDBMemQuotaQueryName] = conf.TiDBMemQuotaQuery
 	}
+	if snapshot != "" {
+		if si.ServerType != ServerTypeTiDB {
+			return errors.New("snapshot consistency is not supported for this server")
+		}
+		if consistency == consistencyTypeSnapshot {
+			hasTiKV, err := CheckTiDBWithTiKV(pool)
+			if err != nil {
+				return err
+			}
+			if hasTiKV {
+				sessionParam["tidb_snapshot"] = snapshot
+			}
+		}
+	}
+	if newPool, err := resetDBWithSessionParams(pool, conf.GetDSN(""), conf.SessionParams); err != nil {
+		return errors.Trace(err)
+	} else {
+		d.dbHandle = newPool
+	}
+	return nil
 }
 
 func shouldRedirectLog(conf *Config) bool {
