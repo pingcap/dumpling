@@ -42,6 +42,12 @@ func (s *testWriterSuite) newWriter(conf *Config, c *C) *Writer {
 	return NewWriter(conf, s.pool, extStore)
 }
 
+func createExtStore(c *C, conf *Config) storage.ExternalStorage {
+	d := &Dumper{conf: conf}
+	c.Assert(createExternalStore(d), IsNil)
+	return d.extStore
+}
+
 func (s *testWriterSuite) TestWriteDatabaseMeta(c *C) {
 	dir := c.MkDir()
 	ctx := context.Background()
