@@ -45,15 +45,16 @@ func (bpool *bufferPool) Get() *RowReceiverArr {
 }
 
 func (bpool *bufferPool) Put(rr *RowReceiverArr) {
-	//TODO1: 这里可能导致无法插入null值
-	for _, v := rr.receivers {
-	case *SQLTypeString:
-		v.(*SQLTypeString).RawBytes = v.(*SQLTypeString).RawBytes[:0]
-	case *SQLTypeBytes:
-		v.(*SQLTypeBytes).RawBytes = v.(*SQLTypeBytes).RawBytes[:0]
-	case *SQLTypeNumber:
-		v.(*SQLTypeNumber).RawBytes = v.(*SQLTypeNumber).RawBytes[:0]
-	}
+	//TODO1: 这里可能导致想插入null值，缺插入空字符串
+	for _, v := range rr.receivers {
+		switch v.(type) {
+		case *SQLTypeString:
+			v.(*SQLTypeString).RawBytes = v.(*SQLTypeString).RawBytes[:0]
+		case *SQLTypeBytes:
+			v.(*SQLTypeBytes).RawBytes = v.(*SQLTypeBytes).RawBytes[:0]
+		case *SQLTypeNumber:
+			v.(*SQLTypeNumber).RawBytes = v.(*SQLTypeNumber).RawBytes[:0]
+		}
 	}
 	bpool.bp.Put(rr)
 }
