@@ -3,6 +3,7 @@ package export
 import (
 	"bytes"
 	"context"
+	_ "database/sql"
 	"fmt"
 	"io"
 	"strings"
@@ -23,6 +24,39 @@ const hardcodedS3ChunkSize = 5 * 1024 * 1024
 var pool = sync.Pool{New: func() interface{} {
 	return &bytes.Buffer{}
 }}
+
+type bufferPool struct {
+	bp *sync.Pool
+}
+
+func newBufferPool(colTypes []string) *bufferPool {
+	return &bufferPool{
+		bp: &sync.Pool{
+			New: func() interface{} {
+				b := MakeRowReceiverArr(colTypes)
+				return b
+			},
+		},
+	}
+}
+
+func (bpool *bufferPool) Get() *RowReceiverArr {
+	return bpool.bp.Get().(*RowReceiverArr)
+}
+
+func (bpool *bufferPool) Put(rr *RowReceiverArr) {
+	//TODO1: 这里可能导致无法插入null值
+	for _, v := rr.receivers {
+	case *SQLTypeString:
+		v.(*SQLTypeString).RawBytes = v.(*SQLTypeString).RawBytes[:0]
+	case *SQLTypeBytes:
+		v.(*SQLTypeBytes).RawBytes = v.(*SQLTypeBytes).RawBytes[:0]
+	case *SQLTypeNumber:
+		v.(*SQLTypeNumber).RawBytes = v.(*SQLTypeNumber).RawBytes[:0]
+	}
+	}
+	bpool.bp.Put(rr)
+}
 
 type writerPipe struct {
 	input  chan *bytes.Buffer
@@ -152,7 +186,6 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, file
 
 	var (
 		insertStatementPrefix string
-		row                   = MakeRowReceiver(tblIR.ColumnTypes())
 		counter               = 0
 		escapeBackSlash       = tblIR.EscapeBackSlash()
 		err                   error
@@ -168,36 +201,85 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, file
 			wrapBackTicks(escapeString(tblIR.TableName())))
 	}
 	insertStatementPrefixLen := uint64(len(insertStatementPrefix))
+	wp.currentStatementSize = 0
+	var wg1 sync.WaitGroup
+	wg1.Add(1)
+	shouldSwitchFile := struct {
+		sync.Mutex
+		flag bool
+	}{flag: false}
+	rowsChan := make(chan *RowReceiverArr, 200)
 
-	for fileRowIter.HasNext() {
-		wp.currentStatementSize = 0
+	colTypes := tblIR.ColumnTypes()
+	//rowPool := sync.Pool{New: func() interface{} {
+	//	return MakeRowReceiverArr(colTypes)
+	//}}
+	rowPool2 := newBufferPool(colTypes)
+
+	rowReceiverClone := func(colTypes []string, r *RowReceiverArr) *RowReceiverArr {
+		//rowReceiverArr := rowPool.Get().(*RowReceiverArr).receivers
+		rowReceiverArr := rowPool2.Get().receivers
+		//rowReceiverArr := MakeRowReceiverArr(colTypes).receivers
+
+		for i, v := range r.receivers {
+			switch v.(type) {
+			case *SQLTypeString:
+				rowReceiverArr[i].(*SQLTypeString).Assign(v.(*SQLTypeString).RawBytes)
+			case *SQLTypeBytes:
+				rowReceiverArr[i].(*SQLTypeBytes).Assign(r.receivers[i].(*SQLTypeBytes).RawBytes)
+			case *SQLTypeNumber:
+				rowReceiverArr[i].(*SQLTypeNumber).Assign(r.receivers[i].(*SQLTypeNumber).RawBytes)
+			}
+		}
+		return &RowReceiverArr{
+			bound:     false,
+			receivers: rowReceiverArr,
+		}
+	}
+
+	go func() {
+		isHead := false
 		bf.WriteString(insertStatementPrefix)
 		wp.AddFileSize(insertStatementPrefixLen)
+		defer wg1.Done()
 
-		for fileRowIter.HasNext() {
-			if err = fileRowIter.Decode(row); err != nil {
-				log.Error("scanning from sql.Row failed", zap.Error(err))
-				return err
+		for {
+			i, ok := <-rowsChan
+			if !ok {
+				bf.Truncate(bf.Len() - 2)
+				bf.WriteString(";\n")
+				break
 			}
-
+			if isHead {
+				wp.currentStatementSize = 0
+				bf.WriteString(insertStatementPrefix)
+				wp.AddFileSize(insertStatementPrefixLen)
+				isHead = false
+			}
 			lastBfSize := bf.Len()
-			row.WriteToBuffer(bf, escapeBackSlash)
-			counter += 1
+			i.WriteToBuffer(bf, escapeBackSlash)
+			rowPool2.Put(i)
 			wp.AddFileSize(uint64(bf.Len()-lastBfSize) + 2) // 2 is for ",\n" and ";\n"
-
-			fileRowIter.Next()
 			shouldSwitch := wp.ShouldSwitchStatement()
-			if fileRowIter.HasNext() && !shouldSwitch {
+			if !shouldSwitch {
 				bf.WriteString(",\n")
 			} else {
 				bf.WriteString(";\n")
+				isHead = true
 			}
+			if wp.ShouldSwitchFile() {
+				// TODO2: 对于switch的判断，如果用读写并发方式，似乎无法保证读与写改判断的一致,文件可能会比预期多一些数据
+				shouldSwitchFile.Lock()
+				shouldSwitchFile.flag = true
+				shouldSwitchFile.Unlock()
+			}
+
 			if bf.Len() >= lengthLimit {
 				select {
 				case <-pCtx.Done():
-					return pCtx.Err()
-				case err := <-wp.errCh:
-					return err
+					return
+				case _ = <-wp.errCh:
+					return
 				case wp.input <- bf:
 					bf = pool.Get().(*bytes.Buffer)
 					if bfCap := bf.Cap(); bfCap < lengthLimit {
@@ -206,14 +288,29 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, file
 				}
 			}
 
-			if shouldSwitch {
-				break
-			}
 		}
-		if wp.ShouldSwitchFile() {
+	}()
+	row0 := MakeRowReceiverArr(colTypes)
+	for fileRowIter.HasNext() {
+		if err = fileRowIter.Decode(row0); err != nil {
+			log.Error("scanning from sql.Row failed", zap.Error(err))
+			return err
+		}
+		row := rowReceiverClone(colTypes, row0)
+		rowsChan <- row
+
+		shouldSwitchFile.Lock()
+		if shouldSwitchFile.flag {
+			shouldSwitchFile.Unlock()
 			break
 		}
+		shouldSwitchFile.Unlock()
+		fileRowIter.Next()
 	}
+
+	close(rowsChan)
+	wg1.Wait()
+
 	log.Debug("dumping table",
 		zap.String("table", tblIR.TableName()),
 		zap.Int("record counts", counter))

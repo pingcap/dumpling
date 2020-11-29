@@ -19,6 +19,7 @@ import (
 	"fmt"
 	_ "net/http/pprof"
 	"os"
+	"runtime/pprof"
 	"strconv"
 	"strings"
 	"time"
@@ -83,7 +84,31 @@ func timestampDirName() string {
 	return fmt.Sprintf("./export-%s", time.Now().Format(time.RFC3339))
 }
 
+func StartCpuProf() {
+	f, err := os.Create("dumpling.cpu.prof")
+	if err != nil {
+		fmt.Println("create cpu profile file error: ", err)
+		return
+	}
+	if err := pprof.StartCPUProfile(f); err != nil {
+		fmt.Println("can not start cpu profile,  error: ", err)
+		f.Close()
+	}
+}
+
+func StopCpuProf() {
+	pprof.StopCPUProfile()
+}
+
 func main() {
+	go func() {
+		fmt.Println("cpu prof start...")
+		StartCpuProf()
+	}()
+	defer func() {
+		fmt.Println("cpu prof stop...")
+		StopCpuProf()
+	}()
 	pflag.Usage = func() {
 		fmt.Fprint(os.Stderr, "Dumpling is a CLI tool that helps you dump MySQL/TiDB data\n\nUsage:\n  dumpling [flags]\n\nFlags:\n")
 		pflag.PrintDefaults()
