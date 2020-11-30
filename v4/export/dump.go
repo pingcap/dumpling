@@ -118,11 +118,6 @@ func (d *Dumper) Dump() (err error) {
 		return err
 	}
 	defer connectPool.Close()
-	writerConnPool, err := newConnectionsPool(ctx, conf.Threads, pool)
-	if err != nil {
-		return err
-	}
-	defer writerConnPool.Close()
 
 	if conf.PosAfterConnect {
 		// record again, to provide a location to exit safe mode for DM
@@ -149,7 +144,7 @@ func (d *Dumper) Dump() (err error) {
 
 	failpoint.Inject("ConsistencyCheck", nil)
 
-	writer := NewWriter(conf, writerConnPool, d.extStore)
+	writer := NewWriter(conf, connectPool, d.extStore)
 	writer.rebuildConnFn = func(conn *sql.Conn) (*sql.Conn, error) {
 		// make sure that the lock connection is still alive
 		err := conCtrl.PingContext(ctx)
@@ -177,11 +172,11 @@ func (d *Dumper) Dump() (err error) {
 	summary.SetUnit(summary.BackupUnit)
 	defer summary.Summary(summary.BackupUnit)
 	if conf.Sql == "" {
-		if err = d.dumpDatabases(connectPool, writer); err != nil {
+		if err = d.dumpDatabases(connectPool.extraConn(), writer); err != nil {
 			return err
 		}
 	} else {
-		if err = d.dumpSql(connectPool, writer); err != nil {
+		if err = d.dumpSql(connectPool.extraConn(), writer); err != nil {
 			return err
 		}
 	}
@@ -191,18 +186,15 @@ func (d *Dumper) Dump() (err error) {
 	return nil
 }
 
-func (d *Dumper) dumpDatabases(connectPool *connectionsPool, writer *Writer) error {
-	ctx, conf := d.ctx, d.conf
+func (d *Dumper) dumpDatabases(conn *sql.Conn, writer *Writer) error {
+	conf := d.conf
 	allTables := conf.Tables
-	var cancel context.CancelFunc
-	ctx, cancel = context.WithCancel(ctx)
+	ctx, cancel := context.WithCancel(d.ctx)
 	defer cancel()
-	var dumpingGroup, writingGroup errgroup.Group
+	var writingGroup errgroup.Group
 	tableDataStartTime := time.Now()
 	for dbName, tables := range allTables {
-		conn := connectPool.getConn()
 		createDatabaseSQL, err := ShowCreateDatabase(conn, dbName)
-		connectPool.releaseConn(conn)
 		if err != nil {
 			return err
 		}
@@ -215,12 +207,10 @@ func (d *Dumper) dumpDatabases(connectPool *connectionsPool, writer *Writer) err
 			continue
 		}
 		for _, table := range tables {
-			conn := connectPool.getConn()
 			meta, err := dumpTableMeta(conf, conn, dbName, table)
 			if err != nil {
 				return err
 			}
-			connectPool.releaseConn(conn)
 
 			if table.Type == TableTypeView {
 				err = writer.WriteViewMeta(ctx, dbName, table.Name, meta.ShowCreateTable(), meta.ShowCreateView())
@@ -232,24 +222,18 @@ func (d *Dumper) dumpDatabases(connectPool *connectionsPool, writer *Writer) err
 			}
 
 			tableIRStream := make(chan TableDataIR, defaultDumpThreads)
-			dumpingGroup.Go(func() error {
-				conn := connectPool.getConn()
-				err := d.dumpTableData(conn, meta, tableIRStream)
-				connectPool.releaseConn(conn)
+			err = d.dumpTableData(conn, meta, tableIRStream)
+			if err != nil {
 				return err
-			})
+			}
 
 			writingGroup.Go(func() error {
 				return writer.WriteTableData(ctx, meta, tableIRStream)
 			})
 		}
 	}
-	if err := dumpingGroup.Wait(); err != nil {
-		summary.CollectFailureUnit("dump", err)
-		return err
-	}
 	if err := writingGroup.Wait(); err != nil {
-		summary.CollectFailureUnit("dump", err)
+		summary.CollectFailureUnit("dump table data", err)
 		return err
 	}
 	summary.CollectSuccessUnit("dump cost", writer.receivedIRCount, time.Since(tableDataStartTime))
@@ -492,9 +476,9 @@ func dumpTableMeta(conf *Config, conn *sql.Conn, db string, table *TableInfo) (T
 	return meta, nil
 }
 
-func (d *Dumper) dumpSql(connectPool *connectionsPool, writer *Writer) error {
+func (d *Dumper) dumpSql(conn *sql.Conn, writer *Writer) error {
 	ctx, conf := d.ctx, d.conf
-	meta, tableIR, err := SelectFromSql(conf, connectPool.extraConn())
+	meta, tableIR, err := SelectFromSql(conf, conn)
 	if err != nil {
 		return err
 	}

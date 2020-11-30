@@ -540,7 +540,7 @@ const (
 func (f FileFormat) String() string {
 	switch f {
 	case FileFormatSQLText:
-		return "text"
+		return "SQL"
 	case FileFormatCSV:
 		return "CSV"
 	default:

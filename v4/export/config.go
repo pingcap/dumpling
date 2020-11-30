@@ -540,8 +540,10 @@ const (
 	defaultEtcdDialTimeOut     = 3 * time.Second
 )
 
-var gcSafePointVersion, _ = semver.NewVersion("4.0.0")
-var tableSampleVersion, _ = semver.NewVersion("5.0.0")
+var (
+	gcSafePointVersion, _ = semver.NewVersion("4.0.0")
+	tableSampleVersion, _ = semver.NewVersion("5.0.0")
+)
 
 type ServerInfo struct {
 	ServerType    ServerType

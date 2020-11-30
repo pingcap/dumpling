@@ -5,11 +5,11 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"github.com/pingcap/br/pkg/utils"
 	"strings"
 	"text/template"
 
 	"github.com/pingcap/br/pkg/storage"
+	"github.com/pingcap/br/pkg/utils"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/dumpling/v4/log"
