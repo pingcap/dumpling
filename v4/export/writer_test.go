@@ -4,12 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
-	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/pingcap/br/pkg/storage"
 	"io/ioutil"
 	"os"
 	"path"
 
+	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/pingcap/br/pkg/storage"
 	. "github.com/pingcap/check"
 )
 

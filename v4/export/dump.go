@@ -1,6 +1,7 @@
 package export
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"fmt"
@@ -311,9 +312,6 @@ func (d *Dumper) concurrentDumpTable(conn *sql.Conn, meta TableMeta, ir chan<- T
 	if err != nil {
 		return err
 	}
-	if selectField == "" {
-		selectField = "''"
-	}
 
 	orderByClause, err := buildOrderByClause(conf, conn, db, tbl)
 	if err != nil {
@@ -379,30 +377,16 @@ func (d *Dumper) concurrentDumpTiDBTables(conn *sql.Conn, meta TableMeta, ir cha
 	ctx, conf := d.ctx, d.conf
 	db, tbl := meta.DatabaseName(), meta.TableName()
 
-	pkNames, pkVals, err := selectTiDBTableSample(db, tbl, conn, meta)
-
+	handleColNames, handleVals, err := selectTiDBTableSample(db, tbl, conn, meta)
+	if len(handleVals) == 0 {
+		return nil
+	}
 	selectField, selectLen, err := buildSelectField(conn, db, tbl, conf.CompleteInsert)
 	if err != nil {
 		return err
 	}
-	if selectField == "" {
-		selectField = "''"
-	}
-
-	where := make([]string, 0, len(pkVals)+1)
-	where = append(where, fmt.Sprintf("(%s) < %s", pkNames, pkVals[0]))
-	for i := 1; i < len(pkVals); i++ {
-		low, up := pkVals[i-1], pkVals[i]
-		where = append(where, fmt.Sprintf("(%s) < (%s) AND (%s) >= (%s)", pkNames, low, pkNames, up))
-	}
-	where = append(where, fmt.Sprintf("(%s) >= (%s)", pkNames, pkVals[len(pkVals)-1]))
-
-	var orderByClause string
-	if pkNames == "_tidb_rowid" {
-		orderByClause = "ORDER BY `_tidb_rowid`"
-	} else {
-		orderByClause = fmt.Sprintf("ORDER BY %s", pkNames)
-	}
+	where := buildWhereClauses(handleColNames, handleVals)
+	orderByClause := buildOrderByClauseString(handleColNames)
 
 	for _, w := range where {
 		query := buildSelectQuery(db, tbl, selectField, buildWhereCondition(conf, w), orderByClause)
@@ -417,6 +401,62 @@ func (d *Dumper) concurrentDumpTiDBTables(conn *sql.Conn, meta TableMeta, ir cha
 		}
 	}
 	return nil
+}
+
+func selectTiDBTableSample(dbName, tableName string, db *sql.Conn, meta TableMeta) (handleCols []string, pkVals []string, err error) {
+	pkFields, err := GetPrimaryKeyColumns(db, dbName, tableName)
+	if err != nil {
+		return nil, nil, errors.Trace(err)
+	}
+	query := buildTiDBTableSampleQuery(pkFields, dbName, tableName)
+	handleCols, handleColTypes := findHandleColsAndColTypes(pkFields, meta)
+	rows, err := db.QueryContext(context.Background(), query)
+	if err != nil {
+		return nil, nil, errors.Trace(err)
+	}
+	iter := newRowIter(rows, len(handleCols))
+	defer iter.Close()
+	rowRec := MakeRowReceiver(handleColTypes)
+	buf := new(bytes.Buffer)
+	for iter.HasNext() {
+		err = iter.Decode(rowRec)
+		if err != nil {
+			return nil, nil, errors.Trace(err)
+		}
+		rowRec.WriteToBuffer(buf, true)
+		pkVals = append(pkVals, buf.String())
+		buf.Reset()
+		iter.Next()
+	}
+	return handleCols, pkVals, nil
+}
+
+func buildTiDBTableSampleQuery(pkFields []string, dbName, tblName string) string {
+	hasImplicitRowID := pkFields == nil
+	if hasImplicitRowID {
+		template := "SELECT `_tidb_rowid` FROM `%s`.`%s` TABLESAMPLE REGIONS() ORDER BY `_tidb_rowid`"
+		return fmt.Sprintf(template, dbName, tblName)
+	}
+	template := "SELECT %s FROM `%s`.`%s` TABLESAMPLE REGIONS() ORDER BY %s"
+	return fmt.Sprintf(template, pkFields, dbName, tblName, pkFields)
+}
+
+func findHandleColsAndColTypes(pkFields []string, meta TableMeta) (handleCols []string, colTypes []string) {
+	hasImplicitRowID := pkFields == nil
+	if hasImplicitRowID {
+		return []string{"_tidb_rowid"}, []string{"BIGINT"}
+	}
+	// Find primary key column types in meta.
+	colTypes = make([]string, len(pkFields))
+	for i, pkColName := range pkFields {
+		for j, colName := range meta.ColumnNames() {
+			if pkColName == colName {
+				colTypes[i] = meta.ColumnTypes()[j]
+				break
+			}
+		}
+	}
+	return pkFields, colTypes
 }
 
 func prepareTableListToDump(conf *Config, pool *sql.Conn) error {

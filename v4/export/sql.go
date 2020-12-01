@@ -1,7 +1,6 @@
 package export
 
 import (
-	"bytes"
 	"context"
 	"database/sql"
 	"fmt"
@@ -181,13 +180,7 @@ func SelectAllFromTable(conf *Config, db *sql.Conn, database, table string) (Tab
 	if err != nil {
 		return nil, err
 	}
-
-	queryField := selectedField
-	// If all columns are generated
-	if queryField == "" {
-		queryField = "''"
-	}
-	query := buildSelectQuery(database, table, queryField, buildWhereCondition(conf, ""), orderByClause)
+	query := buildSelectQuery(database, table, selectedField, buildWhereCondition(conf, ""), orderByClause)
 
 	return &tableData{
 		query:  query,
@@ -231,6 +224,11 @@ func SelectFromSql(conf *Config, conn *sql.Conn) (TableMeta, TableDataIR, error)
 func buildSelectQuery(database, table string, fields string, where string, orderByClause string) string {
 	var query strings.Builder
 	query.WriteString("SELECT ")
+	if fields == "" {
+		// If all of the columns are generated,
+		// we need to make sure the query is valid.
+		fields = "''"
+	}
 	query.WriteString(fields)
 	query.WriteString(" FROM `")
 	query.WriteString(escapeString(database))
@@ -268,16 +266,7 @@ func buildOrderByClause(conf *Config, db *sql.Conn, database, table string) (str
 	if err != nil {
 		return "", errors.Trace(err)
 	}
-	tableContainsPriKey := len(cols) != 0
-	if tableContainsPriKey {
-		separator := ", "
-		quotaCols := make([]string, len(cols))
-		for i, col := range cols {
-			quotaCols[i] = fmt.Sprintf("`%s`", escapeString(col))
-		}
-		return fmt.Sprintf("ORDER BY %s", strings.Join(quotaCols, separator)), nil
-	}
-	return "", nil
+	return buildOrderByClauseString(cols), nil
 }
 
 func SelectTiDBRowID(db *sql.Conn, database, table string) (bool, error) {
@@ -553,6 +542,37 @@ func buildSelectField(db *sql.Conn, dbName, tableName string, completeInsert boo
 	return "*", len(availableFields), nil
 }
 
+func buildWhereClauses(handleColNames, handleVals []string) []string {
+	if len(handleVals) == 0 {
+		return nil
+	}
+	quotaCols := make([]string, len(handleColNames))
+	for i, s := range handleColNames {
+		quotaCols[i] = fmt.Sprintf("`%s`", s)
+	}
+	handleCols := strings.Join(quotaCols, ",")
+	where := make([]string, 0, len(handleVals)+1)
+	where = append(where, fmt.Sprintf("(%s) < %s", handleCols, handleVals[0]))
+	for i := 1; i < len(handleVals); i++ {
+		low, up := handleVals[i-1], handleVals[i]
+		where = append(where, fmt.Sprintf("(%s) < (%s) AND (%s) >= (%s)", handleCols, low, handleCols, up))
+	}
+	where = append(where, fmt.Sprintf("(%s) >= (%s)", handleCols, handleVals[len(handleVals)-1]))
+	return where
+}
+
+func buildOrderByClauseString(handleColNames []string) string {
+	if len(handleColNames) == 0 {
+		return ""
+	}
+	separator := ","
+	quotaCols := make([]string, len(handleColNames))
+	for i, col := range handleColNames {
+		quotaCols[i] = fmt.Sprintf("`%s`", escapeString(col))
+	}
+	return fmt.Sprintf("ORDER BY %s", strings.Join(quotaCols, separator))
+}
+
 type oneStrColumnTable struct {
 	data []string
 }
@@ -585,56 +605,6 @@ func simpleQueryWithArgs(conn *sql.Conn, handleOneRow func(*sql.Rows) error, sql
 	}
 	rows.Close()
 	return rows.Err()
-}
-
-func selectTiDBTableSample(dbName, tableName string, db *sql.Conn, meta TableMeta) (pkNames string, pkVals []string, err error) {
-	pkFields, err := GetPrimaryKeyColumns(db, dbName, tableName)
-	if err != nil {
-		return "", nil, errors.Trace(err)
-	}
-	var query string
-	var colTypes []string
-	if len(pkFields) == 0 {
-		pkFields = []string{"_tidb_rowid"}
-		pkNames = "_tidb_rowid"
-		colTypes = []string{"BIGINT"}
-		template := "SELECT `_tidb_rowid` FROM `%s`.`%s` TABLESAMPLE REGIONS() ORDER BY `_tidb_rowid`"
-		query = fmt.Sprintf(template, dbName, tableName)
-	} else {
-		colTypes = make([]string, len(pkFields))
-		for i, pkColName := range pkFields {
-			for j, colName := range meta.ColumnNames() {
-				if pkColName == colName {
-					colTypes[i] = meta.ColumnTypes()[j]
-					break
-				}
-			}
-			pkFields[i] = fmt.Sprintf("`%s`", escapeString(pkFields[i]))
-		}
-		pkNames = strings.Join(pkFields, ",")
-		template := "SELECT %s FROM `%s`.`%s` TABLESAMPLE REGIONS() ORDER BY %s"
-		query = fmt.Sprintf(template, pkNames, dbName, tableName, pkNames)
-	}
-	rows, err := db.QueryContext(context.Background(), query)
-	if err != nil {
-		return "", nil, errors.Trace(err)
-	}
-	defer rows.Close()
-
-	iter := newRowIter(rows, len(pkFields))
-	rowRec := MakeRowReceiver(colTypes)
-	buf := new(bytes.Buffer)
-	for iter.HasNext() {
-		err = iter.Decode(rowRec)
-		if err != nil {
-			return "", nil, errors.Trace(err)
-		}
-		rowRec.WriteToBuffer(buf, true)
-		pkVals = append(pkVals, buf.String())
-		buf.Reset()
-		iter.Next()
-	}
-	return pkNames, pkVals, nil
 }
 
 func pickupPossibleField(dbName, tableName string, db *sql.Conn, conf *Config) (string, error) {
