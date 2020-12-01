@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"path"
 	"strings"
 	"sync"
 	"time"
@@ -390,10 +391,10 @@ func writeBytes(ctx context.Context, writer storage.Writer, p []byte) error {
 	return err
 }
 
-func buildFileWriter(ctx context.Context, s storage.ExternalStorage, path string, compressType storage.CompressType) (storage.Writer, func(ctx context.Context), error) {
-	path += compressFileSuffix(compressType)
-	fullPath := s.URI() + path
-	uploader, err := s.CreateUploader(ctx, path)
+func buildFileWriter(ctx context.Context, s storage.ExternalStorage, fileName string, compressType storage.CompressType) (storage.Writer, func(ctx context.Context), error) {
+	fileName += compressFileSuffix(compressType)
+	fullPath := path.Join(s.URI(), fileName)
+	uploader, err := s.CreateUploader(ctx, fileName)
 	if err != nil {
 		log.Error("open file failed",
 			zap.String("path", fullPath),
@@ -414,13 +415,13 @@ func buildFileWriter(ctx context.Context, s storage.ExternalStorage, path string
 	return writer, tearDownRoutine, nil
 }
 
-func buildInterceptFileWriter(s storage.ExternalStorage, path string, compressType storage.CompressType) (storage.Writer, func(context.Context)) {
-	path += compressFileSuffix(compressType)
+func buildInterceptFileWriter(s storage.ExternalStorage, fileName string, compressType storage.CompressType) (storage.Writer, func(context.Context)) {
+	fileName += compressFileSuffix(compressType)
 	var writer storage.Writer
-	fullPath := s.URI() + path
+	fullPath := path.Join(s.URI(), fileName)
 	fileWriter := &InterceptFileWriter{}
 	initRoutine := func(ctx context.Context) error {
-		uploader, err := s.CreateUploader(ctx, path)
+		uploader, err := s.CreateUploader(ctx, fileName)
 		if err != nil {
 			log.Error("open file failed",
 				zap.String("path", fullPath),

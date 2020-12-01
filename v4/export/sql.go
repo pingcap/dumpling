@@ -1,6 +1,7 @@
 package export
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"fmt"
@@ -200,6 +201,7 @@ func SelectFromSql(conf *Config, conn *sql.Conn) (TableMeta, TableDataIR, error)
 	if err != nil {
 		return nil, nil, errors.Annotatef(err, "sql: %s", conf.Sql)
 	}
+	defer rows.Close()
 	colTypes, err := rows.ColumnTypes()
 	if err != nil {
 		return nil, nil, errors.Annotatef(err, "sql: %s", conf.Sql)
@@ -219,10 +221,8 @@ func SelectFromSql(conf *Config, conn *sql.Conn) (TableMeta, TableDataIR, error)
 		},
 	}
 	data := &tableData{
-		query:      conf.Sql,
-		rows:       rows,
-		colLen:     len(cols),
-		SQLRowIter: nil,
+		query:  conf.Sql,
+		colLen: len(cols),
 	}
 
 	return meta, data, nil
@@ -261,7 +261,7 @@ func buildOrderByClause(conf *Config, db *sql.Conn, database, table string) (str
 			return "", errors.Trace(err)
 		}
 		if ok {
-			return "ORDER BY _tidb_rowid", nil
+			return "ORDER BY `_tidb_rowid`", nil
 		}
 	}
 	cols, err := GetPrimaryKeyColumns(db, database, table)
@@ -587,17 +587,28 @@ func simpleQueryWithArgs(conn *sql.Conn, handleOneRow func(*sql.Rows) error, sql
 	return rows.Err()
 }
 
-func selectTiDBTableSample(dbName, tableName string, db *sql.Conn) (pkNames string, pkVals []string, err error) {
+func selectTiDBTableSample(dbName, tableName string, db *sql.Conn, meta TableMeta) (pkNames string, pkVals []string, err error) {
 	pkFields, err := GetPrimaryKeyColumns(db, dbName, tableName)
 	if err != nil {
-		return "", nil, err
+		return "", nil, errors.Trace(err)
 	}
 	var query string
+	var colTypes []string
 	if len(pkFields) == 0 {
+		pkFields = []string{"_tidb_rowid"}
+		pkNames = "_tidb_rowid"
+		colTypes = []string{"BIGINT"}
 		template := "SELECT `_tidb_rowid` FROM `%s`.`%s` TABLESAMPLE REGIONS() ORDER BY `_tidb_rowid`"
 		query = fmt.Sprintf(template, dbName, tableName)
 	} else {
-		for i := range pkFields {
+		colTypes = make([]string, len(pkFields))
+		for i, pkColName := range pkFields {
+			for j, colName := range meta.ColumnNames() {
+				if pkColName == colName {
+					colTypes[i] = meta.ColumnTypes()[j]
+					break
+				}
+			}
 			pkFields[i] = fmt.Sprintf("`%s`", escapeString(pkFields[i]))
 		}
 		pkNames = strings.Join(pkFields, ",")
@@ -610,20 +621,18 @@ func selectTiDBTableSample(dbName, tableName string, db *sql.Conn) (pkNames stri
 	}
 	defer rows.Close()
 
-	cols := make([]string, len(pkFields))
-	colRefs := make([]*string, len(pkFields))
-	for i := range cols {
-		colRefs[i] = &cols[i]
-	}
-	for rows.Next() {
-		err = rows.Scan(colRefs)
+	iter := newRowIter(rows, len(pkFields))
+	rowRec := MakeRowReceiver(colTypes)
+	buf := new(bytes.Buffer)
+	for iter.HasNext() {
+		err = iter.Decode(rowRec)
 		if err != nil {
 			return "", nil, errors.Trace(err)
 		}
-		for i := range cols {
-			cols[i] = fmt.Sprintf("%s", escapeString(cols[i]))
-		}
-		pkVals = append(pkVals, strings.Join(cols, ","))
+		rowRec.WriteToBuffer(buf, true)
+		pkVals = append(pkVals, buf.String())
+		buf.Reset()
+		iter.Next()
 	}
 	return pkNames, pkVals, nil
 }

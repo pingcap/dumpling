@@ -226,7 +226,6 @@ func (d *Dumper) dumpDatabases(conn *sql.Conn, writer *Writer) error {
 			if err != nil {
 				return err
 			}
-
 			writingGroup.Go(func() error {
 				return writer.WriteTableData(ctx, meta, tableIRStream)
 			})
@@ -268,7 +267,7 @@ func (d *Dumper) concurrentDumpTable(conn *sql.Conn, meta TableMeta, ir chan<- T
 	db, tbl := meta.DatabaseName(), meta.TableName()
 	if conf.ServerInfo.ServerType == ServerTypeTiDB &&
 		conf.ServerInfo.ServerVersion != nil &&
-		conf.ServerInfo.ServerVersion.Compare(*tableSampleVersion) > 0 {
+		conf.ServerInfo.ServerVersion.Compare(*tableSampleVersion) >= 0 {
 		log.Debug("dumping TiDB tables with TABLESAMPLE",
 			zap.String("database", db), zap.String("table", tbl))
 		return d.concurrentDumpTiDBTables(conn, meta, ir)
@@ -287,6 +286,9 @@ func (d *Dumper) concurrentDumpTable(conn *sql.Conn, meta TableMeta, ir chan<- T
 	if err != nil {
 		return err
 	}
+	log.Debug("get int bounding values",
+		zap.String("lower", min.String()),
+		zap.String("upper", max.String()))
 
 	count := estimateCount(db, tbl, conn, field, conf)
 	log.Info("get estimated rows count", zap.Uint64("estimateCount", count))
@@ -304,11 +306,13 @@ func (d *Dumper) concurrentDumpTable(conn *sql.Conn, meta TableMeta, ir chan<- T
 	estimatedStep := new(big.Int).Sub(max, min).Uint64()/estimatedChunks + 1
 	bigEstimatedStep := new(big.Int).SetUint64(estimatedStep)
 	cutoff := new(big.Int).Set(min)
-	nextCutoff := new(big.Int)
 
 	selectField, selectLen, err := buildSelectField(conn, db, tbl, conf.CompleteInsert)
 	if err != nil {
 		return err
+	}
+	if selectField == "" {
+		selectField = "''"
 	}
 
 	orderByClause, err := buildOrderByClause(conf, conn, db, tbl)
@@ -318,7 +322,8 @@ func (d *Dumper) concurrentDumpTable(conn *sql.Conn, meta TableMeta, ir chan<- T
 
 	nullValueCondition := fmt.Sprintf("`%s` IS NULL OR ", escapeString(field))
 	for max.Cmp(cutoff) >= 0 {
-		where := fmt.Sprintf("%s(`%s` >= %d AND `%s` < %d)", nullValueCondition, escapeString(field), cutoff, escapeString(field), nextCutoff.Add(cutoff, bigEstimatedStep))
+		nextCutOff := new(big.Int).Add(cutoff, bigEstimatedStep)
+		where := fmt.Sprintf("%s(`%s` >= %d AND `%s` < %d)", nullValueCondition, escapeString(field), cutoff, escapeString(field), nextCutOff)
 		query := buildSelectQuery(db, tbl, selectField, buildWhereCondition(conf, where), orderByClause)
 		if len(nullValueCondition) > 0 {
 			nullValueCondition = ""
@@ -328,6 +333,7 @@ func (d *Dumper) concurrentDumpTable(conn *sql.Conn, meta TableMeta, ir chan<- T
 			return nil
 		case ir <- newTableData(query, selectLen):
 		}
+		cutoff = nextCutOff
 	}
 	return nil
 }
@@ -373,15 +379,18 @@ func (d *Dumper) concurrentDumpTiDBTables(conn *sql.Conn, meta TableMeta, ir cha
 	ctx, conf := d.ctx, d.conf
 	db, tbl := meta.DatabaseName(), meta.TableName()
 
-	pkNames, pkVals, err := selectTiDBTableSample(db, tbl, conn)
+	pkNames, pkVals, err := selectTiDBTableSample(db, tbl, conn, meta)
 
 	selectField, selectLen, err := buildSelectField(conn, db, tbl, conf.CompleteInsert)
 	if err != nil {
 		return err
 	}
+	if selectField == "" {
+		selectField = "''"
+	}
 
 	where := make([]string, 0, len(pkVals)+1)
-	where = append(where, fmt.Sprintf("(%s) < (%s)", pkNames, pkVals[0]))
+	where = append(where, fmt.Sprintf("(%s) < %s", pkNames, pkVals[0]))
 	for i := 1; i < len(pkVals); i++ {
 		low, up := pkVals[i-1], pkVals[i]
 		where = append(where, fmt.Sprintf("(%s) < (%s) AND (%s) >= (%s)", pkNames, low, pkNames, up))
@@ -390,7 +399,7 @@ func (d *Dumper) concurrentDumpTiDBTables(conn *sql.Conn, meta TableMeta, ir cha
 
 	var orderByClause string
 	if pkNames == "_tidb_rowid" {
-		orderByClause = "ORDER BY _tidb_rowid"
+		orderByClause = "ORDER BY `_tidb_rowid`"
 	} else {
 		orderByClause = fmt.Sprintf("ORDER BY %s", pkNames)
 	}
