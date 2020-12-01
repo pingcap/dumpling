@@ -555,7 +555,7 @@ func buildWhereClauses(handleColNames, handleVals []string) []string {
 	where = append(where, fmt.Sprintf("(%s) < %s", handleCols, handleVals[0]))
 	for i := 1; i < len(handleVals); i++ {
 		low, up := handleVals[i-1], handleVals[i]
-		where = append(where, fmt.Sprintf("(%s) < (%s) AND (%s) >= (%s)", handleCols, low, handleCols, up))
+		where = append(where, fmt.Sprintf("(%s) >= (%s) AND (%s) < (%s)", handleCols, low, handleCols, up))
 	}
 	where = append(where, fmt.Sprintf("(%s) >= (%s)", handleCols, handleVals[len(handleVals)-1]))
 	return where

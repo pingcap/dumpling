@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"fmt"
 	"math/big"
+	"strings"
 	"time"
 
 	"github.com/pingcap/dumpling/v4/log"
@@ -223,13 +224,13 @@ func (d *Dumper) dumpDatabases(conn *sql.Conn, writer *Writer) error {
 			}
 
 			tableIRStream := make(chan TableDataIR, defaultDumpThreads)
+			writingGroup.Go(func() error {
+				return writer.WriteTableData(ctx, meta, tableIRStream)
+			})
 			err = d.dumpTableData(conn, meta, tableIRStream)
 			if err != nil {
 				return err
 			}
-			writingGroup.Go(func() error {
-				return writer.WriteTableData(ctx, meta, tableIRStream)
-			})
 		}
 	}
 	if err := writingGroup.Wait(); err != nil {
@@ -326,14 +327,30 @@ func (d *Dumper) concurrentDumpTable(conn *sql.Conn, meta TableMeta, ir chan<- T
 		if len(nullValueCondition) > 0 {
 			nullValueCondition = ""
 		}
-		select {
-		case <-ctx.Done():
-			return nil
-		case ir <- newTableData(query, selectLen):
+		ctxDone := sendDataIRToChan(ctx, newTableData(query, selectLen), ir)
+		if ctxDone {
+			break
 		}
 		cutoff = nextCutOff
 	}
 	return nil
+}
+
+func sendDataIRToChan(ctx context.Context, ir TableDataIR, irChan chan<- TableDataIR) (ctxDone bool) {
+	for {
+		select {
+		case <-ctx.Done():
+			return true
+		case irChan <- ir:
+			return false
+		default:
+			sleepTime := 1 * time.Second
+			time.Sleep(sleepTime)
+			log.Warn("write channel is full, waiting writer to consume IR",
+				zap.Int("channel size", defaultDumpThreads),
+				zap.Stringer("sleep time", sleepTime))
+		}
+	}
 }
 
 var z = &big.Int{}
@@ -378,6 +395,9 @@ func (d *Dumper) concurrentDumpTiDBTables(conn *sql.Conn, meta TableMeta, ir cha
 	db, tbl := meta.DatabaseName(), meta.TableName()
 
 	handleColNames, handleVals, err := selectTiDBTableSample(db, tbl, conn, meta)
+	if err != nil {
+		return err
+	}
 	if len(handleVals) == 0 {
 		return nil
 	}
@@ -390,13 +410,8 @@ func (d *Dumper) concurrentDumpTiDBTables(conn *sql.Conn, meta TableMeta, ir cha
 
 	for _, w := range where {
 		query := buildSelectQuery(db, tbl, selectField, buildWhereCondition(conf, w), orderByClause)
-		contextDone := false
-		select {
-		case <-ctx.Done():
-			contextDone = true
-		case ir <- newTableData(query, selectLen):
-		}
-		if contextDone {
+		ctxDone := sendDataIRToChan(ctx, newTableData(query, selectLen), ir)
+		if ctxDone {
 			break
 		}
 	}
@@ -438,7 +453,12 @@ func buildTiDBTableSampleQuery(pkFields []string, dbName, tblName string) string
 		return fmt.Sprintf(template, dbName, tblName)
 	}
 	template := "SELECT %s FROM `%s`.`%s` TABLESAMPLE REGIONS() ORDER BY %s"
-	return fmt.Sprintf(template, pkFields, dbName, tblName, pkFields)
+	quotaPk := make([]string, len(pkFields))
+	for i, s := range pkFields {
+		quotaPk[i] = fmt.Sprintf("`%s`", s)
+	}
+	pks := strings.Join(quotaPk, ",")
+	return fmt.Sprintf(template, pks, dbName, tblName, pks)
 }
 
 func findHandleColsAndColTypes(pkFields []string, meta TableMeta) (handleCols []string, colTypes []string) {
