@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"golang.org/x/sync/errgroup"
 	"strings"
 	"text/template"
 
@@ -84,6 +85,7 @@ func (w *Writer) WriteTableData(ctx context.Context, meta TableMeta, irStream <-
 		zap.Stringer("format", w.fileFmt))
 	chunkIndex := 0
 	channelClosed := false
+	var wg errgroup.Group
 	for !channelClosed {
 		select {
 		case <-ctx.Done():
@@ -97,15 +99,18 @@ func (w *Writer) WriteTableData(ctx context.Context, meta TableMeta, irStream <-
 				break
 			}
 			w.receivedIRCount++
-			conn := w.cntPool.getConn()
-			err := w.startTableIRQueryWithRetry(ctx, conn, meta, ir, chunkIndex)
-			if err != nil {
-				w.cntPool.releaseConn(conn)
-				return err
-			}
+
+			chkIdx := chunkIndex
+			wg.Go(func() error {
+				conn := w.cntPool.getConn()
+				defer w.cntPool.releaseConn(conn)
+				return w.startTableIRQueryWithRetry(ctx, conn, meta, ir, chkIdx)
+			})
 			chunkIndex++
-			w.cntPool.releaseConn(conn)
 		}
+	}
+	if err := wg.Wait(); err != nil {
+		return err
 	}
 	log.Debug("dumping table successfully",
 		zap.String("table", meta.TableName()))

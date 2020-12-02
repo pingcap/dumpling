@@ -193,7 +193,7 @@ func (d *Dumper) dumpDatabases(writer *Writer) error {
 	allTables := conf.Tables
 	ctx, cancel := context.WithCancel(d.ctx)
 	defer cancel()
-	var writingGroup errgroup.Group
+	var wg errgroup.Group
 	tableDataStartTime := time.Now()
 	extraConn := writer.cntPool.extraConn()
 	for dbName, tables := range allTables {
@@ -225,7 +225,7 @@ func (d *Dumper) dumpDatabases(writer *Writer) error {
 			}
 
 			tableIRStream := make(chan TableDataIR, defaultDumpThreads)
-			writingGroup.Go(func() error {
+			wg.Go(func() error {
 				return writer.WriteTableData(ctx, meta, tableIRStream)
 			})
 			err = d.dumpTableData(extraConn, meta, tableIRStream)
@@ -234,7 +234,7 @@ func (d *Dumper) dumpDatabases(writer *Writer) error {
 			}
 		}
 	}
-	if err := writingGroup.Wait(); err != nil {
+	if err := wg.Wait(); err != nil {
 		summary.CollectFailureUnit("dump table data", err)
 		return err
 	}
@@ -354,10 +354,8 @@ func sendDataIRToChan(ctx context.Context, ir TableDataIR, irChan chan<- TableDa
 	}
 }
 
-var z = &big.Int{}
-
 func (d *Dumper) selectMinAndMaxIntValue(conn *sql.Conn, db, tbl, field string) (*big.Int, *big.Int, error) {
-	ctx, conf := d.ctx, d.conf
+	ctx, conf, zero := d.ctx, d.conf, &big.Int{}
 	query := fmt.Sprintf("SELECT MIN(`%s`),MAX(`%s`) FROM `%s`.`%s`",
 		escapeString(field), escapeString(field), escapeString(db), escapeString(tbl))
 	if conf.Where != "" {
@@ -371,22 +369,22 @@ func (d *Dumper) selectMinAndMaxIntValue(conn *sql.Conn, db, tbl, field string) 
 	err := row.Scan(&smin, &smax)
 	if err != nil {
 		log.Error("split chunks - get max min failed", zap.String("query", query), zap.Error(err))
-		return z, z, err
+		return zero, zero, err
 	}
 	if !smax.Valid || !smin.Valid {
 		// found no data
 		log.Warn("no data to dump", zap.String("schema", db), zap.String("table", tbl))
-		return z, z, nil
+		return zero, zero, nil
 	}
 
 	max := new(big.Int)
 	min := new(big.Int)
 	var ok bool
 	if max, ok = max.SetString(smax.String, 10); !ok {
-		return z, z, errors.Errorf("fail to convert max value %s in query %s", smax.String, query)
+		return zero, zero, errors.Errorf("fail to convert max value %s in query %s", smax.String, query)
 	}
 	if min, ok = min.SetString(smin.String, 10); !ok {
-		return z, z, errors.Errorf("fail to convert min value %s in query %s", smin.String, query)
+		return zero, zero, errors.Errorf("fail to convert min value %s in query %s", smin.String, query)
 	}
 	return min, max, nil
 }
