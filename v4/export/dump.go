@@ -174,11 +174,11 @@ func (d *Dumper) Dump() (err error) {
 	summary.SetUnit(summary.BackupUnit)
 	defer summary.Summary(summary.BackupUnit)
 	if conf.Sql == "" {
-		if err = d.dumpDatabases(connectPool.extraConn(), writer); err != nil {
+		if err = d.dumpDatabases(writer); err != nil {
 			return err
 		}
 	} else {
-		if err = d.dumpSql(connectPool.extraConn(), writer); err != nil {
+		if err = d.dumpSql(writer); err != nil {
 			return err
 		}
 	}
@@ -188,15 +188,16 @@ func (d *Dumper) Dump() (err error) {
 	return nil
 }
 
-func (d *Dumper) dumpDatabases(conn *sql.Conn, writer *Writer) error {
+func (d *Dumper) dumpDatabases(writer *Writer) error {
 	conf := d.conf
 	allTables := conf.Tables
 	ctx, cancel := context.WithCancel(d.ctx)
 	defer cancel()
 	var writingGroup errgroup.Group
 	tableDataStartTime := time.Now()
+	extraConn := writer.cntPool.extraConn()
 	for dbName, tables := range allTables {
-		createDatabaseSQL, err := ShowCreateDatabase(conn, dbName)
+		createDatabaseSQL, err := ShowCreateDatabase(extraConn, dbName)
 		if err != nil {
 			return err
 		}
@@ -209,7 +210,7 @@ func (d *Dumper) dumpDatabases(conn *sql.Conn, writer *Writer) error {
 			continue
 		}
 		for _, table := range tables {
-			meta, err := dumpTableMeta(conf, conn, dbName, table)
+			meta, err := dumpTableMeta(conf, extraConn, dbName, table)
 			if err != nil {
 				return err
 			}
@@ -227,7 +228,7 @@ func (d *Dumper) dumpDatabases(conn *sql.Conn, writer *Writer) error {
 			writingGroup.Go(func() error {
 				return writer.WriteTableData(ctx, meta, tableIRStream)
 			})
-			err = d.dumpTableData(conn, meta, tableIRStream)
+			err = d.dumpTableData(extraConn, meta, tableIRStream)
 			if err != nil {
 				return err
 			}
@@ -260,7 +261,7 @@ func (d *Dumper) sequentialDumpTable(conn *sql.Conn, meta TableMeta, ir chan<- T
 	if err != nil {
 		return err
 	}
-	ir <- tableIR
+	sendDataIRToChan(d.ctx, tableIR, ir)
 	return nil
 }
 
@@ -450,15 +451,15 @@ func buildTiDBTableSampleQuery(pkFields []string, dbName, tblName string) string
 	hasImplicitRowID := pkFields == nil
 	if hasImplicitRowID {
 		template := "SELECT `_tidb_rowid` FROM `%s`.`%s` TABLESAMPLE REGIONS() ORDER BY `_tidb_rowid`"
-		return fmt.Sprintf(template, dbName, tblName)
+		return fmt.Sprintf(template, escapeString(dbName), escapeString(tblName))
 	}
 	template := "SELECT %s FROM `%s`.`%s` TABLESAMPLE REGIONS() ORDER BY %s"
 	quotaPk := make([]string, len(pkFields))
 	for i, s := range pkFields {
-		quotaPk[i] = fmt.Sprintf("`%s`", s)
+		quotaPk[i] = fmt.Sprintf("`%s`", escapeString(s))
 	}
 	pks := strings.Join(quotaPk, ",")
-	return fmt.Sprintf(template, pks, dbName, tblName, pks)
+	return fmt.Sprintf(template, pks, escapeString(dbName), escapeString(tblName), pks)
 }
 
 func findHandleColsAndColTypes(pkFields []string, meta TableMeta) (handleCols []string, colTypes []string) {
@@ -516,6 +517,9 @@ func dumpTableMeta(conf *Config, conn *sql.Conn, db string, table *TableInfo) (T
 	} else {
 		colTypes, err = GetColumnTypes(conn, selectField, db, tbl)
 	}
+	if err != nil {
+		return nil, err
+	}
 
 	meta := &tableMeta{
 		database:      db,
@@ -541,13 +545,16 @@ func dumpTableMeta(conf *Config, conn *sql.Conn, db string, table *TableInfo) (T
 		return meta, nil
 	}
 	createTableSQL, err := ShowCreateTable(conn, db, tbl)
+	if err != nil {
+		return nil, err
+	}
 	meta.showCreateTable = createTableSQL
 	return meta, nil
 }
 
-func (d *Dumper) dumpSql(conn *sql.Conn, writer *Writer) error {
+func (d *Dumper) dumpSql(writer *Writer) error {
 	ctx, conf := d.ctx, d.conf
-	meta, tableIR, err := SelectFromSql(conf, conn)
+	meta, tableIR, err := SelectFromSql(conf, writer.cntPool.extraConn())
 	if err != nil {
 		return err
 	}

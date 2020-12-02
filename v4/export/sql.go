@@ -512,6 +512,8 @@ func createConnWithConsistency(ctx context.Context, db *sql.DB) (*sql.Conn, erro
 	return conn, nil
 }
 
+// buildSelectField returns the selecting fields' string(joined by comma(`,`)),
+// and the number of writable fields.
 func buildSelectField(db *sql.Conn, dbName, tableName string, completeInsert bool) (string, int, error) {
 	query := `SELECT COLUMN_NAME,EXTRA FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=? AND TABLE_NAME=? ORDER BY ORDINAL_POSITION;`
 	rows, err := db.QueryContext(context.Background(), query, dbName, tableName)
@@ -548,7 +550,7 @@ func buildWhereClauses(handleColNames, handleVals []string) []string {
 	}
 	quotaCols := make([]string, len(handleColNames))
 	for i, s := range handleColNames {
-		quotaCols[i] = fmt.Sprintf("`%s`", s)
+		quotaCols[i] = fmt.Sprintf("`%s`", escapeString(s))
 	}
 	handleCols := strings.Join(quotaCols, ",")
 	where := make([]string, 0, len(handleVals)+1)

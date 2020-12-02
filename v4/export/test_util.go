@@ -87,11 +87,11 @@ type mockTableIR struct {
 }
 
 func (m *mockTableIR) ShowCreateTable() string {
-	panic("implement me")
+	return ""
 }
 
 func (m *mockTableIR) ShowCreateView() string {
-	panic("implement me")
+	return ""
 }
 
 func (m *mockTableIR) Start(ctx context.Context, conn *sql.Conn) error {

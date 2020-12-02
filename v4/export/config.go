@@ -541,8 +541,8 @@ const (
 )
 
 var (
-	gcSafePointVersion, _ = semver.NewVersion("4.0.0")
-	tableSampleVersion, _ = semver.NewVersion("5.0.0")
+	gcSafePointVersion = semver.New("4.0.0")
+	tableSampleVersion = semver.New("5.0.0")
 )
 
 type ServerInfo struct {
