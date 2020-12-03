@@ -1,5 +1,5 @@
-PACKAGES := go list ./...
-PACKAGE_DIRECTORIES := $(PACKAGES) | sed 's/github.com\/pingcap\/dumpling\/*//' | sed '/bin/d'
+PACKAGES := go list ./... | sed '/github.com\/pingcap\/dumpling\/bin/d'
+PACKAGE_DIRECTORIES := $(PACKAGES) | sed 's/github.com\/pingcap\/dumpling\/*//'
 DUMPLING_PKG := github.com/pingcap/dumpling
 CHECKER := awk '{ print } END { if (NR > 0) { exit 1 } }'
 
@@ -16,7 +16,7 @@ ifeq ("$(WITH_RACE)", "1")
 	GOLDFLAGS += -race
 endif
 
-.PHONY: build test
+all: build check test
 
 build: bin/dumpling
 
@@ -72,6 +72,8 @@ static: tools
 	@#   exhaustivestruct - Protobuf structs have hidden fields, like "XXX_NoUnkeyedLiteral"
 	@#         exhaustive - no need to check exhaustiveness of enum switch statements
 	@#              gosec - too many false positive
+	@#          errorlint - can't detect errors.Cause
+	@#      sqlclosecheck - the rows in dumpling is created in one function but closed in other functions
 	CGO_ENABLED=0 tools/bin/golangci-lint run --enable-all --deadline 120s \
 		--disable gochecknoglobals \
 		--disable goimports \
@@ -92,13 +94,16 @@ static: tools
 		--disable exhaustive \
 		--disable godot \
 		--disable gosec \
+		--disable errorlint \
+		--disable sqlclosecheck \
 		$$($(PACKAGE_DIRECTORIES))
 	# pingcap/errors APIs are mixed with multiple patterns 'pkg/errors',
 	# 'juju/errors' and 'pingcap/parser'. To avoid confusion and mistake,
 	# we only allow a subset of APIs, that's "Normalize|Annotate|Trace|Cause".
+    # TODO: delete Errorf and New after we support standard code
 	@# TODO: allow more APIs when we need to support "workaound".
-	grep -Rn --exclude="*_test.go" -E "(\t| )errors\.[A-Z]" cmd pkg | \
-		grep -vE "Normalize|Annotate|Trace|Cause" 2>&1 | $(CHECKER)
+	grep -Rn --exclude="*_test.go" -E "(\t| )errors\.[A-Z]" cmd v4 | \
+		grep -vE "Normalize|Annotate|Trace|Cause|Errorf|New" 2>&1 | $(CHECKER)
 
 lint: tools
 	@echo "linting"

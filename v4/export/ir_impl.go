@@ -9,9 +9,10 @@ import (
 	"math/big"
 	"strings"
 
-	"github.com/pingcap/dumpling/v4/log"
 	"github.com/pingcap/errors"
 	"go.uber.org/zap"
+
+	"github.com/pingcap/dumpling/v4/log"
 )
 
 // rowIter implements the SQLRowIter interface.
@@ -69,7 +70,7 @@ func (m *stringIter) Next() string {
 		return ""
 	}
 	ret := m.ss[m.idx]
-	m.idx += 1
+	m.idx++
 	return ret
 }
 
@@ -96,7 +97,10 @@ func (td *tableData) Start(pCtx context.Context, conn *sql.Conn) error {
 	ctx, td.cancel = context.WithCancel(pCtx)
 	rows, err := conn.QueryContext(ctx, td.query)
 	if err != nil {
-		return err
+		return errors.Trace(err)
+	}
+	if err = rows.Err(); err != nil {
+		return errors.Trace(err)
 	}
 	td.SQLRowIter = nil
 	td.rows = rows
@@ -256,7 +260,7 @@ func splitTableDataIntoChunks(
 	nullValueCondition := fmt.Sprintf("`%s` IS NULL OR ", escapeString(field))
 LOOP:
 	for max.Cmp(cutoff) >= 0 {
-		chunkIndex += 1
+		chunkIndex++
 		where := fmt.Sprintf("%s(`%s` >= %d AND `%s` < %d)", nullValueCondition, escapeString(field), cutoff, escapeString(field), nextCutoff.Add(cutoff, bigEstimatedStep))
 		query = buildSelectQuery(dbName, tableName, selectedField, buildWhereCondition(conf, where), orderByClause)
 		if len(nullValueCondition) > 0 {

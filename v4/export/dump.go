@@ -10,6 +10,7 @@ import (
 
 	"github.com/pingcap/dumpling/v4/log"
 
+	// import mysql driver
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/br/pkg/storage"
 	"github.com/pingcap/br/pkg/summary"
@@ -21,6 +22,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+// Dumper is the dump progress structure
 type Dumper struct {
 	ctx       context.Context
 	conf      *Config
@@ -32,6 +34,7 @@ type Dumper struct {
 	tidbPDClientForGC pd.Client
 }
 
+// NewDumper returns a new Dumper
 func NewDumper(ctx context.Context, conf *Config) (*Dumper, error) {
 	ctx, cancelFn := context.WithCancel(ctx)
 	d := &Dumper{
@@ -48,7 +51,7 @@ func NewDumper(ctx context.Context, conf *Config) (*Dumper, error) {
 	}
 	err = runSteps(d,
 		createExternalStore,
-		startHttpService,
+		startHTTPService,
 		openSQLDB,
 		detectServerInfo,
 		resolveAutoConsistency,
@@ -61,11 +64,20 @@ func NewDumper(ctx context.Context, conf *Config) (*Dumper, error) {
 	return d, err
 }
 
-func (d *Dumper) Dump() (err error) {
+// Dump dumps table from database
+// nolint: gocyclo
+func (d *Dumper) Dump() (dumpErr error) {
+	initColTypeRowReceiverMap()
+	var (
+		conn        *sql.Conn
+		err         error
+		conCtrl     ConsistencyController
+		connectPool *connectionsPool
+	)
 	ctx, conf, pool := d.ctx, d.conf, d.dbHandle
 	m := newGlobalMetadata(d.extStore, conf.Snapshot)
 	defer func() {
-		if err == nil {
+		if dumpErr == nil {
 			_ = m.writeGlobalMetaData(ctx)
 		}
 	}()
@@ -73,7 +85,7 @@ func (d *Dumper) Dump() (err error) {
 	// for consistency lock, we should lock tables at first to get the tables we want to lock & dump
 	// for consistency lock, record meta pos before lock tables because other tables may still be modified while locking tables
 	if conf.Consistency == consistencyTypeLock {
-		conn, err := createConnWithConsistency(ctx, pool)
+		conn, err = createConnWithConsistency(ctx, pool)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -89,20 +101,25 @@ func (d *Dumper) Dump() (err error) {
 		conn.Close()
 	}
 
-	conCtrl, err := NewConsistencyController(ctx, conf, pool)
+	conCtrl, err = NewConsistencyController(ctx, conf, pool)
 	if err != nil {
 		return err
 	}
 	if err = conCtrl.Setup(ctx); err != nil {
-		return err
+		return errors.Trace(err)
 	}
 	// To avoid lock is not released
-	defer conCtrl.TearDown(ctx)
+	defer func() {
+		err = conCtrl.TearDown(ctx)
+		if err != nil {
+			log.Error("fail to tear down consistency controller", zap.Error(err))
+		}
+	}()
 
 	// for other consistencies, we should get table list after consistency is set up and GlobalMetaData is cached
 	// for other consistencies, record snapshot after whole tables are locked. The recorded meta info is exactly the locked snapshot.
 	if conf.Consistency != consistencyTypeLock {
-		conn, err := pool.Conn(ctx)
+		conn, err = pool.Conn(ctx)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -114,7 +131,7 @@ func (d *Dumper) Dump() (err error) {
 		conn.Close()
 	}
 
-	connectPool, err := newConnectionsPool(ctx, conf.Threads, pool)
+	connectPool, err = newConnectionsPool(ctx, conf.Threads, pool)
 	if err != nil {
 		return err
 	}
@@ -139,11 +156,11 @@ func (d *Dumper) Dump() (err error) {
 			log.Info("All the dumping transactions have started. Start to unlock tables")
 		}
 		if err = conCtrl.TearDown(ctx); err != nil {
-			return err
+			return errors.Trace(err)
 		}
 	}
 
-	failpoint.Inject("ConsistencyCheck", nil)
+	failpoint.Eval(_curpkg_("ConsistencyCheck"))
 
 	simpleWriter, err := NewSimpleWriter(conf, d.extStore)
 	if err != nil {
@@ -151,10 +168,8 @@ func (d *Dumper) Dump() (err error) {
 	}
 	var writer Writer
 	switch strings.ToLower(conf.FileType) {
-	case "sql":
-		writer = SQLWriter{SimpleWriter: simpleWriter}
-	case "csv":
-		writer = CSVWriter{SimpleWriter: simpleWriter}
+	case "sql", "csv":
+		writer = simpleWriter
 	default:
 		return errors.Errorf("unsupported filetype %s", conf.FileType)
 	}
@@ -162,25 +177,25 @@ func (d *Dumper) Dump() (err error) {
 	summary.SetLogCollector(summary.NewLogCollector(log.Info))
 	summary.SetUnit(summary.BackupUnit)
 	defer summary.Summary(summary.BackupUnit)
-	if conf.Sql == "" {
+	if conf.SQL == "" {
 		if err = dumpDatabases(ctx, conf, connectPool, writer, func(conn *sql.Conn) (*sql.Conn, error) {
 			// make sure that the lock connection is still alive
-			err := conCtrl.PingContext(ctx)
-			if err != nil {
-				return conn, err
+			rebuildErr := conCtrl.PingContext(ctx)
+			if rebuildErr != nil {
+				return conn, errors.Trace(rebuildErr)
 			}
 			// give up the last broken connection
 			conn.Close()
-			newConn, err := createConnWithConsistency(ctx, pool)
-			if err != nil {
-				return conn, err
+			newConn, rebuildErr := createConnWithConsistency(ctx, pool)
+			if rebuildErr != nil {
+				return conn, rebuildErr
 			}
 			conn = newConn
 			// renew the master status after connection. dm can't close safe-mode until dm reaches current pos
 			if conf.PosAfterConnect {
-				err = m.recordGlobalMetaData(conn, conf.ServerInfo.ServerType, true)
-				if err != nil {
-					return conn, err
+				rebuildErr = m.recordGlobalMetaData(conn, conf.ServerInfo.ServerType, true)
+				if rebuildErr != nil {
+					return conn, rebuildErr
 				}
 			}
 			return conn, nil
@@ -188,7 +203,7 @@ func (d *Dumper) Dump() (err error) {
 			return err
 		}
 	} else {
-		if err = dumpSql(ctx, conf, connectPool, writer); err != nil {
+		if err = dumpSQL(ctx, conf, connectPool, writer); err != nil {
 			return err
 		}
 	}
@@ -209,7 +224,7 @@ func dumpDatabases(pCtx context.Context, conf *Config, connectPool *connectionsP
 			return err
 		}
 		if err := writer.WriteDatabaseMeta(ctx, dbName, createDatabaseSQL); err != nil {
-			return err
+			return errors.Trace(err)
 		}
 
 		if len(tables) == 0 {
@@ -246,7 +261,7 @@ func dumpDatabases(pCtx context.Context, conf *Config, connectPool *connectionsP
 						errorCount.With(conf.Labels).Inc()
 					}
 				}()
-				retryTime += 1
+				retryTime++
 				log.Debug("trying to dump table chunk", zap.Int("retryTime", retryTime), zap.String("db", tableIR.DatabaseName()),
 					zap.String("table", tableIR.TableName()), zap.Int("chunkIndex", tableIR.ChunkIndex()), zap.NamedError("lastError", lastErr))
 				if retryTime > 1 {
@@ -260,15 +275,14 @@ func dumpDatabases(pCtx context.Context, conf *Config, connectPool *connectionsP
 					return
 				}
 				return writer.WriteTableData(ctx, tableIR)
-			}, newDumpChunkBackoffer(canRebuildConn(conf.Consistency, conf.TransactionalConsistency)))
+			}, newDumpChunkBackoffer(shouldRebuildConn(conf.Consistency, conf.TransactionalConsistency)))
 		})
 	}
 	if err := g.Wait(); err != nil {
 		summary.CollectFailureUnit("dump", err)
-		return err
-	} else {
-		summary.CollectSuccessUnit("dump cost", len(tableDataIRTotal), time.Since(tableDataStartTime))
+		return errors.Trace(err)
 	}
+	summary.CollectSuccessUnit("dump cost", len(tableDataIRTotal), time.Since(tableDataStartTime))
 	return nil
 }
 
@@ -295,8 +309,8 @@ func prepareTableListToDump(conf *Config, pool *sql.Conn) error {
 	return nil
 }
 
-func dumpSql(ctx context.Context, conf *Config, connectPool *connectionsPool, writer Writer) error {
-	tableIR, err := SelectFromSql(conf, connectPool.extraConn())
+func dumpSQL(ctx context.Context, conf *Config, connectPool *connectionsPool, writer Writer) error {
+	tableIR, err := SelectFromSQL(conf, connectPool.extraConn())
 	if err != nil {
 		return err
 	}
@@ -305,10 +319,9 @@ func dumpSql(ctx context.Context, conf *Config, connectPool *connectionsPool, wr
 	err = writer.WriteTableData(ctx, tableIR)
 	if err != nil {
 		summary.CollectFailureUnit("dump", err)
-		return err
-	} else {
-		summary.CollectSuccessUnit("dump cost", 1, time.Since(tableDataStartTime))
+		return errors.Trace(err)
 	}
+	summary.CollectSuccessUnit("dump cost", 1, time.Since(tableDataStartTime))
 	return nil
 }
 
@@ -328,7 +341,7 @@ func dumpTable(ctx context.Context, conf *Config, db *sql.Conn, dbName string, t
 			return nil, err
 		}
 		if err := writer.WriteTableMeta(ctx, dbName, tableName, createTableSQL); err != nil {
-			return nil, err
+			return nil, errors.Trace(err)
 		}
 	}
 	// Do not dump table data and return nil
@@ -382,12 +395,12 @@ Loop:
 		}
 	}
 	if err := g.Wait(); err != nil {
-		return true, chunksIterArray, err
+		return true, chunksIterArray, errors.Trace(err)
 	}
 	return true, chunksIterArray, nil
 }
 
-func canRebuildConn(consistency string, trxConsistencyOnly bool) bool {
+func shouldRebuildConn(consistency string, trxConsistencyOnly bool) bool {
 	switch consistency {
 	case consistencyTypeLock, consistencyTypeFlush:
 		return !trxConsistencyOnly
@@ -398,6 +411,7 @@ func canRebuildConn(consistency string, trxConsistencyOnly bool) bool {
 	}
 }
 
+// Close closes a Dumper and stop dumping immediately
 func (d *Dumper) Close() error {
 	d.cancelCtx()
 	return d.dbHandle.Close()
@@ -418,18 +432,18 @@ func createExternalStore(d *Dumper) error {
 	ctx, conf := d.ctx, d.conf
 	b, err := storage.ParseBackend(conf.OutputDirPath, &conf.BackendOptions)
 	if err != nil {
-		return err
+		return errors.Trace(err)
 	}
 	extStore, err := storage.Create(ctx, b, false)
 	if err != nil {
-		return err
+		return errors.Trace(err)
 	}
 	d.extStore = extStore
 	return nil
 }
 
-// startHttpService is an initialization step of Dumper.
-func startHttpService(d *Dumper) error {
+// startHTTPService is an initialization step of Dumper.
+func startHTTPService(d *Dumper) error {
 	conf := d.conf
 	if conf.StatusAddr != "" {
 		go func() {
@@ -602,10 +616,9 @@ func setSessionParam(d *Dumper) error {
 			}
 		}
 	}
-	if newPool, err := resetDBWithSessionParams(pool, conf.GetDSN(""), conf.SessionParams); err != nil {
+	var err error
+	if d.dbHandle, err = resetDBWithSessionParams(pool, conf.GetDSN(""), conf.SessionParams); err != nil {
 		return errors.Trace(err)
-	} else {
-		d.dbHandle = newPool
 	}
 	return nil
 }

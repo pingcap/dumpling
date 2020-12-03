@@ -100,9 +100,8 @@ func (s *testWriterSuite) TestWriteTableData(c *C) {
 	config := DefaultConfig()
 	config.OutputDirPath = dir
 
-	simpleWriter, err := NewSimpleWriter(config, createExtStore(c, config))
+	writer, err := NewSimpleWriter(config, createExtStore(c, config))
 	c.Assert(err, IsNil)
-	writer := SQLWriter{SimpleWriter: simpleWriter}
 
 	data := [][]driver.Value{
 		{"1", "male", "bob@mail.com", "020-1234", nil},
@@ -151,9 +150,8 @@ func (s *testWriterSuite) TestWriteTableDataWithFileSize(c *C) {
 	config.FileSize += uint64(len(specCmts[1]) + 1)
 	config.FileSize += uint64(len("INSERT INTO `employees` VALUES\n"))
 
-	simpleWriter, err := NewSimpleWriter(config, createExtStore(c, config))
+	writer, err := NewSimpleWriter(config, createExtStore(c, config))
 	c.Assert(err, IsNil)
-	writer := SQLWriter{SimpleWriter: simpleWriter}
 
 	data := [][]driver.Value{
 		{"1", "male", "bob@mail.com", "020-1234", nil},
@@ -180,7 +178,7 @@ func (s *testWriterSuite) TestWriteTableDataWithFileSize(c *C) {
 	}
 
 	for p, expected := range cases {
-		p := path.Join(dir, p)
+		p = path.Join(dir, p)
 		_, err = os.Stat(p)
 		c.Assert(err, IsNil)
 		bytes, err := ioutil.ReadFile(p)
@@ -206,9 +204,8 @@ func (s *testWriterSuite) TestWriteTableDataWithFileSizeAndRows(c *C) {
 	config.FileSize += uint64(len(specCmts[1]) + 1)
 	config.FileSize += uint64(len("INSERT INTO `employees` VALUES\n"))
 
-	simpleWriter, err := NewSimpleWriter(config, createExtStore(c, config))
+	writer, err := NewSimpleWriter(config, createExtStore(c, config))
 	c.Assert(err, IsNil)
-	writer := SQLWriter{SimpleWriter: simpleWriter}
 
 	data := [][]driver.Value{
 		{"1", "male", "bob@mail.com", "020-1234", nil},
@@ -235,7 +232,7 @@ func (s *testWriterSuite) TestWriteTableDataWithFileSizeAndRows(c *C) {
 	}
 
 	for p, expected := range cases {
-		p := path.Join(dir, p)
+		p = path.Join(dir, p)
 		_, err = os.Stat(p)
 		c.Assert(err, IsNil)
 		bytes, err := ioutil.ReadFile(p)
@@ -257,9 +254,8 @@ func (s *testWriterSuite) TestWriteTableDataWithStatementSize(c *C) {
 	config.OutputFileTemplate, err = ParseOutputFileTemplate("specified-name")
 	c.Assert(err, IsNil)
 
-	simpleWriter, err := NewSimpleWriter(config, createExtStore(c, config))
+	writer, err := NewSimpleWriter(config, createExtStore(c, config))
 	c.Assert(err, IsNil)
-	writer := SQLWriter{SimpleWriter: simpleWriter}
 
 	data := [][]driver.Value{
 		{"1", "male", "bob@mail.com", "020-1234", nil},
@@ -289,11 +285,11 @@ func (s *testWriterSuite) TestWriteTableDataWithStatementSize(c *C) {
 	}
 
 	for p, expected := range cases {
-		p := path.Join(config.OutputDirPath, p)
+		p = path.Join(config.OutputDirPath, p)
 		_, err = os.Stat(p)
 		c.Assert(err, IsNil)
-		bytes, err := ioutil.ReadFile(p)
-		c.Assert(err, IsNil)
+		bytes, err1 := ioutil.ReadFile(p)
+		c.Assert(err1, IsNil)
 		c.Assert(string(bytes), Equals, expected)
 	}
 
@@ -309,9 +305,9 @@ func (s *testWriterSuite) TestWriteTableDataWithStatementSize(c *C) {
 	err = os.RemoveAll(config.OutputDirPath)
 	c.Assert(err, IsNil)
 	config.OutputDirPath, err = ioutil.TempDir("", "dumpling")
-	simpleWriter, err = NewSimpleWriter(config, createExtStore(c, config))
 	c.Assert(err, IsNil)
-	writer = SQLWriter{SimpleWriter: simpleWriter}
+	writer, err = NewSimpleWriter(config, createExtStore(c, config))
+	c.Assert(err, IsNil)
 
 	cases = map[string]string{
 		"000000000-employee-te%25%2Fst.sql": "/*!40101 SET NAMES binary*/;\n" +
@@ -331,7 +327,7 @@ func (s *testWriterSuite) TestWriteTableDataWithStatementSize(c *C) {
 	c.Assert(writer.WriteTableData(ctx, tableIR), IsNil)
 	c.Assert(err, IsNil)
 	for p, expected := range cases {
-		p := path.Join(config.OutputDirPath, p)
+		p = path.Join(config.OutputDirPath, p)
 		_, err = os.Stat(p)
 		c.Assert(err, IsNil)
 		bytes, err := ioutil.ReadFile(p)
