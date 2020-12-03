@@ -95,7 +95,14 @@ func (w *Writer) handleTask(task Task) error {
 	case *TaskViewMeta:
 		return w.WriteViewMeta(t.DatabaseName, t.ViewName, t.CreateTableSQL, t.CreateViewSQL)
 	case *TaskTableData:
-		return w.WriteTableData(t.Meta, t.Data, t.ChunkIndex, t.TotalChunks)
+		err := w.WriteTableData(t.Meta, t.Data, t.ChunkIndex)
+		if err != nil {
+			return err
+		}
+		if t.ChunkIndex+1 == t.TotalChunks {
+			w.finishTableCallBack(task)
+		}
+		return nil
 	default:
 		log.Warn("unsupported writer task type", zap.String("type", fmt.Sprintf("%T", t)))
 		return nil
@@ -137,12 +144,7 @@ func (w *Writer) WriteViewMeta(db, view, createTableSQL, createViewSQL string) e
 	return writeMetaToFile(ctx, db, createViewSQL, w.extStorage, fileNameView+".sql", conf.CompressType)
 }
 
-func (w *Writer) WriteTableData(meta TableMeta, ir TableDataIR, currentChunk, totalChunk int) error {
-	defer func() {
-		if currentChunk == totalChunk {
-			w.finishTableCallBack(meta)
-		}
-	}()
+func (w *Writer) WriteTableData(meta TableMeta, ir TableDataIR, currentChunk int) error {
 	ctx, conf, conn := w.ctx, w.conf, w.conn
 	retryTime := 0
 	var lastErr error

@@ -1,6 +1,10 @@
 package export
 
-type Task interface{}
+import "fmt"
+
+type Task interface {
+	Brief() string
+}
 
 type TaskDatabaseMeta struct {
 	Task
@@ -55,16 +59,29 @@ func NewTaskViewMeta(dbName, tblName, createTableSQL, createViewSQL string) *Tas
 	}
 }
 
-func NewTaskTableData(meta TableMeta, data TableDataIR, totalChunks int) *TaskTableData {
+func NewTaskTableData(meta TableMeta, data TableDataIR, currentChunk, totalChunks int) *TaskTableData {
 	return &TaskTableData{
 		Meta:        meta,
 		Data:        data,
-		ChunkIndex:  0,
+		ChunkIndex:  currentChunk,
 		TotalChunks: totalChunks,
 	}
 }
 
-func (t *TaskTableData) setCurrentChunkIndex(idx int) *TaskTableData {
-	t.ChunkIndex = idx
-	return t
+func (t *TaskDatabaseMeta) Brief() string {
+	return fmt.Sprintf("meta of dababase '%s'", t.DatabaseName)
+}
+
+func (t *TaskTableMeta) Brief() string {
+	return fmt.Sprintf("meta of table '%s'.'%s'", t.DatabaseName, t.TableName)
+}
+
+func (t *TaskViewMeta) Brief() string {
+	return fmt.Sprintf("meta of view '%s'.'%s'", t.DatabaseName, t.ViewName)
+}
+
+func (t *TaskTableData) Brief() string {
+	db, tbl := t.Meta.DatabaseName(), t.Meta.TableName()
+	idx, total := t.ChunkIndex, t.TotalChunks
+	return fmt.Sprintf("data of table '%s'.'%s'(%d/%d)", db, tbl, idx, total)
 }

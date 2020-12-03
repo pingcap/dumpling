@@ -8,11 +8,6 @@ import (
 	"github.com/pingcap/errors"
 )
 
-type Chunk struct {
-	data TableDataIR
-	meta TableMeta
-}
-
 // TableDataIR is table data intermediate representation.
 // A table may be split into multiple TableDataIRs.
 type TableDataIR interface {

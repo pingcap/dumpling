@@ -134,15 +134,6 @@ func (d *Dumper) Dump() (err error) {
 		}
 	}
 
-	if conf.TransactionalConsistency {
-		if conf.Consistency == consistencyTypeFlush || conf.Consistency == consistencyTypeLock {
-			log.Info("All the dumping transactions have started. Start to unlock tables")
-		}
-		if err = conCtrl.TearDown(ctx); err != nil {
-			return err
-		}
-	}
-
 	failpoint.Inject("ConsistencyCheck", nil)
 	rebuildConn := func(conn *sql.Conn) (*sql.Conn, error) {
 		// make sure that the lock connection is still alive
@@ -174,6 +165,14 @@ func (d *Dumper) Dump() (err error) {
 		return err
 	}
 	defer tearDownWriters()
+	if conf.TransactionalConsistency {
+		if conf.Consistency == consistencyTypeFlush || conf.Consistency == consistencyTypeLock {
+			log.Info("All the dumping transactions have started. Start to unlock tables")
+		}
+		if err = conCtrl.TearDown(ctx); err != nil {
+			return err
+		}
+	}
 
 	summary.SetLogCollector(summary.NewLogCollector(log.Info))
 	summary.SetUnit(summary.BackupUnit)
@@ -285,7 +284,7 @@ func (d *Dumper) sequentialDumpTable(conn *sql.Conn, meta TableMeta, taskChan ch
 	if err != nil {
 		return err
 	}
-	task := NewTaskTableData(meta, tableIR, 1)
+	task := NewTaskTableData(meta, tableIR, 0, 1)
 	sendTaskToChan(d.ctx, task, taskChan)
 	return nil
 }
@@ -358,12 +357,13 @@ func (d *Dumper) concurrentDumpTable(conn *sql.Conn, meta TableMeta, taskChan ch
 		if len(nullValueCondition) > 0 {
 			nullValueCondition = ""
 		}
-		task := NewTaskTableData(meta, newTableData(query, selectLen), int(totalChunks)).setCurrentChunkIndex(chunkIndex)
+		task := NewTaskTableData(meta, newTableData(query, selectLen), chunkIndex, int(totalChunks))
 		ctxDone := sendTaskToChan(ctx, task, taskChan)
 		if ctxDone {
 			break
 		}
 		cutoff = nextCutOff
+		chunkIndex++
 	}
 	return nil
 }
@@ -374,6 +374,8 @@ func sendTaskToChan(ctx context.Context, task Task, taskChan chan<- Task) (ctxDo
 		case <-ctx.Done():
 			return true
 		case taskChan <- task:
+			log.Debug("send task to writer",
+				zap.String("task", task.Brief()))
 			return false
 		default:
 			sleepTime := 1 * time.Second
@@ -440,7 +442,7 @@ func (d *Dumper) concurrentDumpTiDBTables(conn *sql.Conn, meta TableMeta, taskCh
 
 	for i, w := range where {
 		query := buildSelectQuery(db, tbl, selectField, buildWhereCondition(conf, w), orderByClause)
-		task := NewTaskTableData(meta, newTableData(query, selectLen), len(where)).setCurrentChunkIndex(i)
+		task := NewTaskTableData(meta, newTableData(query, selectLen), i, len(where))
 		ctxDone := sendTaskToChan(ctx, task, taskChan)
 		if ctxDone {
 			break
@@ -589,7 +591,7 @@ func (d *Dumper) dumpSql(metaConn *sql.Conn, taskChan chan<- Task) error {
 		return err
 	}
 
-	task := NewTaskTableData(meta, tableIR, 1)
+	task := NewTaskTableData(meta, tableIR, 0, 1)
 	sendTaskToChan(ctx, task, taskChan)
 	return nil
 }
