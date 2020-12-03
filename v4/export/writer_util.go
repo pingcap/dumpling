@@ -207,10 +207,10 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, cfg 
 			}
 			counter++
 			wp.AddFileSize(uint64(bf.Len()-lastBfSize) + 2) // 2 is for ",\n" and ";\n"
-			if _, _err_ := failpoint.Eval(_curpkg_("ChaosBrokenMySQLConn")); _err_ == nil {
+			failpoint.Inject("ChaosBrokenMySQLConn", func(_ failpoint.Value) {
 				tblIR.Close()
-				return errors.New("connection is closed")
-			}
+				failpoint.Return(errors.New("connection is closed"))
+			})
 
 			fileRowIter.Next()
 			shouldSwitch := wp.ShouldSwitchStatement()

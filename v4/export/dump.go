@@ -160,7 +160,7 @@ func (d *Dumper) Dump() (dumpErr error) {
 		}
 	}
 
-	failpoint.Eval(_curpkg_("ConsistencyCheck"))
+	failpoint.Inject("ConsistencyCheck", nil)
 
 	simpleWriter, err := NewSimpleWriter(conf, d.extStore)
 	if err != nil {
