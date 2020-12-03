@@ -456,7 +456,10 @@ func selectTiDBTableSample(conn *sql.Conn, dbName, tableName string) (pkFields [
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}
-	hasImplicitRowID := pkFields == nil
+	hasImplicitRowID, err := SelectTiDBRowID(conn, dbName, tableName)
+	if err != nil {
+		return nil, nil, errors.Trace(err)
+	}
 	if hasImplicitRowID {
 		pkFields, pkColTypes = []string{"_tidb_rowid"}, []string{"BIGINT"}
 	}
