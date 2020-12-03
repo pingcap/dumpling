@@ -5,16 +5,17 @@ package export
 import (
 	"context"
 	"database/sql/driver"
-	"errors"
 	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/pingcap/br/pkg/storage"
 	. "github.com/pingcap/check"
+	"github.com/pingcap/errors"
 )
 
 func TestT(t *testing.T) {
+	initColTypeRowReceiverMap()
 	TestingT(t)
 }
 

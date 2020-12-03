@@ -11,9 +11,11 @@ LDFLAGS += -X "github.com/pingcap/dumpling/v4/cli.GoVersion=$(shell go version)"
 
 GO = go
 GOLDFLAGS = -ldflags '$(LDFLAGS)'
+GOTEST  := CGO_ENABLED=1 GO111MODULE=on go test -ldflags '$(LDFLAGS)'
 
 ifeq ("$(WITH_RACE)", "1")
 	GOLDFLAGS += -race
+	RACEFLAG = -race
 endif
 
 all: build check test
@@ -24,7 +26,7 @@ bin/%: cmd/%/main.go $(wildcard v4/**/*.go)
 	$(GO) build $(GOLDFLAGS) -tags codes -o $@ $<
 
 test: failpoint-enable
-	$(GO) list ./... | xargs $(GO) test $(GOLDFLAGS) -coverprofile=coverage.txt -covermode=atomic  ||{ $(FAILPOINT_DISABLE); exit 1; }
+	$(GOTEST) $(RACEFLAG) -tags leak ./... || ( make failpoint-disable && exit 1 )
 	@make failpoint-disable
 
 integration_test: failpoint-enable bin/dumpling
@@ -39,7 +41,7 @@ failpoint-enable: tools
 	tools/bin/failpoint-ctl enable
 
 failpoint-disable: tools
-	tools/bin/failpoint-ctl enable
+	tools/bin/failpoint-ctl disable
 
 check:
 	@# Tidy first to avoid go.mod being affected by static and lint
