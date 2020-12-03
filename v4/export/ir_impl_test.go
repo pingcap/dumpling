@@ -115,6 +115,7 @@ func (s *testIRImplSuite) TestChunkRowIter(c *C) {
 	c.Assert(sqlRowIter.HasNext(), IsTrue)
 	c.Assert(wp.ShouldSwitchFile(), IsTrue)
 	c.Assert(wp.ShouldSwitchStatement(), IsTrue)
+	rows.Close()
 	c.Assert(sqlRowIter.Decode(res), NotNil)
 	sqlRowIter.Next()
 }

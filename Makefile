@@ -31,7 +31,7 @@ test: failpoint-enable
 
 integration_test: failpoint-enable bin/dumpling
 	@make failpoint-disable
-	./tests/run.sh ||{ $(FAILPOINT_DISABLE); exit 1; }
+	./tests/run.sh
 
 tools:
 	@echo "install tools..."
