@@ -39,24 +39,21 @@ func (s *testWriterSuite) newWriter(conf *Config, c *C) *Writer {
 	c.Assert(err, IsNil)
 	extStore, err := storage.Create(context.Background(), b, false)
 	c.Assert(err, IsNil)
-	return NewWriter(conf, s.pool, extStore)
-}
-
-func createExtStore(c *C, conf *Config) storage.ExternalStorage {
-	d := &Dumper{conf: conf}
-	c.Assert(createExternalStore(d), IsNil)
-	return d.extStore
+	db, _, err := sqlmock.New()
+	c.Assert(err, IsNil)
+	conn, err := db.Conn(context.Background())
+	c.Assert(err, IsNil)
+	return NewWriter(0, context.Background(), conf, conn, extStore)
 }
 
 func (s *testWriterSuite) TestWriteDatabaseMeta(c *C) {
 	dir := c.MkDir()
-	ctx := context.Background()
 
 	config := DefaultConfig()
 	config.OutputDirPath = dir
 
 	writer := s.newWriter(config, c)
-	err := writer.WriteDatabaseMeta(ctx, "test", "CREATE DATABASE `test`")
+	err := writer.WriteDatabaseMeta("test", "CREATE DATABASE `test`")
 	c.Assert(err, IsNil)
 	p := path.Join(dir, "test-schema-create.sql")
 	_, err = os.Stat(p)
@@ -68,13 +65,12 @@ func (s *testWriterSuite) TestWriteDatabaseMeta(c *C) {
 
 func (s *testWriterSuite) TestWriteTableMeta(c *C) {
 	dir := c.MkDir()
-	ctx := context.Background()
 
 	config := DefaultConfig()
 	config.OutputDirPath = dir
 
 	writer := s.newWriter(config, c)
-	err := writer.WriteTableMeta(ctx, "test", "t", "CREATE TABLE t (a INT)")
+	err := writer.WriteTableMeta("test", "t", "CREATE TABLE t (a INT)")
 	c.Assert(err, IsNil)
 	p := path.Join(dir, "test.t-schema.sql")
 	_, err = os.Stat(p)
@@ -86,7 +82,6 @@ func (s *testWriterSuite) TestWriteTableMeta(c *C) {
 
 func (s *testWriterSuite) TestWriteViewMeta(c *C) {
 	dir := c.MkDir()
-	ctx := context.Background()
 
 	config := DefaultConfig()
 	config.OutputDirPath = dir
@@ -95,7 +90,7 @@ func (s *testWriterSuite) TestWriteViewMeta(c *C) {
 	specCmt := "/*!40101 SET NAMES binary*/;\n"
 	createTableSQL := "CREATE TABLE `v`(\n`a` int\n)ENGINE=MyISAM;\n"
 	createViewSQL := "DROP TABLE IF EXISTS `v`;\nDROP VIEW IF EXISTS `v`;\nSET @PREV_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT;\nSET @PREV_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS;\nSET @PREV_COLLATION_CONNECTION=@@COLLATION_CONNECTION;\nSET character_set_client = utf8;\nSET character_set_results = utf8;\nSET collation_connection = utf8_general_ci;\nCREATE ALGORITHM=UNDEFINED DEFINER=`root`@`localhost` SQL SECURITY DEFINER VIEW `v` (`a`) AS SELECT `t`.`a` AS `a` FROM `test`.`t`;\nSET character_set_client = @PREV_CHARACTER_SET_CLIENT;\nSET character_set_results = @PREV_CHARACTER_SET_RESULTS;\nSET collation_connection = @PREV_COLLATION_CONNECTION;\n"
-	err := writer.WriteViewMeta(ctx, "test", "v", createTableSQL, createViewSQL)
+	err := writer.WriteViewMeta("test", "v", createTableSQL, createViewSQL)
 	c.Assert(err, IsNil)
 
 	p := path.Join(dir, "test.v-schema.sql")
@@ -116,8 +111,6 @@ func (s *testWriterSuite) TestWriteViewMeta(c *C) {
 func (s *testWriterSuite) TestWriteTableData(c *C) {
 	dir := c.MkDir()
 
-	ctx := context.Background()
-
 	config := DefaultConfig()
 	config.OutputDirPath = dir
 
@@ -135,7 +128,7 @@ func (s *testWriterSuite) TestWriteTableData(c *C) {
 		"/*!40014 SET FOREIGN_KEY_CHECKS=0*/;",
 	}
 	tableIR := newMockTableIR("test", "employee", data, specCmts, colTypes)
-	err := writer.WriteTableData(ctx, tableIR, makeOneTimeChan(tableIR))
+	err := writer.WriteTableData(tableIR, tableIR, 0, 1)
 	c.Assert(err, IsNil)
 
 	p := path.Join(dir, "test.employee.000000000.sql")
@@ -156,8 +149,6 @@ func (s *testWriterSuite) TestWriteTableData(c *C) {
 
 func (s *testWriterSuite) TestWriteTableDataWithFileSize(c *C) {
 	dir := c.MkDir()
-
-	ctx := context.Background()
 
 	config := DefaultConfig()
 	config.OutputDirPath = dir
@@ -180,7 +171,7 @@ func (s *testWriterSuite) TestWriteTableDataWithFileSize(c *C) {
 	}
 	colTypes := []string{"INT", "SET", "VARCHAR", "VARCHAR", "TEXT"}
 	tableIR := newMockTableIR("test", "employee", data, specCmts, colTypes)
-	err := writer.WriteTableData(ctx, tableIR, makeOneTimeChan(tableIR))
+	err := writer.WriteTableData(tableIR, tableIR, 0, 0)
 	c.Assert(err, IsNil)
 
 	cases := map[string]string{
@@ -209,8 +200,6 @@ func (s *testWriterSuite) TestWriteTableDataWithFileSize(c *C) {
 func (s *testWriterSuite) TestWriteTableDataWithFileSizeAndRows(c *C) {
 	dir := c.MkDir()
 
-	ctx := context.Background()
-
 	config := DefaultConfig()
 	config.OutputDirPath = dir
 	config.FileSize = 50
@@ -233,7 +222,7 @@ func (s *testWriterSuite) TestWriteTableDataWithFileSizeAndRows(c *C) {
 	}
 	colTypes := []string{"INT", "SET", "VARCHAR", "VARCHAR", "TEXT"}
 	tableIR := newMockTableIR("test", "employee", data, specCmts, colTypes)
-	err := writer.WriteTableData(ctx, tableIR, makeOneTimeChan(tableIR))
+	err := writer.WriteTableData(tableIR, tableIR, 0, 1)
 	c.Assert(err, IsNil)
 
 	cases := map[string]string{
@@ -262,8 +251,6 @@ func (s *testWriterSuite) TestWriteTableDataWithFileSizeAndRows(c *C) {
 func (s *testWriterSuite) TestWriteTableDataWithStatementSize(c *C) {
 	dir := c.MkDir()
 
-	ctx := context.Background()
-
 	config := DefaultConfig()
 	config.OutputDirPath = dir
 	config.StatementSize = 50
@@ -286,7 +273,7 @@ func (s *testWriterSuite) TestWriteTableDataWithStatementSize(c *C) {
 		"/*!40014 SET FOREIGN_KEY_CHECKS=0*/;",
 	}
 	tableIR := newMockTableIR("te%/st", "employee", data, specCmts, colTypes)
-	err = writer.WriteTableData(ctx, tableIR, makeOneTimeChan(tableIR))
+	err = writer.WriteTableData(tableIR, tableIR, 0, 1)
 	c.Assert(err, IsNil)
 
 	// only with statement size
@@ -339,7 +326,7 @@ func (s *testWriterSuite) TestWriteTableDataWithStatementSize(c *C) {
 	}
 
 	tableIR = newMockTableIR("te%/st", "employee", data, specCmts, colTypes)
-	c.Assert(writer.WriteTableData(ctx, tableIR, makeOneTimeChan(tableIR)), IsNil)
+	c.Assert(writer.WriteTableData(tableIR, tableIR, 0, 1), IsNil)
 	c.Assert(err, IsNil)
 	for p, expected := range cases {
 		p := path.Join(config.OutputDirPath, p)
