@@ -426,7 +426,7 @@ func (d *Dumper) concurrentDumpTiDBTables(conn *sql.Conn, meta TableMeta, taskCh
 	ctx, conf := d.ctx, d.conf
 	db, tbl := meta.DatabaseName(), meta.TableName()
 
-	handleColNames, handleVals, err := selectTiDBTableSample(db, tbl, conn, meta)
+	handleColNames, handleVals, err := selectTiDBTableSample(conn, db, tbl)
 	if err != nil {
 		return err
 	}
@@ -451,20 +451,23 @@ func (d *Dumper) concurrentDumpTiDBTables(conn *sql.Conn, meta TableMeta, taskCh
 	return nil
 }
 
-func selectTiDBTableSample(dbName, tableName string, db *sql.Conn, meta TableMeta) (handleCols []string, pkVals []string, err error) {
-	pkFields, err := GetPrimaryKeyColumns(db, dbName, tableName)
+func selectTiDBTableSample(conn *sql.Conn, dbName, tableName string) (handleCols []string, pkVals []string, err error) {
+	pkFields, pkColTypes, err := GetPrimaryKeyAndColumnTypes(conn, dbName, tableName)
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}
+	hasImplicitRowID := pkFields == nil
+	if hasImplicitRowID {
+		pkFields, pkColTypes = []string{"_tidb_rowid"}, []string{"BIGINT"}
+	}
 	query := buildTiDBTableSampleQuery(pkFields, dbName, tableName)
-	handleCols, handleColTypes := findHandleColsAndColTypes(pkFields, meta)
-	rows, err := db.QueryContext(context.Background(), query)
+	rows, err := conn.QueryContext(context.Background(), query)
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}
 	iter := newRowIter(rows, len(handleCols))
 	defer iter.Close()
-	rowRec := MakeRowReceiver(handleColTypes)
+	rowRec := MakeRowReceiver(pkColTypes)
 	buf := new(bytes.Buffer)
 	for iter.HasNext() {
 		err = iter.Decode(rowRec)
@@ -480,11 +483,6 @@ func selectTiDBTableSample(dbName, tableName string, db *sql.Conn, meta TableMet
 }
 
 func buildTiDBTableSampleQuery(pkFields []string, dbName, tblName string) string {
-	hasImplicitRowID := pkFields == nil
-	if hasImplicitRowID {
-		template := "SELECT `_tidb_rowid` FROM `%s`.`%s` TABLESAMPLE REGIONS() ORDER BY `_tidb_rowid`"
-		return fmt.Sprintf(template, escapeString(dbName), escapeString(tblName))
-	}
 	template := "SELECT %s FROM `%s`.`%s` TABLESAMPLE REGIONS() ORDER BY %s"
 	quotaPk := make([]string, len(pkFields))
 	for i, s := range pkFields {
@@ -492,24 +490,6 @@ func buildTiDBTableSampleQuery(pkFields []string, dbName, tblName string) string
 	}
 	pks := strings.Join(quotaPk, ",")
 	return fmt.Sprintf(template, pks, escapeString(dbName), escapeString(tblName), pks)
-}
-
-func findHandleColsAndColTypes(pkFields []string, meta TableMeta) (handleCols []string, colTypes []string) {
-	hasImplicitRowID := pkFields == nil
-	if hasImplicitRowID {
-		return []string{"_tidb_rowid"}, []string{"BIGINT"}
-	}
-	// Find primary key column types in meta.
-	colTypes = make([]string, len(pkFields))
-	for i, pkColName := range pkFields {
-		for j, colName := range meta.ColumnNames() {
-			if pkColName == colName {
-				colTypes[i] = meta.ColumnTypes()[j]
-				break
-			}
-		}
-	}
-	return pkFields, colTypes
 }
 
 func prepareTableListToDump(conf *Config, pool *sql.Conn) error {

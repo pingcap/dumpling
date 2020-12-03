@@ -293,6 +293,32 @@ func GetColumnTypes(db *sql.Conn, fields, database, table string) ([]*sql.Column
 	return rows.ColumnTypes()
 }
 
+func GetPrimaryKeyAndColumnTypes(conn *sql.Conn, database, table string) ([]string, []string, error) {
+	query :=
+		`SELECT c.COLUMN_NAME, DATA_TYPE FROM
+INFORMATION_SCHEMA.COLUMNS c INNER JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE k ON
+c.column_name = k.column_name and
+c.table_schema = k.table_schema and
+c.table_name = k.table_name and
+c.table_schema = ? and
+c.table_name = ?
+WHERE COLUMN_KEY = 'PRI'
+ORDER BY k.ORDINAL_POSITION;`
+	var colNames, colTypes []string
+	if err := simpleQueryWithArgs(conn, func(rows *sql.Rows) error {
+		var colName, colType string
+		if err := rows.Scan(&colName, &colType); err != nil {
+			return errors.Trace(err)
+		}
+		colNames = append(colNames, colName)
+		colTypes = append(colTypes, strings.ToUpper(colType))
+		return nil
+	}, query, database, table); err != nil {
+		return nil, nil, errors.Annotatef(err, "sql: %s", query)
+	}
+	return colNames, colTypes, nil
+}
+
 func GetPrimaryKeyColumns(db *sql.Conn, database, table string) ([]string, error) {
 	priKeyColsQuery := "SELECT column_name FROM information_schema.KEY_COLUMN_USAGE " +
 		"WHERE table_schema = ? AND table_name = ? AND CONSTRAINT_NAME = 'PRIMARY' order by ORDINAL_POSITION;"
