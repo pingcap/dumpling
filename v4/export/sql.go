@@ -3,6 +3,7 @@
 package export
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"fmt"
@@ -567,6 +568,33 @@ func buildSelectField(db *sql.Conn, dbName, tableName string, completeInsert boo
 		return strings.Join(availableFields, ","), nil
 	}
 	return "*", nil
+}
+
+func buildLockTablesSQL(allTables DatabaseTables, blockList map[string]map[string]interface{}) string {
+	// ,``.`` READ has 11 bytes, "LOCK TABLE" has 10 bytes
+	estimatedCap := len(allTables)*11 + 10
+	s := bytes.NewBuffer(make([]byte, 0, estimatedCap))
+	n := false
+	for dbName, tables := range allTables {
+		escapedDBName := escapeString(dbName)
+		for _, table := range tables {
+			if table.Type != TableTypeBase {
+				continue
+			}
+			if blockTable, ok := blockList[dbName]; ok {
+				if _, ok := blockTable[table.Name]; ok {
+					continue
+				}
+			}
+			if !n {
+				fmt.Fprintf(s, "LOCK TABLE `%s`.`%s` READ", escapedDBName, escapeString(table.Name))
+				n = true
+			} else {
+				fmt.Fprintf(s, ",`%s`.`%s` READ", escapedDBName, escapeString(table.Name))
+			}
+		}
+	}
+	return s.String()
 }
 
 type oneStrColumnTable struct {

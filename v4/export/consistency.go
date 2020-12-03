@@ -6,6 +6,8 @@ import (
 	"context"
 	"database/sql"
 
+	"github.com/pingcap/br/pkg/utils"
+
 	"github.com/pingcap/errors"
 )
 
@@ -101,15 +103,12 @@ type ConsistencyLockDumpingTables struct {
 }
 
 func (c *ConsistencyLockDumpingTables) Setup(ctx context.Context) error {
-	for dbName, tables := range c.allTables {
-		for _, table := range tables {
-			err := LockTables(ctx, c.conn, dbName, table.Name)
-			if err != nil {
-				return err
-			}
-		}
-	}
-	return nil
+	blockList := make(map[string]map[string]interface{})
+	return utils.WithRetry(ctx, func() error {
+		lockTablesSQL := buildLockTablesSQL(c.allTables, blockList)
+		_, err := c.conn.ExecContext(ctx, lockTablesSQL)
+		return err
+	}, newLockTablesBackoffer(blockList))
 }
 
 func (c *ConsistencyLockDumpingTables) TearDown(ctx context.Context) error {
