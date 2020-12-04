@@ -162,8 +162,8 @@ func (d *Dumper) Dump() (err error) {
 
 	taskChan := make(chan Task, defaultDumpThreads)
 	taskChannelCapacity.With(conf.Labels).Add(defaultDumpThreads)
-	var wg errgroup.Group
-	writers, tearDownWriters, err := d.startWriters(&wg, taskChan, rebuildConn)
+	wg, writingCtx := errgroup.WithContext(ctx)
+	writers, tearDownWriters, err := d.startWriters(writingCtx, wg, taskChan, rebuildConn)
 	if err != nil {
 		return err
 	}
@@ -203,9 +203,9 @@ func (d *Dumper) Dump() (err error) {
 	return nil
 }
 
-func (d *Dumper) startWriters(wg *errgroup.Group, taskChan <-chan Task,
+func (d *Dumper) startWriters(ctx context.Context, wg *errgroup.Group, taskChan <-chan Task,
 	rebuildConnFn func(*sql.Conn) (*sql.Conn, error)) ([]*Writer, func(), error) {
-	ctx, conf, pool := d.ctx, d.conf, d.dbHandle
+	conf, pool := d.conf, d.dbHandle
 	writers := make([]*Writer, conf.Threads)
 	for i := 0; i < conf.Threads; i++ {
 		conn, err := createConnWithConsistency(ctx, pool)
