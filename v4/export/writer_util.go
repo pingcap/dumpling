@@ -294,10 +294,11 @@ func WriteInsertInCsv(pCtx context.Context, cfg *Config, meta TableMeta, tblIR T
 		counter         uint64
 		lastCounter     uint64
 		escapeBackSlash = cfg.EscapeBackslash
+		selectedFields  = meta.SelectedField()
 		err             error
 	)
 
-	if !cfg.NoHeader && len(meta.ColumnNames()) != 0 && meta.SelectedField() != "" {
+	if !cfg.NoHeader && len(meta.ColumnNames()) != 0 && selectedFields != "" {
 		for i, col := range meta.ColumnNames() {
 			bf.Write(opt.delimiter)
 			escape([]byte(col), bf, getEscapeQuotation(escapeBackSlash, opt.delimiter))
@@ -312,7 +313,7 @@ func WriteInsertInCsv(pCtx context.Context, cfg *Config, meta TableMeta, tblIR T
 
 	for fileRowIter.HasNext() {
 		lastBfSize := bf.Len()
-		if meta.SelectedField() != "" {
+		if selectedFields != "" {
 			if err = fileRowIter.Decode(row); err != nil {
 				log.Error("scanning from sql.Row failed", zap.Error(err))
 				return err
