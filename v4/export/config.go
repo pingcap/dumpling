@@ -641,7 +641,12 @@ const (
 	ServerTypeAll
 )
 
-var serverTypeString = []string{"Unknown", "MySQL", "MariaDB", "TiDB"}
+var serverTypeString = []string{
+	ServerTypeUnknown: "Unknown",
+	ServerTypeMySQL:   "MySQL",
+	ServerTypeMariaDB: "MariaDB",
+	ServerTypeTiDB:    "TiDB",
+}
 
 func adjustConfig(conf *Config, fns ...func(*Config) error) error {
 	for _, f := range fns {

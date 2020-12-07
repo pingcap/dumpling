@@ -72,7 +72,9 @@ func main() {
 	if err != nil {
 		log.Error("dump failed error stack info", zap.Error(err))
 		fmt.Printf("\ndump failed: %s\n", err.Error())
+		dumper.Close()
 		os.Exit(1)
 	}
+	dumper.Close()
 	log.Info("dump data successfully, dumpling will exit now")
 }

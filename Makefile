@@ -115,4 +115,4 @@ tidy:
 	cd tools && GO111MODULE=on go mod tidy
 	git diff --exit-code go.mod go.sum tools/go.mod tools/go.sum
 
-.PHONY: tools
+.PHONY: build test integration_test tools failpoint-enable failpoint-disable check static lint tidy
