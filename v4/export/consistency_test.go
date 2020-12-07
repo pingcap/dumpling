@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/go-sql-driver/mysql"
 	. "github.com/pingcap/check"
 )
 
@@ -67,6 +68,32 @@ func (s *testConsistencySuite) TestConsistencyController(c *C) {
 	mock.ExpectExec("UNLOCK TABLES").WillReturnResult(resultOk)
 	ctrl, _ = NewConsistencyController(ctx, conf, db)
 	_, ok = ctrl.(*ConsistencyLockDumpingTables)
+	c.Assert(ok, IsTrue)
+	s.assertLifetimeErrNil(ctx, ctrl, c)
+	if err = mock.ExpectationsWereMet(); err != nil {
+		c.Fatalf(err.Error())
+	}
+}
+
+func (s *testConsistencySuite) TestConsistencyLockControllerRetry(c *C) {
+	db, mock, err := sqlmock.New()
+	c.Assert(err, IsNil)
+	defer db.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	conf := DefaultConfig()
+	resultOk := sqlmock.NewResult(0, 1)
+
+	conf.Consistency = consistencyTypeLock
+	conf.Tables = NewDatabaseTables().
+		AppendTables("db1", "t1", "t2", "t3").
+		AppendViews("db2", "t4")
+	mock.ExpectExec("LOCK TABLES `db1`.`t1` READ,`db1`.`t2` READ,`db1`.`t3` READ").
+		WillReturnError(&mysql.MySQLError{Number: ErrNoSuchTable, Message: "Table 'db1.t3' doesn't exist"})
+	mock.ExpectExec("LOCK TABLES `db1`.`t1` READ,`db1`.`t2` READ").WillReturnResult(resultOk)
+	mock.ExpectExec("UNLOCK TABLES").WillReturnResult(resultOk)
+	ctrl, _ := NewConsistencyController(ctx, conf, db)
+	_, ok := ctrl.(*ConsistencyLockDumpingTables)
 	c.Assert(ok, IsTrue)
 	s.assertLifetimeErrNil(ctx, ctrl, c)
 	if err = mock.ExpectationsWereMet(); err != nil {
