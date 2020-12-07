@@ -100,7 +100,7 @@ static: tools
 	# pingcap/errors APIs are mixed with multiple patterns 'pkg/errors',
 	# 'juju/errors' and 'pingcap/parser'. To avoid confusion and mistake,
 	# we only allow a subset of APIs, that's "Normalize|Annotate|Trace|Cause".
-    # TODO: delete Errorf and New after we support standard code
+	@# TODO: delete Errorf and New after we support standard code.
 	@# TODO: allow more APIs when we need to support "workaound".
 	grep -Rn --exclude="*_test.go" -E "(\t| )errors\.[A-Z]" cmd v4 | \
 		grep -vE "Normalize|Annotate|Trace|Cause|Errorf|New" 2>&1 | $(CHECKER)
