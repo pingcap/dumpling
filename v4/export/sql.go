@@ -186,18 +186,7 @@ func SelectVersion(db *sql.DB) (string, error) {
 
 // SelectAllFromTable dumps data serialized from a specified table
 func SelectAllFromTable(conf *Config, db *sql.Conn, database, table string) (TableDataIR, error) {
-	selectedField, err := buildSelectField(db, database, table, conf.CompleteInsert)
-	if err != nil {
-		return nil, err
-	}
-
-	var colTypes []*sql.ColumnType
-	// If all columns are generated
-	if selectedField == "" {
-		colTypes, err = GetColumnTypes(db, "*", database, table)
-	} else {
-		colTypes, err = GetColumnTypes(db, selectedField, database, table)
-	}
+	selectedField, selectLen, err := buildSelectField(db, database, table, conf.CompleteInsert)
 	if err != nil {
 		return nil, err
 	}
@@ -206,64 +195,55 @@ func SelectAllFromTable(conf *Config, db *sql.Conn, database, table string) (Tab
 	if err != nil {
 		return nil, err
 	}
-
-	queryField := selectedField
-	// If all columns are generated
-	if queryField == "" {
-		queryField = "''"
-	}
-	query := buildSelectQuery(database, table, queryField, buildWhereCondition(conf, ""), orderByClause)
+	query := buildSelectQuery(database, table, selectedField, buildWhereCondition(conf, ""), orderByClause)
 
 	return &tableData{
-		database:        database,
-		table:           table,
-		query:           query,
-		colTypes:        colTypes,
-		selectedField:   selectedField,
-		escapeBackslash: conf.EscapeBackslash,
-		specCmts: []string{
-			"/*!40101 SET NAMES binary*/;",
-		},
+		query:  query,
+		colLen: selectLen,
 	}, nil
 }
 
-// SelectFromSQL dumps data from a SQL
-func SelectFromSQL(conf *Config, db *sql.Conn) (TableDataIR, error) {
+func SelectFromSql(conf *Config, conn *sql.Conn) (TableMeta, TableDataIR, error) {
 	log.Info("dump data from sql", zap.String("sql", conf.SQL))
-	rows, err := db.QueryContext(context.Background(), conf.SQL)
+	rows, err := conn.QueryContext(context.Background(), conf.SQL)
 	if err != nil {
-		return nil, errors.Annotatef(err, "sql: %s", conf.SQL)
+		return nil, nil, errors.Annotatef(err, "sql: %s", conf.SQL)
 	}
+	defer rows.Close()
 	colTypes, err := rows.ColumnTypes()
 	if err != nil {
-		return nil, errors.Annotatef(err, "sql: %s", conf.SQL)
+		return nil, nil, errors.Annotatef(err, "sql: %s", conf.SQL)
 	}
 	cols, err := rows.Columns()
 	if err != nil {
-		return nil, errors.Annotatef(err, "sql: %s", conf.SQL)
-	}
-	if err = rows.Err(); err != nil {
-		return nil, errors.Annotatef(err, "sql: %s", conf.SQL)
+		return nil, nil, errors.Annotatef(err, "sql: %s", conf.SQL)
 	}
 	for i := range cols {
 		cols[i] = wrapBackTicks(cols[i])
 	}
-	return &tableData{
-		database:        "",
-		table:           "",
-		rows:            rows,
-		colTypes:        colTypes,
-		selectedField:   strings.Join(cols, ","),
-		escapeBackslash: conf.EscapeBackslash,
+	meta := &tableMeta{
+		colTypes:      colTypes,
+		selectedField: strings.Join(cols, ","),
 		specCmts: []string{
 			"/*!40101 SET NAMES binary*/;",
 		},
-	}, nil
+	}
+	data := &tableData{
+		query:  conf.SQL,
+		colLen: len(cols),
+	}
+
+	return meta, data, nil
 }
 
 func buildSelectQuery(database, table string, fields string, where string, orderByClause string) string {
 	var query strings.Builder
 	query.WriteString("SELECT ")
+	if fields == "" {
+		// If all of the columns are generated,
+		// we need to make sure the query is valid.
+		fields = "''"
+	}
 	query.WriteString(fields)
 	query.WriteString(" FROM `")
 	query.WriteString(escapeString(database))
@@ -294,23 +274,14 @@ func buildOrderByClause(conf *Config, db *sql.Conn, database, table string) (str
 			return "", errors.Trace(err)
 		}
 		if ok {
-			return "ORDER BY _tidb_rowid", nil
+			return "ORDER BY `_tidb_rowid`", nil
 		}
 	}
 	cols, err := GetPrimaryKeyColumns(db, database, table)
 	if err != nil {
 		return "", errors.Trace(err)
 	}
-	tableContainsPriKey := len(cols) != 0
-	if tableContainsPriKey {
-		separator := ", "
-		quotaCols := make([]string, len(cols))
-		for i, col := range cols {
-			quotaCols[i] = fmt.Sprintf("`%s`", escapeString(col))
-		}
-		return fmt.Sprintf("ORDER BY %s", strings.Join(quotaCols, separator)), nil
-	}
-	return "", nil
+	return buildOrderByClauseString(cols), nil
 }
 
 // SelectTiDBRowID checks whether this table has _tidb_rowid column
@@ -342,7 +313,34 @@ func GetColumnTypes(db *sql.Conn, fields, database, table string) ([]*sql.Column
 	return rows.ColumnTypes()
 }
 
-// GetPrimaryKeyColumns gets all primary columns in ordinal order
+// GetPrimaryKeyAndColumnTypes gets all primary columns and their types in ordinal order
+func GetPrimaryKeyAndColumnTypes(conn *sql.Conn, database, table string) ([]string, []string, error) {
+	query :=
+		`SELECT c.COLUMN_NAME, DATA_TYPE FROM
+INFORMATION_SCHEMA.COLUMNS c INNER JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE k ON
+c.column_name = k.column_name and
+c.table_schema = k.table_schema and
+c.table_name = k.table_name and
+c.table_schema = ? and
+c.table_name = ?
+WHERE COLUMN_KEY = 'PRI'
+ORDER BY k.ORDINAL_POSITION;`
+	var colNames, colTypes []string
+	if err := simpleQueryWithArgs(conn, func(rows *sql.Rows) error {
+		var colName, colType string
+		if err := rows.Scan(&colName, &colType); err != nil {
+			return errors.Trace(err)
+		}
+		colNames = append(colNames, colName)
+		colTypes = append(colTypes, strings.ToUpper(colType))
+		return nil
+	}, query, database, table); err != nil {
+		return nil, nil, errors.Annotatef(err, "sql: %s", query)
+	}
+	return colNames, colTypes, nil
+}
+
+// GetPrimaryKeyAndColumns gets all primary columns in ordinal order
 func GetPrimaryKeyColumns(db *sql.Conn, database, table string) ([]string, error) {
 	priKeyColsQuery := "SELECT column_name FROM information_schema.KEY_COLUMN_USAGE " +
 		"WHERE table_schema = ? AND table_name = ? AND CONSTRAINT_NAME = 'PRIMARY' order by ORDINAL_POSITION;"
@@ -569,11 +567,13 @@ func createConnWithConsistency(ctx context.Context, db *sql.DB) (*sql.Conn, erro
 	return conn, nil
 }
 
-func buildSelectField(db *sql.Conn, dbName, tableName string, completeInsert bool) (string, error) { // revive:disable-line:flag-parameter
+// buildSelectField returns the selecting fields' string(joined by comma(`,`)),
+// and the number of writable fields.
+func buildSelectField(db *sql.Conn, dbName, tableName string, completeInsert bool) (string, int, error) {
 	query := `SELECT COLUMN_NAME,EXTRA FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=? AND TABLE_NAME=? ORDER BY ORDINAL_POSITION;`
 	rows, err := db.QueryContext(context.Background(), query, dbName, tableName)
 	if err != nil {
-		return "", errors.Annotatef(err, "sql: %s", query)
+		return "", 0, errors.Annotatef(err, "sql: %s", query)
 	}
 	defer rows.Close()
 	availableFields := make([]string, 0)
@@ -584,7 +584,7 @@ func buildSelectField(db *sql.Conn, dbName, tableName string, completeInsert boo
 	for rows.Next() {
 		err = rows.Scan(&fieldName, &extra)
 		if err != nil {
-			return "", errors.Annotatef(err, "sql: %s", query)
+			return "", 0, errors.Annotatef(err, "sql: %s", query)
 		}
 		switch extra {
 		case "STORED GENERATED", "VIRTUAL GENERATED":
@@ -594,12 +594,43 @@ func buildSelectField(db *sql.Conn, dbName, tableName string, completeInsert boo
 		availableFields = append(availableFields, wrapBackTicks(escapeString(fieldName)))
 	}
 	if err = rows.Err(); err != nil {
-		return "", errors.Annotatef(err, "sql: %s", query)
+		return "", 0, errors.Annotatef(err, "sql: %s", query)
 	}
 	if completeInsert || hasGenerateColumn {
-		return strings.Join(availableFields, ","), nil
+		return strings.Join(availableFields, ","), len(availableFields), nil
 	}
-	return "*", nil
+	return "*", len(availableFields), nil
+}
+
+func buildWhereClauses(handleColNames, handleVals []string) []string {
+	if len(handleVals) == 0 {
+		return nil
+	}
+	quotaCols := make([]string, len(handleColNames))
+	for i, s := range handleColNames {
+		quotaCols[i] = fmt.Sprintf("`%s`", escapeString(s))
+	}
+	handleCols := strings.Join(quotaCols, ",")
+	where := make([]string, 0, len(handleVals)+1)
+	where = append(where, fmt.Sprintf("(%s) < %s", handleCols, handleVals[0]))
+	for i := 1; i < len(handleVals); i++ {
+		low, up := handleVals[i-1], handleVals[i]
+		where = append(where, fmt.Sprintf("(%s) >= (%s) AND (%s) < (%s)", handleCols, low, handleCols, up))
+	}
+	where = append(where, fmt.Sprintf("(%s) >= (%s)", handleCols, handleVals[len(handleVals)-1]))
+	return where
+}
+
+func buildOrderByClauseString(handleColNames []string) string {
+	if len(handleColNames) == 0 {
+		return ""
+	}
+	separator := ","
+	quotaCols := make([]string, len(handleColNames))
+	for i, col := range handleColNames {
+		quotaCols[i] = fmt.Sprintf("`%s`", escapeString(col))
+	}
+	return fmt.Sprintf("ORDER BY %s", strings.Join(quotaCols, separator))
 }
 
 type oneStrColumnTable struct {

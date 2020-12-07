@@ -63,13 +63,15 @@ func (m *globalMetadata) recordGlobalMetaData(db *sql.Conn, serverType ServerTyp
 	return recordGlobalMetaData(db, &m.buffer, serverType, afterConn, m.snapshot)
 }
 
-func recordGlobalMetaData(db *sql.Conn, buffer *bytes.Buffer, serverType ServerType, afterConn bool, snapshot string) error { // revive:disable-line:flag-parameter
-	// get master status info
-	buffer.WriteString("SHOW MASTER STATUS:")
-	if afterConn {
-		buffer.WriteString(" /* AFTER CONNECTION POOL ESTABLISHED */")
+func recordGlobalMetaData(db *sql.Conn, buffer *bytes.Buffer, serverType ServerType, afterConn bool, snapshot string) error {
+	writeMasterStatusHeader := func() {
+		buffer.WriteString("SHOW MASTER STATUS:")
+		if afterConn {
+			buffer.WriteString(" /* AFTER CONNECTION POOL ESTABLISHED */")
+		}
+		buffer.WriteString("\n")
 	}
-	buffer.WriteString("\n")
+
 	switch serverType {
 	// For MySQL:
 	// mysql 5.6+
@@ -105,6 +107,7 @@ func recordGlobalMetaData(db *sql.Conn, buffer *bytes.Buffer, serverType ServerT
 		gtidSet := getValidStr(str, gtidSetFieldIndex)
 
 		if logFile != "" {
+			writeMasterStatusHeader()
 			fmt.Fprintf(buffer, "\tLog: %s\n\tPos: %s\n\tGTID:%s\n", logFile, pos, gtidSet)
 		}
 	// For MariaDB:
@@ -135,6 +138,7 @@ func recordGlobalMetaData(db *sql.Conn, buffer *bytes.Buffer, serverType ServerT
 		}
 
 		if logFile != "" {
+			writeMasterStatusHeader()
 			fmt.Fprintf(buffer, "\tLog: %s\n\tPos: %s\n\tGTID:%s\n", logFile, pos, gtidSet)
 		}
 	default:
