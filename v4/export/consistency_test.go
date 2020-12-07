@@ -63,9 +63,7 @@ func (s *testConsistencySuite) TestConsistencyController(c *C) {
 	conf.Tables = NewDatabaseTables().
 		AppendTables("db1", "t1", "t2", "t3").
 		AppendViews("db2", "t4")
-	for i := 0; i < 4; i++ {
-		mock.ExpectExec("LOCK TABLES").WillReturnResult(resultOk)
-	}
+	mock.ExpectExec("LOCK TABLES `db1`.`t1` READ,`db1`.`t2` READ,`db1`.`t3` READ").WillReturnResult(resultOk)
 	mock.ExpectExec("UNLOCK TABLES").WillReturnResult(resultOk)
 	ctrl, _ = NewConsistencyController(ctx, conf, db)
 	_, ok = ctrl.(*ConsistencyLockDumpingTables)

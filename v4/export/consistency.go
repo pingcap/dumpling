@@ -107,7 +107,7 @@ func (c *ConsistencyLockDumpingTables) Setup(ctx context.Context) error {
 	return utils.WithRetry(ctx, func() error {
 		lockTablesSQL := buildLockTablesSQL(c.allTables, blockList)
 		_, err := c.conn.ExecContext(ctx, lockTablesSQL)
-		return err
+		return errors.Trace(err)
 	}, newLockTablesBackoffer(blockList))
 }
 

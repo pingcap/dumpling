@@ -108,7 +108,7 @@ func getTableFromMySQLError(msg string) (db, table string, err error) {
 	msg = strings.TrimSuffix(msg, "' doesn't exist")
 	failPart := strings.Split(msg, ".")
 	if len(failPart) != 2 {
-		err = errors.Errorf("doesn't support retry lock this table", zap.String("table", msg))
+		err = errors.Errorf("doesn't support retry lock table %s", msg)
 		return
 	}
 	return failPart[0], failPart[1], nil

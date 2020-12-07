@@ -612,6 +612,8 @@ func buildLockTablesSQL(allTables DatabaseTables, blockList map[string]map[strin
 	for dbName, tables := range allTables {
 		escapedDBName := escapeString(dbName)
 		for _, table := range tables {
+			// Lock views will lock related tables. However, we won't dump data only the create sql of view, so we needn't lock view here.
+			// Besides, mydumper also only lock base table here. https://github.com/maxbube/mydumper/blob/1fabdf87e3007e5934227b504ad673ba3697946c/mydumper.c#L1568
 			if table.Type != TableTypeBase {
 				continue
 			}
@@ -621,7 +623,7 @@ func buildLockTablesSQL(allTables DatabaseTables, blockList map[string]map[strin
 				}
 			}
 			if !n {
-				fmt.Fprintf(s, "LOCK TABLE `%s`.`%s` READ", escapedDBName, escapeString(table.Name))
+				fmt.Fprintf(s, "LOCK TABLES `%s`.`%s` READ", escapedDBName, escapeString(table.Name))
 				n = true
 			} else {
 				fmt.Fprintf(s, ",`%s`.`%s` READ", escapedDBName, escapeString(table.Name))
