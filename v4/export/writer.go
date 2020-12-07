@@ -168,6 +168,7 @@ func (w *Writer) WriteTableData(meta TableMeta, ir TableDataIR, currentChunk int
 		retryTime++
 		log.Debug("trying to dump table chunk", zap.Int("retryTime", retryTime), zap.String("db", meta.DatabaseName()),
 			zap.String("table", meta.TableName()), zap.Int("chunkIndex", currentChunk), zap.NamedError("lastError", lastErr))
+		// don't rebuild connection when dump for the first time
 		if retryTime > 1 {
 			conn, err = w.rebuildConnFn(conn)
 			if err != nil {
