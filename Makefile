@@ -9,12 +9,10 @@ LDFLAGS += -X "github.com/pingcap/dumpling/v4/cli.GitHash=$(shell git rev-parse 
 LDFLAGS += -X "github.com/pingcap/dumpling/v4/cli.GitBranch=$(shell git rev-parse --abbrev-ref HEAD)"
 LDFLAGS += -X "github.com/pingcap/dumpling/v4/cli.GoVersion=$(shell go version)"
 
-GO = go
-GOLDFLAGS = -ldflags '$(LDFLAGS)'
+GOBUILD := CGO_ENABLED=0 GO111MODULE=on go build -trimpath -ldflags '$(LDFLAGS)'
 GOTEST  := CGO_ENABLED=1 GO111MODULE=on go test -ldflags '$(LDFLAGS)'
 
 ifeq ("$(WITH_RACE)", "1")
-	GOLDFLAGS += -race
 	RACEFLAG = -race
 endif
 
@@ -23,7 +21,7 @@ all: build check test
 build: bin/dumpling
 
 bin/%: cmd/%/main.go $(wildcard v4/**/*.go)
-	$(GO) build $(GOLDFLAGS) -tags codes -o $@ $<
+	$(GOBUILD) $(RACEFLAG) -tags codes -o $@ $<
 
 test: failpoint-enable
 	$(GOTEST) $(RACEFLAG) -tags leak ./... || ( make failpoint-disable && exit 1 )
