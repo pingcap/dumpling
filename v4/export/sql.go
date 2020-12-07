@@ -203,7 +203,8 @@ func SelectAllFromTable(conf *Config, db *sql.Conn, database, table string) (Tab
 	}, nil
 }
 
-func SelectFromSql(conf *Config, conn *sql.Conn) (TableMeta, TableDataIR, error) {
+// SelectFromSQL dumps data serialized from a specified SQL
+func SelectFromSQL(conf *Config, conn *sql.Conn) (TableMeta, TableDataIR, error) {
 	log.Info("dump data from sql", zap.String("sql", conf.SQL))
 	rows, err := conn.QueryContext(context.Background(), conf.SQL)
 	if err != nil {
@@ -232,8 +233,9 @@ func SelectFromSql(conf *Config, conn *sql.Conn) (TableMeta, TableDataIR, error)
 		query:  conf.SQL,
 		colLen: len(cols),
 	}
+	rows.Close()
 
-	return meta, data, nil
+	return meta, data, rows.Err()
 }
 
 func buildSelectQuery(database, table string, fields string, where string, orderByClause string) string {
@@ -340,7 +342,7 @@ ORDER BY k.ORDINAL_POSITION;`
 	return colNames, colTypes, nil
 }
 
-// GetPrimaryKeyAndColumns gets all primary columns in ordinal order
+// GetPrimaryKeyColumns gets all primary columns in ordinal order
 func GetPrimaryKeyColumns(db *sql.Conn, database, table string) ([]string, error) {
 	priKeyColsQuery := "SELECT column_name FROM information_schema.KEY_COLUMN_USAGE " +
 		"WHERE table_schema = ? AND table_name = ? AND CONSTRAINT_NAME = 'PRIMARY' order by ORDINAL_POSITION;"
@@ -569,7 +571,7 @@ func createConnWithConsistency(ctx context.Context, db *sql.DB) (*sql.Conn, erro
 
 // buildSelectField returns the selecting fields' string(joined by comma(`,`)),
 // and the number of writable fields.
-func buildSelectField(db *sql.Conn, dbName, tableName string, completeInsert bool) (string, int, error) {
+func buildSelectField(db *sql.Conn, dbName, tableName string, completeInsert bool) (string, int, error) { // revive:disable-line:flag-parameter
 	query := `SELECT COLUMN_NAME,EXTRA FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=? AND TABLE_NAME=? ORDER BY ORDINAL_POSITION;`
 	rows, err := db.QueryContext(context.Background(), query, dbName, tableName)
 	if err != nil {

@@ -63,7 +63,7 @@ func (m *globalMetadata) recordGlobalMetaData(db *sql.Conn, serverType ServerTyp
 	return recordGlobalMetaData(db, &m.buffer, serverType, afterConn, m.snapshot)
 }
 
-func recordGlobalMetaData(db *sql.Conn, buffer *bytes.Buffer, serverType ServerType, afterConn bool, snapshot string) error {
+func recordGlobalMetaData(db *sql.Conn, buffer *bytes.Buffer, serverType ServerType, afterConn bool, snapshot string) error { // revive:disable-line:flag-parameter
 	writeMasterStatusHeader := func() {
 		buffer.WriteString("SHOW MASTER STATUS:")
 		if afterConn {

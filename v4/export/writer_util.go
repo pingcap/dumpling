@@ -543,18 +543,28 @@ func compressFileSuffix(compressType storage.CompressType) string {
 type FileFormat int32
 
 const (
+	// FileFormatUnknown indicates the given file type is unknown
 	FileFormatUnknown FileFormat = iota
+	// FileFormatSQLText indicates the given file type is sql type
 	FileFormatSQLText
+	// FileFormatCSV indicates the given file type is csv type
 	FileFormatCSV
+)
+
+const (
+	// FileFormatSQLTextString indicates the string/suffix of sql type file
+	FileFormatSQLTextString = "sql"
+	// FileFormatCSVString indicates the string/suffix of csv type file
+	FileFormatCSVString = "csv"
 )
 
 // String implement Stringer.String method.
 func (f FileFormat) String() string {
 	switch f {
 	case FileFormatSQLText:
-		return "SQL"
+		return strings.ToUpper(FileFormatSQLTextString)
 	case FileFormatCSV:
-		return "CSV"
+		return strings.ToUpper(FileFormatCSVString)
 	default:
 		return "unknown"
 	}
@@ -566,14 +576,15 @@ func (f FileFormat) String() string {
 func (f FileFormat) Extension() string {
 	switch f {
 	case FileFormatSQLText:
-		return "sql"
+		return FileFormatSQLTextString
 	case FileFormatCSV:
-		return "csv"
+		return FileFormatCSVString
 	default:
 		return "unknown_format"
 	}
 }
 
+// WriteInsert writes TableDataIR to a storage.Writer in sql/csv type
 func (f FileFormat) WriteInsert(pCtx context.Context, cfg *Config, meta TableMeta, tblIR TableDataIR, w storage.Writer) error {
 	switch f {
 	case FileFormatSQLText:

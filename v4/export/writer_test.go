@@ -27,7 +27,7 @@ func (s *testWriterSuite) newWriter(conf *Config, c *C) *Writer {
 	c.Assert(err, IsNil)
 	conn, err := db.Conn(context.Background())
 	c.Assert(err, IsNil)
-	return NewWriter(0, context.Background(), conf, conn, extStore)
+	return NewWriter(context.Background(), 0, conf, conn, extStore)
 }
 
 func (s *testWriterSuite) TestWriteDatabaseMeta(c *C) {

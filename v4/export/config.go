@@ -155,7 +155,7 @@ func DefaultConfig() *Config {
 		NoViews:            true,
 		Rows:               UnspecifiedSize,
 		Where:              "",
-		FileType:           "sql",
+		FileType:           FileFormatSQLTextString,
 		NoHeader:           false,
 		NoSchemas:          false,
 		NoData:             false,
@@ -221,7 +221,7 @@ func (conf *Config) DefineFlags(flags *pflag.FlagSet) {
 	flags.Uint64P(flagRows, "r", UnspecifiedSize, "Split table into chunks of this many rows, default unlimited")
 	flags.String(flagWhere, "", "Dump only selected records")
 	flags.Bool(flagEscapeBackslash, true, "use backslash to escape special characters")
-	flags.String(flagFiletype, "sql", "The type of export file (sql/csv)")
+	flags.String(flagFiletype, FileFormatSQLTextString, "The type of export file (sql/csv)")
 	flags.Bool(flagNoHeader, false, "whether not to dump CSV table header")
 	flags.BoolP(flagNoSchemas, "m", false, "Do not dump table schemas with the data")
 	flags.BoolP(flagNoData, "d", false, "Do not dump table data")
@@ -693,7 +693,7 @@ func validateSpecifiedSQL(conf *Config) error {
 func validateFileFormat(conf *Config) error {
 	conf.FileType = strings.ToLower(conf.FileType)
 	switch conf.FileType {
-	case "sql", "csv":
+	case FileFormatSQLTextString, FileFormatCSVString:
 		return nil
 	}
 	return errors.Errorf("unknown config.FileType '%s'", conf.FileType)

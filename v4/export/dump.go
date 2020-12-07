@@ -157,20 +157,20 @@ func (d *Dumper) Dump() (dumpErr error) {
 		// make sure that the lock connection is still alive
 		err1 := conCtrl.PingContext(ctx)
 		if err1 != nil {
-			return conn, err1
+			return conn, errors.Trace(err1)
 		}
 		// give up the last broken connection
 		conn.Close()
 		newConn, err1 := createConnWithConsistency(ctx, pool)
 		if err1 != nil {
-			return conn, err1
+			return conn, errors.Trace(err1)
 		}
 		conn = newConn
 		// renew the master status after connection. dm can't close safe-mode until dm reaches current pos
 		if conf.PosAfterConnect {
 			err1 = m.recordGlobalMetaData(conn, conf.ServerInfo.ServerType, true)
 			if err1 != nil {
-				return conn, err1
+				return conn, errors.Trace(err1)
 			}
 		}
 		return conn, nil
@@ -189,7 +189,7 @@ func (d *Dumper) Dump() (dumpErr error) {
 			log.Info("All the dumping transactions have started. Start to unlock tables")
 		}
 		if err = conCtrl.TearDown(ctx); err != nil {
-			return err
+			return errors.Trace(err)
 		}
 	}
 
@@ -210,7 +210,7 @@ func (d *Dumper) Dump() (dumpErr error) {
 	close(taskChan)
 	if err := wg.Wait(); err != nil {
 		summary.CollectFailureUnit("dump table data", err)
-		return err
+		return errors.Trace(err)
 	}
 	summary.CollectSuccessUnit("dump cost", countTotalTask(writers), time.Since(tableDataStartTime))
 
@@ -228,18 +228,18 @@ func (d *Dumper) startWriters(ctx context.Context, wg *errgroup.Group, taskChan 
 		if err != nil {
 			return nil, func() {}, err
 		}
-		writer := NewWriter(int64(i), ctx, conf, conn, d.extStore)
+		writer := NewWriter(ctx, int64(i), conf, conn, d.extStore)
 		writer.rebuildConnFn = rebuildConnFn
-		writer.finishTableCallBack = func(task Task) {
+		writer.setFinishTableCallBack(func(task Task) {
 			if td, ok := task.(*TaskTableData); ok {
 				log.Debug("finished dumping table data",
 					zap.String("database", td.Meta.DatabaseName()),
 					zap.String("table", td.Meta.TableName()))
 			}
-		}
-		writer.finishTaskCallBack = func(task Task) {
+		})
+		writer.setFinishTaskCallBack(func(task Task) {
 			taskChannelCapacity.With(conf.Labels).Inc()
-		}
+		})
 		wg.Go(func() error {
 			return writer.run(taskChan)
 		})
@@ -420,7 +420,7 @@ func (d *Dumper) selectMinAndMaxIntValue(conn *sql.Conn, db, tbl, field string) 
 	err := row.Scan(&smin, &smax)
 	if err != nil {
 		log.Error("split chunks - get max min failed", zap.String("query", query), zap.Error(err))
-		return zero, zero, err
+		return zero, zero, errors.Trace(err)
 	}
 	if !smax.Valid || !smin.Valid {
 		// found no data
@@ -587,7 +587,7 @@ func dumpTableMeta(conf *Config, conn *sql.Conn, db string, table *TableInfo) (T
 
 func (d *Dumper) dumpSQL(metaConn *sql.Conn, taskChan chan<- Task) error {
 	conf := d.conf
-	meta, tableIR, err := SelectFromSql(conf, metaConn)
+	meta, tableIR, err := SelectFromSQL(conf, metaConn)
 	if err != nil {
 		return err
 	}
@@ -818,8 +818,4 @@ func setSessionParam(d *Dumper) error {
 		return errors.Trace(err)
 	}
 	return nil
-}
-
-func shouldRedirectLog(conf *Config) bool {
-	return conf.Logger != nil || conf.LogFile != ""
 }
