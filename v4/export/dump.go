@@ -112,14 +112,6 @@ func (d *Dumper) Dump() (err error) {
 		log.Info("get global metadata failed", zap.Error(err))
 	}
 
-	if conf.PosAfterConnect {
-		// record again, to provide a location to exit safe mode for DM
-		err = m.recordGlobalMetaData(metaConn, conf.ServerInfo.ServerType, true)
-		if err != nil {
-			log.Info("get global metadata (after connection pool established) failed", zap.Error(err))
-		}
-	}
-
 	// for other consistencies, we should get table list after consistency is set up and GlobalMetaData is cached
 	if conf.Consistency != consistencyTypeLock {
 		if err = prepareTableListToDump(conf, metaConn); err != nil {
@@ -159,12 +151,21 @@ func (d *Dumper) Dump() (err error) {
 		return err
 	}
 	defer tearDownWriters()
+
 	if conf.TransactionalConsistency {
 		if conf.Consistency == consistencyTypeFlush || conf.Consistency == consistencyTypeLock {
 			log.Info("All the dumping transactions have started. Start to unlock tables")
 		}
 		if err = conCtrl.TearDown(ctx); err != nil {
 			return err
+		}
+	}
+
+	if conf.PosAfterConnect {
+		// record again, to provide a location to exit safe mode for DM
+		err = m.recordGlobalMetaData(metaConn, conf.ServerInfo.ServerType, true)
+		if err != nil {
+			log.Info("get global metadata (after connection pool established) failed", zap.Error(err))
 		}
 	}
 
