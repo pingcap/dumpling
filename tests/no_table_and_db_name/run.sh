@@ -30,12 +30,12 @@ assert [ $( ls -lh $DUMPLING_OUTPUT_DIR | grep -e ".csv$" | wc -l ) -eq 10 ]
 # 10 files with header.
 assert [ $( cat $DUMPLING_OUTPUT_DIR/*.csv | wc -l ) -eq $(( 100 + 10 )) ]
 
-# dumping with file size = 311 bytes, actually 10 rows
-run_dumpling -F 311B --filetype sql --sql "select * from $TEST_NAME.t"
+# dumping with file size = 280 bytes, actually 10 rows
+run_dumpling -F 280B --filetype sql --sql "select * from $TEST_NAME.t"
 
 assert [ $( ls -lh $DUMPLING_OUTPUT_DIR | grep -e ".sql$" | wc -l ) -eq 10 ]
 
 # 10 files with header.
-assert [ $( cat $DUMPLING_OUTPUT_DIR/*.sql | wc -l ) -eq $(( 100 + 10 * 2 )) ]
+assert [ $( cat $DUMPLING_OUTPUT_DIR/*.sql | wc -l ) -eq $(( 100 + 10 )) ]
 
 echo "TEST: [$TEST_NAME] passed."
