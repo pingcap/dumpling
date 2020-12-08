@@ -153,7 +153,7 @@ func (d DatabaseTables) AppendTables(dbName string, tableNames ...string) Databa
 	return d
 }
 
-// AppendViews appends several view to DatabaseTables
+// AppendViews appends several views to DatabaseTables
 func (d DatabaseTables) AppendViews(dbName string, viewNames ...string) DatabaseTables {
 	for _, v := range viewNames {
 		d[dbName] = append(d[dbName], &TableInfo{v, TableTypeView})
