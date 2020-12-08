@@ -101,6 +101,6 @@ func setTableMetaFromRows(rows *sql.Rows) (TableMeta, error) {
 	return &tableMeta{
 		colTypes:      tps,
 		selectedField: strings.Join(nms, ","),
-		specCmts: []string{ "/*!40101 SET NAMES binary*/;"},
+		specCmts:      []string{"/*!40101 SET NAMES binary*/;"},
 	}, nil
 }
