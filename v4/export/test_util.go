@@ -85,7 +85,12 @@ type mockTableIR struct {
 	colNames        []string
 	escapeBackSlash bool
 	rowErr          error
+	rows            *sql.Rows
 	SQLRowIter
+}
+
+func (m *mockTableIR) RawRows() *sql.Rows {
+	return m.rows
 }
 
 func (m *mockTableIR) ShowCreateTable() string {
@@ -152,6 +157,7 @@ func (m *mockTableIR) Rows() SQLRowIter {
 			panic(fmt.Sprintf("sqlmock.New return error: %v", err))
 		}
 		m.SQLRowIter = newRowIter(rows, len(m.colTypes))
+		m.rows = rows
 	}
 	return m.SQLRowIter
 }

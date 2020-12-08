@@ -99,7 +99,7 @@ func setTableMetaFromRows(rows *sql.Rows) (TableMeta, error) {
 		nms[i] = wrapBackTicks(nms[i])
 	}
 	return &tableMeta{
-		colTypes: tps,
+		colTypes:      tps,
 		selectedField: strings.Join(nms, ","),
 	}, nil
 }

@@ -73,18 +73,18 @@ func (m *stringIter) HasNext() bool {
 }
 
 type tableData struct {
-	query  string
-	rows   *sql.Rows
-	colLen int
+	query        string
+	rows         *sql.Rows
+	colLen       int
 	needColTypes bool
-	colTypes []string
+	colTypes     []string
 	SQLRowIter
 }
 
 func newTableData(query string, colLength int, needColTypes bool) *tableData {
 	return &tableData{
-		query:  query,
-		colLen: colLength,
+		query:        query,
+		colLen:       colLength,
 		needColTypes: needColTypes,
 	}
 }
