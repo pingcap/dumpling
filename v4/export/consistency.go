@@ -7,7 +7,6 @@ import (
 	"database/sql"
 
 	"github.com/pingcap/br/pkg/utils"
-
 	"github.com/pingcap/errors"
 )
 

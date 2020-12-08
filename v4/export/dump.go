@@ -73,7 +73,7 @@ func (d *Dumper) Dump() (err error) {
 		}
 	}()
 
-	// for consistency lock, we should lock tables at first to get the tables we want to lock & dump
+	// for consistency lock, we should get table list at first to generate the lock tables SQL
 	if conf.Consistency == consistencyTypeLock {
 		conn, err := createConnWithConsistency(ctx, pool)
 		if err != nil {
@@ -119,7 +119,6 @@ func (d *Dumper) Dump() (err error) {
 		}
 	}
 
-	failpoint.Inject("ConsistencyCheck", nil)
 	rebuildConn := func(conn *sql.Conn) (*sql.Conn, error) {
 		// make sure that the lock connection is still alive
 		err := conCtrl.PingContext(ctx)
@@ -160,6 +159,8 @@ func (d *Dumper) Dump() (err error) {
 			return err
 		}
 	}
+	// Inject consistency failpoint test after we release the table lock
+	failpoint.Inject("ConsistencyCheck", nil)
 
 	if conf.PosAfterConnect {
 		// record again, to provide a location to exit safe mode for DM

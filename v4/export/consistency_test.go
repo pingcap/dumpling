@@ -18,7 +18,7 @@ type testConsistencySuite struct{}
 
 func (s *testConsistencySuite) assertNil(err error, c *C) {
 	if err != nil {
-		c.Fatalf(err.Error())
+		c.Fatal(err.Error())
 	}
 }
 
@@ -50,7 +50,7 @@ func (s *testConsistencySuite) TestConsistencyController(c *C) {
 	c.Assert(ok, IsTrue)
 	s.assertLifetimeErrNil(ctx, ctrl, c)
 	if err = mock.ExpectationsWereMet(); err != nil {
-		c.Fatalf(err.Error())
+		c.Fatal(err.Error())
 	}
 
 	conf.Consistency = consistencyTypeSnapshot
@@ -71,7 +71,7 @@ func (s *testConsistencySuite) TestConsistencyController(c *C) {
 	c.Assert(ok, IsTrue)
 	s.assertLifetimeErrNil(ctx, ctrl, c)
 	if err = mock.ExpectationsWereMet(); err != nil {
-		c.Fatalf(err.Error())
+		c.Fatal(err.Error())
 	}
 }
 
@@ -97,7 +97,7 @@ func (s *testConsistencySuite) TestConsistencyLockControllerRetry(c *C) {
 	c.Assert(ok, IsTrue)
 	s.assertLifetimeErrNil(ctx, ctrl, c)
 	if err = mock.ExpectationsWereMet(); err != nil {
-		c.Fatalf(err.Error())
+		c.Fatal(err.Error())
 	}
 }
 
