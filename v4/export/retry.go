@@ -23,8 +23,8 @@ const (
 	ErrNoSuchTable uint16 = 1146
 )
 
-func newDumpChunkBackoffer(canRetry bool) *dumpChunkBackoffer {
-	if !canRetry {
+func newDumpChunkBackoffer(shouldRetry bool) *dumpChunkBackoffer { // revive:disable-line:flag-parameter
+	if !shouldRetry {
 		return &dumpChunkBackoffer{
 			attempt: 1,
 		}
