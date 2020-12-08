@@ -7,6 +7,8 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+
+	"github.com/pingcap/errors"
 )
 
 // rowIter implements the SQLRowIter interface.
@@ -64,7 +66,7 @@ func (m *stringIter) Next() string {
 		return ""
 	}
 	ret := m.ss[m.idx]
-	m.idx += 1
+	m.idx++
 	return ret
 }
 
@@ -92,20 +94,23 @@ func newTableData(query string, colLength int, needColTypes bool) *tableData {
 func (td *tableData) Start(ctx context.Context, conn *sql.Conn) error {
 	rows, err := conn.QueryContext(ctx, td.query)
 	if err != nil {
-		return err
+		return errors.Trace(err)
+	}
+	if err = rows.Err(); err != nil {
+		return errors.Trace(err)
 	}
 	td.SQLRowIter = nil
 	td.rows = rows
 	ns, err := rows.Columns()
 	if err != nil {
-		return err
+		return errors.Trace(err)
 	}
 	if td.needColTypes {
 		td.colLen = len(ns)
 		td.colTypes = make([]string, 0, td.colLen)
 		colTps, err := rows.ColumnTypes()
 		if err != nil {
-			return err
+			return errors.Trace(err)
 		}
 		for _, c := range colTps {
 			td.colTypes = append(td.colTypes, c.DatabaseTypeName())

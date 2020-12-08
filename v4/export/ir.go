@@ -43,16 +43,19 @@ type SQLRowIter interface {
 	Close() error
 }
 
+// RowReceiverStringer is a combined interface of RowReceiver and Stringer
 type RowReceiverStringer interface {
 	RowReceiver
 	Stringer
 }
 
+// Stringer is an interface which represents sql types that support writing to buffer in sql/csv type
 type Stringer interface {
 	WriteToBuffer(*bytes.Buffer, bool)
 	WriteToBufferInCsv(*bytes.Buffer, bool, *csvOption)
 }
 
+// RowReceiver is an interface which represents sql types that support bind address for *sql.Rows
 type RowReceiver interface {
 	BindAddress([]interface{})
 }
@@ -72,6 +75,7 @@ type StringIter interface {
 	HasNext() bool
 }
 
+// MetaIR is the interface that wraps database/table/view's metadata
 type MetaIR interface {
 	SpecialComments() StringIter
 	TargetName() string
@@ -89,11 +93,11 @@ type Logger interface {
 func setTableMetaFromRows(rows *sql.Rows) (TableMeta, error) {
 	tps, err := rows.ColumnTypes()
 	if err != nil {
-		return nil, err
+		return nil, errors.Trace(err)
 	}
 	nms, err := rows.Columns()
 	if err != nil {
-		return nil, err
+		return nil, errors.Trace(err)
 	}
 	for i := range nms {
 		nms[i] = wrapBackTicks(nms[i])
