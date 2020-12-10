@@ -120,13 +120,9 @@ func escapeCSV(s []byte, bf *bytes.Buffer, escapeBackslash bool, delimiter []byt
 	var (
 		escape   bool
 		last          = 0
-		delimit  byte = 0
 		separate byte = 0
 	)
 	if len(delimiter) > 0 {
-		delimit = delimiter[0]
-	}
-	if delimit != 0 {
 		bf.Write(bytes.ReplaceAll(s, delimiter, append(delimiter, delimiter...)))
 		return
 	}
