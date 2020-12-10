@@ -13,6 +13,7 @@ var colTypeRowReceiverMap = map[string]func() RowReceiverStringer{}
 var (
 	nullValue           = "NULL"
 	quotationMark       = []byte{'\''}
+	twoQuotationMarks   = []byte{'\'', '\''}
 	doubleQuotationMark = []byte{'"'}
 )
 
@@ -49,23 +50,19 @@ var dataTypeBin = []string{
 	"BIT",
 }
 
-func getEscapeQuotation(escapeBackSlash bool, escapeQuotation []byte) []byte { // revive:disable-line:flag-parameter
-	if escapeBackSlash {
-		return nil
-	}
-	return escapeQuotation
-}
-
-func escape(s []byte, bf *bytes.Buffer, escapeQuotation []byte) {
-	if len(escapeQuotation) > 0 {
-		bf.Write(bytes.ReplaceAll(s, escapeQuotation, append(escapeQuotation, escapeQuotation...)))
-		return
-	}
-
+func escapeBackslashFn(s []byte, bf *bytes.Buffer, delimiter []byte, separator []byte) {
 	var (
-		escape byte
-		last   = 0
+		escape   byte
+		last          = 0
+		delimit  byte = 0
+		separate byte = 0
 	)
+	if len(delimiter) > 0 {
+		delimit = delimiter[0]
+	}
+	if len(separator) > 0 {
+		separate = separator[0]
+	}
 	// reference: https://gist.github.com/siddontang/8875771
 	for i := 0; i < len(s); i++ {
 		escape = 0
@@ -85,12 +82,79 @@ func escape(s []byte, bf *bytes.Buffer, escapeQuotation []byte) {
 			escape = '"'
 		case '\032': /* This gives problems on Win32 */
 			escape = 'Z'
+		case delimit:
+			escape = delimit
+		case separate:
+			escape = separate
 		}
 
 		if escape != 0 {
 			bf.Write(s[last:i])
 			bf.WriteByte('\\')
 			bf.WriteByte(escape)
+			last = i + 1
+		}
+	}
+	if last == 0 {
+		bf.Write(s)
+	} else if last < len(s) {
+		bf.Write(s[last:])
+	}
+}
+
+func escapeSQL(s []byte, bf *bytes.Buffer, escapeBackslash bool) {
+	if escapeBackslash {
+		escapeBackslashFn(s, bf, nil, nil)
+		return
+	}
+	bf.Write(bytes.ReplaceAll(s, quotationMark, twoQuotationMarks))
+	return
+}
+
+func escapeCSV(s []byte, bf *bytes.Buffer, escapeBackslash bool, delimiter []byte, separator []byte) {
+	if escapeBackslash {
+		escapeBackslashFn(s, bf, delimiter, separator)
+		return
+	}
+
+	var (
+		escape   bool
+		last          = 0
+		delimit  byte = 0
+		separate byte = 0
+	)
+	if len(delimiter) > 0 {
+		delimit = delimiter[0]
+	}
+	if delimit != 0 {
+		bf.Write(bytes.ReplaceAll(s, delimiter, append(delimiter, delimiter...)))
+		return
+	}
+	if len(separator) > 0 {
+		separate = separator[0]
+	}
+
+	for i := 0; i < len(s); i++ {
+		escape = false
+		b := s[i]
+
+		switch b {
+		case 0: /* always escape 0 */
+			b = '0'
+			escape = true
+		case '\n': /* Must be escaped for line encloser */
+			b = 'n'
+			escape = true
+		case '\\':
+			escape = true
+		case separate:
+			escape = true
+		}
+
+		if escape {
+			bf.Write(s[last:i])
+			bf.WriteByte('\\')
+			bf.WriteByte(b)
 			last = i + 1
 		}
 	}
@@ -208,7 +272,7 @@ func (s *SQLTypeString) BindAddress(arg []interface{}) {
 func (s *SQLTypeString) WriteToBuffer(bf *bytes.Buffer, escapeBackslash bool) {
 	if s.RawBytes != nil {
 		bf.Write(quotationMark)
-		escape(s.RawBytes, bf, getEscapeQuotation(escapeBackslash, quotationMark))
+		escapeSQL(s.RawBytes, bf, escapeBackslash)
 		bf.Write(quotationMark)
 	} else {
 		bf.WriteString(nullValue)
@@ -219,7 +283,7 @@ func (s *SQLTypeString) WriteToBuffer(bf *bytes.Buffer, escapeBackslash bool) {
 func (s *SQLTypeString) WriteToBufferInCsv(bf *bytes.Buffer, escapeBackslash bool, opt *csvOption) {
 	if s.RawBytes != nil {
 		bf.Write(opt.delimiter)
-		escape(s.RawBytes, bf, getEscapeQuotation(escapeBackslash, opt.delimiter))
+		escapeCSV(s.RawBytes, bf, escapeBackslash, opt.delimiter, opt.separator)
 		bf.Write(opt.delimiter)
 	} else {
 		bf.WriteString(opt.nullValue)
@@ -249,7 +313,7 @@ func (s *SQLTypeBytes) WriteToBuffer(bf *bytes.Buffer, _ bool) {
 func (s *SQLTypeBytes) WriteToBufferInCsv(bf *bytes.Buffer, escapeBackslash bool, opt *csvOption) {
 	if s.RawBytes != nil {
 		bf.Write(opt.delimiter)
-		escape(s.RawBytes, bf, getEscapeQuotation(escapeBackslash, opt.delimiter))
+		escapeCSV(s.RawBytes, bf, escapeBackslash, opt.delimiter, opt.separator)
 		bf.Write(opt.delimiter)
 	} else {
 		bf.WriteString(opt.nullValue)
