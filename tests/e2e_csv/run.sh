@@ -59,7 +59,7 @@ run() {
 }
 
 escape_backslash_arr="true false"
-csv_delimiter_arr="\" '"
+csv_delimiter_arr="\"" # '"
 csv_separator_arr=', a aa |*|'
 
 for escape_backslash in $escape_backslash_arr
