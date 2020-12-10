@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 #
 # Copyright 2020 PingCAP, Inc. Licensed under Apache-2.0.
 
@@ -38,8 +38,12 @@ run() {
     mkdir -p $DUMPLING_TEST_DIR/conf
     cp "$cur/conf/lightning.toml" $DUMPLING_TEST_DIR/conf
 
-    sed -i -e "s/delimiter-place-holder/$csv_delimiter/g" $DUMPLING_TEST_DIR/conf/lightning.toml
     sed -i -e "s/separator-place-holder/$csv_separator/g" $DUMPLING_TEST_DIR/conf/lightning.toml
+    # csv_delimiter_holder=$csv_delimiter
+    # if [[ $csv_delimiter == '"' ]]; then
+    #     csv_delimiter_holder='\\\"'
+    # fi
+    sed -i -e "s/delimiter-place-holder/$csv_delimiter/g" $DUMPLING_TEST_DIR/conf/lightning.toml
     escape_backslash_holder="true"
     if [[ $escape_backslash == "false" && $csv_delimiter != "" ]]; then
         escape_backslash_holder="false"
@@ -54,19 +58,19 @@ run() {
     check_sync_diff $cur/conf/diff_config.toml
 }
 
-escape_backslash_arr=("true" "false")
-csv_delimiter_arr=('"')
-csv_separator_arr=(',' 'a' 'aa' '|*|')
+escape_backslash_arr="true false"
+csv_delimiter_arr="\" '"
+csv_separator_arr=', a aa |*|'
 
-for escape_backslash in ${escape_backslash_arr[@]}
+for escape_backslash in $escape_backslash_arr
 do
-  for csv_separator in ${csv_separator_arr[@]}
+  for csv_separator in $csv_separator_arr
   do
-    for csv_delimiter in ${csv_delimiter_arr[@]}
+    for csv_delimiter in $csv_delimiter_arr
     do
-      run $*
+      run
     done
     csv_delimiter=""
-    run $*
+    run
   done
 done

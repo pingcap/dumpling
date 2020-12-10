@@ -102,16 +102,15 @@ func escapeBackslashFn(s []byte, bf *bytes.Buffer, delimiter []byte, separator [
 	}
 }
 
-func escapeSQL(s []byte, bf *bytes.Buffer, escapeBackslash bool) {
+func escapeSQL(s []byte, bf *bytes.Buffer, escapeBackslash bool) { // revive:disable-line:flag-parameter
 	if escapeBackslash {
 		escapeBackslashFn(s, bf, nil, nil)
-		return
+	} else {
+		bf.Write(bytes.ReplaceAll(s, quotationMark, twoQuotationMarks))
 	}
-	bf.Write(bytes.ReplaceAll(s, quotationMark, twoQuotationMarks))
-	return
 }
 
-func escapeCSV(s []byte, bf *bytes.Buffer, escapeBackslash bool, delimiter []byte, separator []byte) {
+func escapeCSV(s []byte, bf *bytes.Buffer, escapeBackslash bool, delimiter []byte, separator []byte) { // revive:disable-line:flag-parameter
 	if escapeBackslash {
 		escapeBackslashFn(s, bf, delimiter, separator)
 		return
