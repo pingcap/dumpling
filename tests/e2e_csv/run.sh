@@ -16,7 +16,10 @@ export DUMPLING_TEST_DATABASE="e2e_csv"
 run_sql_file "$DUMPLING_BASE_NAME/data/e2e_csv.escape-schema.sql"
 run_sql_file "$DUMPLING_BASE_NAME/data/e2e_csv.escape.sql"
 run_sql_file "$DUMPLING_BASE_NAME/data/e2e_csv.t-schema.sql"
-run_sql_file "$DUMPLING_BASE_NAME/data/e2e_csv.t.sql"
+
+mkdir -p $DUMPLING_TEST_DIR/data
+sed "s/('')/-- ('')/g" "$DUMPLING_BASE_NAME/data/e2e_csv.t.sql" | sed "s/(' ')/-- (' ')/g" > $DUMPLING_TEST_DIR/data/e2e_csv.t.sql
+run_sql_file "$DUMPLING_TEST_DIR/data/e2e_csv.t.sql"
 
 run() {
     echo "*** running subtest case ***"

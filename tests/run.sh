@@ -25,10 +25,10 @@ file_should_exist bin/tidb-lightning
 file_should_exist bin/dumpling
 file_should_exist bin/sync_diff_inspector
 
-# trap stop_services EXIT
+trap stop_services EXIT
 start_services
 
-for script in tests/e2e_csv/run.sh; do
+for script in tests/*/run.sh; do
     echo "****************** Running test $script..."
     DUMPLING_BASE_NAME="$(dirname "$script")"
     export DUMPLING_BASE_NAME

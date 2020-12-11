@@ -1,3 +1,1 @@
-CREATE TABLE `t` (
-  `a` text CHARACTER SET utf8mb4 COLLATE utf8mb4_bin
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+../../naughty_strings/data/naughty_strings.t-schema.sql
