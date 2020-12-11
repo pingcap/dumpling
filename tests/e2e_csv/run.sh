@@ -44,7 +44,7 @@ run() {
 
     sed -i -e "s/separator-place-holder/$csv_separator/g" $DUMPLING_TEST_DIR/conf/lightning.toml
      csv_delimiter_holder=$csv_delimiter
-     if [[ $csv_delimiter == '"' ]]; then
+     if [ "$csv_delimiter" == '"' ]; then
          csv_delimiter_holder='\\\"'
      fi
     sed -i -e "s/delimiter-place-holder/$csv_delimiter_holder/g" $DUMPLING_TEST_DIR/conf/lightning.toml
