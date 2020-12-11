@@ -108,6 +108,8 @@ func escapeBackslashCSV(s []byte, bf *bytes.Buffer, opt *csvOption) {
 		switch s[i] {
 		case 0: /* Must be escaped for 'mysql' */
 			escape = '0'
+		case '\n': /* escaped for line terminators */
+			escape = 'n'
 		case '\\':
 			escape = '\\'
 		case specCmt:
