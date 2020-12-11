@@ -139,7 +139,6 @@ func escapeSQL(s []byte, bf *bytes.Buffer, escapeBackslash bool) { // revive:dis
 func escapeCSV(s []byte, bf *bytes.Buffer, escapeBackslash bool, opt *csvOption) { // revive:disable-line:flag-parameter
 	if escapeBackslash {
 		escapeBackslashCSV(s, bf, opt)
-		return
 	} else {
 		if len(opt.delimiter) > 0 {
 			bf.Write(bytes.ReplaceAll(s, opt.delimiter, append(opt.delimiter, opt.delimiter...)))
