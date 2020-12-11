@@ -50,19 +50,11 @@ var dataTypeBin = []string{
 	"BIT",
 }
 
-func escapeBackslashFn(s []byte, bf *bytes.Buffer, delimiter []byte, separator []byte) {
+func escapeBackslashSQL(s []byte, bf *bytes.Buffer) {
 	var (
-		escape   byte
-		last          = 0
-		delimit  byte = 0
-		separate byte = 0
+		escape byte
+		last   = 0
 	)
-	if len(delimiter) > 0 {
-		delimit = delimiter[0]
-	}
-	if len(separator) > 0 {
-		separate = separator[0]
-	}
 	// reference: https://gist.github.com/siddontang/8875771
 	for i := 0; i < len(s); i++ {
 		escape = 0
@@ -82,10 +74,44 @@ func escapeBackslashFn(s []byte, bf *bytes.Buffer, delimiter []byte, separator [
 			escape = '"'
 		case '\032': /* This gives problems on Win32 */
 			escape = 'Z'
-		case delimit:
-			escape = delimit
-		case separate:
-			escape = separate
+		}
+
+		if escape != 0 {
+			bf.Write(s[last:i])
+			bf.WriteByte('\\')
+			bf.WriteByte(escape)
+			last = i + 1
+		}
+	}
+	if last == 0 {
+		bf.Write(s)
+	} else if last < len(s) {
+		bf.Write(s[last:])
+	}
+}
+
+func escapeBackslashCSV(s []byte, bf *bytes.Buffer, opt *csvOption) {
+	var (
+		escape  byte
+		last         = 0
+		specCmt byte = 0
+	)
+	if len(opt.delimiter) > 0 {
+		specCmt = opt.delimiter[0] // if csv has a delimiter, we should use backslash to comment the delimiter in field value
+	} else if len(opt.separator) > 0 {
+		specCmt = opt.separator[0] // if csv's delimiter is "", we should escape the separator to avoid error
+	}
+
+	for i := 0; i < len(s); i++ {
+		escape = 0
+
+		switch s[i] {
+		case 0: /* Must be escaped for 'mysql' */
+			escape = '0'
+		case '\\':
+			escape = '\\'
+		case specCmt:
+			escape = specCmt
 		}
 
 		if escape != 0 {
@@ -104,59 +130,22 @@ func escapeBackslashFn(s []byte, bf *bytes.Buffer, delimiter []byte, separator [
 
 func escapeSQL(s []byte, bf *bytes.Buffer, escapeBackslash bool) { // revive:disable-line:flag-parameter
 	if escapeBackslash {
-		escapeBackslashFn(s, bf, nil, nil)
+		escapeBackslashSQL(s, bf)
 	} else {
 		bf.Write(bytes.ReplaceAll(s, quotationMark, twoQuotationMarks))
 	}
 }
 
-func escapeCSV(s []byte, bf *bytes.Buffer, escapeBackslash bool, delimiter []byte, separator []byte) { // revive:disable-line:flag-parameter
+func escapeCSV(s []byte, bf *bytes.Buffer, escapeBackslash bool, opt *csvOption) { // revive:disable-line:flag-parameter
 	if escapeBackslash {
-		escapeBackslashFn(s, bf, delimiter, separator)
+		escapeBackslashCSV(s, bf, opt)
 		return
-	}
-
-	var (
-		escape   bool
-		last          = 0
-		separate byte = 0
-	)
-	if len(delimiter) > 0 {
-		bf.Write(bytes.ReplaceAll(s, delimiter, append(delimiter, delimiter...)))
-		return
-	}
-	if len(separator) > 0 {
-		separate = separator[0]
-	}
-
-	for i := 0; i < len(s); i++ {
-		escape = false
-		b := s[i]
-
-		switch b {
-		case 0: /* always escape 0 */
-			b = '0'
-			escape = true
-		case '\n': /* Must be escaped for line encloser */
-			b = 'n'
-			escape = true
-		case '\\':
-			escape = true
-		case separate:
-			escape = true
+	} else {
+		if len(opt.delimiter) > 0 {
+			bf.Write(bytes.ReplaceAll(s, opt.delimiter, append(opt.delimiter, opt.delimiter...)))
+		} else {
+			bf.Write(s)
 		}
-
-		if escape {
-			bf.Write(s[last:i])
-			bf.WriteByte('\\')
-			bf.WriteByte(b)
-			last = i + 1
-		}
-	}
-	if last == 0 {
-		bf.Write(s)
-	} else if last < len(s) {
-		bf.Write(s[last:])
 	}
 }
 
@@ -278,7 +267,7 @@ func (s *SQLTypeString) WriteToBuffer(bf *bytes.Buffer, escapeBackslash bool) {
 func (s *SQLTypeString) WriteToBufferInCsv(bf *bytes.Buffer, escapeBackslash bool, opt *csvOption) {
 	if s.RawBytes != nil {
 		bf.Write(opt.delimiter)
-		escapeCSV(s.RawBytes, bf, escapeBackslash, opt.delimiter, opt.separator)
+		escapeCSV(s.RawBytes, bf, escapeBackslash, opt)
 		bf.Write(opt.delimiter)
 	} else {
 		bf.WriteString(opt.nullValue)
@@ -308,7 +297,7 @@ func (s *SQLTypeBytes) WriteToBuffer(bf *bytes.Buffer, _ bool) {
 func (s *SQLTypeBytes) WriteToBufferInCsv(bf *bytes.Buffer, escapeBackslash bool, opt *csvOption) {
 	if s.RawBytes != nil {
 		bf.Write(opt.delimiter)
-		escapeCSV(s.RawBytes, bf, escapeBackslash, opt.delimiter, opt.separator)
+		escapeCSV(s.RawBytes, bf, escapeBackslash, opt)
 		bf.Write(opt.delimiter)
 	} else {
 		bf.WriteString(opt.nullValue)

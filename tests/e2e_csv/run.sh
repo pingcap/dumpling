@@ -59,7 +59,7 @@ run() {
 }
 
 escape_backslash_arr="true false"
-csv_delimiter_arr="\"" # '"
+csv_delimiter_arr="\""
 csv_separator_arr=', a aa |*|'
 
 for escape_backslash in $escape_backslash_arr
@@ -70,7 +70,9 @@ do
     do
       run
     done
-    csv_delimiter=""
-    run
+    if [[ $escape_backslash == "true" ]]; then
+      csv_delimiter=""
+      run
+    fi
   done
 done
