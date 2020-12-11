@@ -14,8 +14,7 @@ data-source-dir = "/tmp/dumpling_test_result/sql_res.e2e_csv"
 
 [mydumper.csv]
 separator = 'separator-place-holder'
-delimiter = 'delimiter-place-holder'
-# delimiter = "delimiter-place-holder"
+delimiter = "delimiter-place-holder"
 header = true
 not-null = false
 null = '\N'

@@ -42,13 +42,13 @@ run() {
     cp "$cur/conf/lightning.toml" $DUMPLING_TEST_DIR/conf
 
     sed -i -e "s/separator-place-holder/$csv_separator/g" $DUMPLING_TEST_DIR/conf/lightning.toml
-    # csv_delimiter_holder=$csv_delimiter
-    # if [[ $csv_delimiter == '"' ]]; then
-    #     csv_delimiter_holder='\\\"'
-    # fi
-    sed -i -e "s/delimiter-place-holder/$csv_delimiter/g" $DUMPLING_TEST_DIR/conf/lightning.toml
+     csv_delimiter_holder=$csv_delimiter
+     if [[ $csv_delimiter == '"' ]]; then
+         csv_delimiter_holder='\\\"'
+     fi
+    sed -i -e "s/delimiter-place-holder/$csv_delimiter_holder/g" $DUMPLING_TEST_DIR/conf/lightning.toml
     escape_backslash_holder="true"
-    if [[ $escape_backslash == "false" && $csv_delimiter != "" ]]; then
+    if [ "$escape_backslash" == "false" ] && [ "$csv_delimiter" != "" ]; then
         escape_backslash_holder="false"
     fi
     sed -i -e "s/backslash-escape-place-holder/$escape_backslash_holder/g" $DUMPLING_TEST_DIR/conf/lightning.toml
@@ -62,7 +62,7 @@ run() {
 }
 
 escape_backslash_arr="true false"
-csv_delimiter_arr="\""
+csv_delimiter_arr="\" '"
 csv_separator_arr=', a aa |*|'
 
 for escape_backslash in $escape_backslash_arr
@@ -73,7 +73,7 @@ do
     do
       run
     done
-    if [[ $escape_backslash == "true" ]]; then
+    if [ "$escape_backslash" == "true" ]; then
       csv_delimiter=""
       run
     fi
