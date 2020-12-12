@@ -40,14 +40,14 @@ run() {
 
     # construct lightning configuration
     mkdir -p $DUMPLING_TEST_DIR/conf
-    if [ "$csv_delimiter" == '"' ]; then
-        cp "$cur/conf/lightning_quotation.toml" $DUMPLING_TEST_DIR/conf/lightning.toml
-    else
-        cp "$cur/conf/lightning.toml" $DUMPLING_TEST_DIR/conf/lightning.toml
-    fi
+    cp "$cur/conf/lightning.toml" $DUMPLING_TEST_DIR/conf
 
     sed -i -e "s/separator-place-holder/$csv_separator/g" $DUMPLING_TEST_DIR/conf/lightning.toml
-    sed -i -e "s/delimiter-place-holder/$csv_delimiter/g" $DUMPLING_TEST_DIR/conf/lightning.toml
+    csv_delimiter_holder=$csv_delimiter
+    if [ "$csv_delimiter" == '"' ]; then
+        csv_delimiter_holder="\\\\\\\""
+    fi
+    sed -i -e "s/delimiter-place-holder/$csv_delimiter_holder/g" $DUMPLING_TEST_DIR/conf/lightning.toml
     escape_backslash_holder="true"
     if [ "$escape_backslash" == "false" ] && [ "$csv_delimiter" != "" ]; then
         escape_backslash_holder="false"
