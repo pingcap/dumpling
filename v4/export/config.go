@@ -395,7 +395,7 @@ func (conf *Config) ParseFromFlags(flags *pflag.FlagSet) error {
 		return errors.Errorf("--threads is set to %d. It should be greater than 0", conf.Threads)
 	}
 	if len(conf.CsvSeparator) == 0 {
-		return errors.Errorf("--csv-separator is set to \"\". It must not be an empty string", conf.Threads)
+		return errors.New("--csv-separator is set to \"\". It must not be an empty string")
 	}
 
 	if conf.SessionParams == nil {
