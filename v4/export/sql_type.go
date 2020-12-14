@@ -83,11 +83,7 @@ func escapeBackslashSQL(s []byte, bf *bytes.Buffer) {
 			last = i + 1
 		}
 	}
-	if last == 0 {
-		bf.Write(s)
-	} else if last < len(s) {
-		bf.Write(s[last:])
-	}
+	bf.Write(s[last:])
 }
 
 func escapeBackslashCSV(s []byte, bf *bytes.Buffer, opt *csvOption) {
@@ -108,6 +104,8 @@ func escapeBackslashCSV(s []byte, bf *bytes.Buffer, opt *csvOption) {
 		switch s[i] {
 		case 0: /* Must be escaped for 'mysql' */
 			escape = '0'
+		case '\r': /* escaped for line terminators */
+			escape = 'r'
 		case '\n': /* escaped for line terminators */
 			escape = 'n'
 		case '\\':
@@ -123,11 +121,7 @@ func escapeBackslashCSV(s []byte, bf *bytes.Buffer, opt *csvOption) {
 			last = i + 1
 		}
 	}
-	if last == 0 {
-		bf.Write(s)
-	} else if last < len(s) {
-		bf.Write(s[last:])
-	}
+	bf.Write(s[last:])
 }
 
 func escapeSQL(s []byte, bf *bytes.Buffer, escapeBackslash bool) { // revive:disable-line:flag-parameter
@@ -139,14 +133,13 @@ func escapeSQL(s []byte, bf *bytes.Buffer, escapeBackslash bool) { // revive:dis
 }
 
 func escapeCSV(s []byte, bf *bytes.Buffer, escapeBackslash bool, opt *csvOption) { // revive:disable-line:flag-parameter
-	if escapeBackslash {
+	switch {
+	case escapeBackslash:
 		escapeBackslashCSV(s, bf, opt)
-	} else {
-		if len(opt.delimiter) > 0 {
-			bf.Write(bytes.ReplaceAll(s, opt.delimiter, append(opt.delimiter, opt.delimiter...)))
-		} else {
-			bf.Write(s)
-		}
+	case len(opt.delimiter) > 0:
+		bf.Write(bytes.ReplaceAll(s, opt.delimiter, append(opt.delimiter, opt.delimiter...)))
+	default:
+		bf.Write(s)
 	}
 }
 

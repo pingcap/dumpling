@@ -45,7 +45,9 @@ run() {
     sed -i -e "s/separator-place-holder/$csv_separator/g" $DUMPLING_TEST_DIR/conf/lightning.toml
     csv_delimiter_holder=$csv_delimiter
     if [ "$csv_delimiter" = '"' ]; then
-        csv_delimiter_holder="\\\\\\\""
+        # We want to replace delimiter-place-holder in lightning.toml to \",
+        # but sed will identify \" as ", so we need to use \\\" here.
+        csv_delimiter_holder='\\\"'
     fi
     sed -i -e "s/delimiter-place-holder/$csv_delimiter_holder/g" $DUMPLING_TEST_DIR/conf/lightning.toml
     escape_backslash_holder="true"
