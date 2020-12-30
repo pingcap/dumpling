@@ -257,7 +257,7 @@ func (d *Dumper) dumpDatabases(metaConn *sql.Conn, taskChan chan<- Task) error {
 		d.sendTaskToChan(task, taskChan)
 
 		for _, table := range tables {
-			log.Debug("start dumping table...",
+			log.Debug("start dumping table...", zap.String("database", dbName),
 				zap.String("table", table.Name))
 			meta, err := dumpTableMeta(conf, metaConn, dbName, table)
 			if err != nil {
@@ -321,7 +321,8 @@ func (d *Dumper) concurrentDumpTable(conn *sql.Conn, meta TableMeta, taskChan ch
 	}
 	if field == "" {
 		// skip split chunk logic if not found proper field
-		log.Debug("fallback to sequential dump due to no proper field", zap.String("field", field))
+		log.Warn("fallback to sequential dump due to no proper field",
+			zap.String("database", db), zap.String("table", tbl))
 		return d.sequentialDumpTable(conn, meta, taskChan)
 	}
 
@@ -334,13 +335,17 @@ func (d *Dumper) concurrentDumpTable(conn *sql.Conn, meta TableMeta, taskChan ch
 		zap.String("upper", max.String()))
 
 	count := estimateCount(db, tbl, conn, field, conf)
-	log.Info("get estimated rows count", zap.Uint64("estimateCount", count))
+	log.Info("get estimated rows count",
+		zap.String("database", db),
+		zap.String("table", tbl),
+		zap.Uint64("estimateCount", count))
 	if count < conf.Rows {
 		// skip chunk logic if estimates are low
-		log.Debug("skip concurrent dump due to estimate count < rows",
+		log.Warn("skip concurrent dump due to estimate count < rows",
 			zap.Uint64("estimate count", count),
 			zap.Uint64("conf.rows", conf.Rows),
-		)
+			zap.String("database", db),
+			zap.String("table", tbl))
 		return d.sequentialDumpTable(conn, meta, taskChan)
 	}
 
@@ -416,7 +421,7 @@ func (d *Dumper) selectMinAndMaxIntValue(conn *sql.Conn, db, tbl, field string) 
 	}
 	if !smax.Valid || !smin.Valid {
 		// found no data
-		log.Warn("no data to dump", zap.String("schema", db), zap.String("table", tbl))
+		log.Warn("no data to dump", zap.String("database", db), zap.String("table", tbl))
 		return zero, zero, nil
 	}
 
@@ -634,7 +639,7 @@ func startHTTPService(d *Dumper) error {
 		go func() {
 			err := startDumplingService(conf.StatusAddr)
 			if err != nil {
-				log.Error("dumpling stops to serving service", zap.Error(err))
+				log.Warn("meet error when stopping dumpling http service", zap.Error(err))
 			}
 		}()
 	}
@@ -696,7 +701,7 @@ func tidbSetPDClientForGC(d *Dumper) error {
 	if len(pdAddrs) > 0 {
 		doPdGC, err := checkSameCluster(ctx, pool, pdAddrs)
 		if err != nil {
-			log.Warn("meet error while check whether fetched pd addr and TiDB belongs to one cluster", zap.Error(err), zap.Strings("pdAddrs", pdAddrs))
+			log.Warn("meet error while check whether fetched pd addr and TiDB belong to one cluster", zap.Error(err), zap.Strings("pdAddrs", pdAddrs))
 		} else if doPdGC {
 			pdClient, err := pd.NewClientWithContext(ctx, pdAddrs, pd.SecurityOption{})
 			if err != nil {
