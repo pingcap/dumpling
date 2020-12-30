@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/docker/go-units"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/dumpling/v4/log"
@@ -37,7 +38,7 @@ func (d *Dumper) runLogProgress(ctx context.Context) {
 			log.Info("progress",
 				zap.String("tables", fmt.Sprintf("%.0f/%.0f (%.1f%%)", completedTables, totalTables, completedTables/totalTables*100)),
 				zap.String("finished rows", fmt.Sprintf("%.0f", finishedRows)),
-				zap.String("finished bytes", fmt.Sprintf("%.0f", finishedBytes)),
+				zap.String("finished size", units.HumanSize(finishedBytes)),
 				zap.Float64("speed(MiB/s)", (finishedBytes-lastBytes)/(1048576e-9*nanoseconds)),
 			)
 
