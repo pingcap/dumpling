@@ -349,10 +349,10 @@ func WriteInsertInCsv(pCtx context.Context, cfg *Config, meta TableMeta, tblIR T
 		}
 	}
 
-	log.Debug("dumping table",
+	log.Debug("finish dumping table(chunk)",
 		zap.String("database", meta.DatabaseName()),
 		zap.String("table", meta.TableName()),
-		zap.Uint64("record counts", counter))
+		zap.Uint64("total rows", counter))
 	if bf.Len() > 0 {
 		wp.input <- bf
 	}
