@@ -39,7 +39,7 @@ func (d *Dumper) runLogProgress(ctx context.Context) {
 				zap.String("tables", fmt.Sprintf("%.0f/%.0f (%.1f%%)", completedTables, totalTables, completedTables/totalTables*100)),
 				zap.String("finished rows", fmt.Sprintf("%.0f", finishedRows)),
 				zap.String("finished size", units.HumanSize(finishedBytes)),
-				zap.Float64("speed(MiB/s)", (finishedBytes-lastBytes)/(1048576e-9*nanoseconds)),
+				zap.Float64("average speed(MiB/s)", (finishedBytes-lastBytes)/(1048576e-9*nanoseconds)),
 			)
 
 			lastCheckpoint = time.Now()
