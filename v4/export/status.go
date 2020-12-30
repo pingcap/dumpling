@@ -34,7 +34,6 @@ func (d *Dumper) runLogProgress(ctx context.Context) {
 			finishedBytes := ReadCounter(finishedSizeCounter.With(conf.Labels))
 			finishedRows := ReadCounter(finishedRowsCounter.With(conf.Labels))
 
-			// Note: a speed of 28 MiB/s roughly corresponds to 100 GiB/hour.
 			log.Info("progress",
 				zap.String("tables", fmt.Sprintf("%.0f/%.0f (%.1f%%)", completedTables, totalTables, completedTables/totalTables*100)),
 				zap.String("finished rows", fmt.Sprintf("%.0f", finishedRows)),
