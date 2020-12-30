@@ -191,6 +191,10 @@ func (d *Dumper) Dump() (dumpErr error) {
 	summary.SetUnit(summary.BackupUnit)
 	defer summary.Summary(summary.BackupUnit)
 
+	logProgressCtx, logProgressCancel := context.WithCancel(ctx)
+	go d.runLogProgress(logProgressCtx)
+	defer logProgressCancel()
+
 	tableDataStartTime := time.Now()
 	if conf.SQL == "" {
 		if err = d.dumpDatabases(metaConn, taskChan); err != nil {
@@ -224,6 +228,7 @@ func (d *Dumper) startWriters(ctx context.Context, wg *errgroup.Group, taskChan 
 		writer.rebuildConnFn = rebuildConnFn
 		writer.setFinishTableCallBack(func(task Task) {
 			if td, ok := task.(*TaskTableData); ok {
+				finishedTablesCounter.With(conf.Labels).Inc()
 				log.Debug("finished dumping table data",
 					zap.String("database", td.Meta.DatabaseName()),
 					zap.String("table", td.Meta.TableName()))
