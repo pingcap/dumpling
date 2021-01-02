@@ -10,27 +10,42 @@ import (
 )
 
 var (
+	finishedSizeCounter            *prometheus.CounterVec
+	finishedRowsCounter            *prometheus.CounterVec
+	finishedTablesCounter          *prometheus.CounterVec
+	writeTimeHistogram             *prometheus.HistogramVec
+	receiveWriteChunkTimeHistogram *prometheus.HistogramVec
+	errorCount                     *prometheus.CounterVec
+	taskChannelCapacity            *prometheus.CounterVec
+)
+
+// InitMetricsVector inits metrics vectors
+func InitMetricsVector(labels prometheus.Labels) {
+	labelNames := make([]string, 0, len(labels))
+	for name := range labels {
+		labelNames = append(labelNames, name)
+	}
 	finishedSizeCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "dumpling",
 			Subsystem: "dump",
 			Name:      "finished_size",
 			Help:      "counter for dumpling finished file size",
-		}, []string{})
+		}, labelNames)
 	finishedRowsCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "dumpling",
 			Subsystem: "dump",
 			Name:      "finished_rows",
 			Help:      "counter for dumpling finished rows",
-		}, []string{})
+		}, labelNames)
 	finishedTablesCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "dumpling",
 			Subsystem: "dump",
 			Name:      "finished_tables",
 			Help:      "counter for dumpling finished tables",
-		}, []string{})
+		}, labelNames)
 	writeTimeHistogram = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "dumpling",
@@ -38,7 +53,7 @@ var (
 			Name:      "write_duration_time",
 			Help:      "Bucketed histogram of write time (s) of files",
 			Buckets:   prometheus.ExponentialBuckets(0.00005, 2, 20),
-		}, []string{})
+		}, labelNames)
 	receiveWriteChunkTimeHistogram = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "dumpling",
@@ -46,25 +61,28 @@ var (
 			Name:      "receive_chunk_duration_time",
 			Help:      "Bucketed histogram of write time (s) of files",
 			Buckets:   prometheus.ExponentialBuckets(0.00005, 2, 20),
-		}, []string{})
+		}, labelNames)
 	errorCount = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "dumpling",
 			Subsystem: "dump",
 			Name:      "error_count",
 			Help:      "Total error count during dumping progress",
-		}, []string{})
+		}, labelNames)
 	taskChannelCapacity = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "dumpling",
 			Subsystem: "dump",
 			Name:      "channel_capacity",
 			Help:      "The task channel capacity during dumping progress",
-		}, []string{})
-)
+		}, labelNames)
+}
 
 // RegisterMetrics registers metrics.
 func RegisterMetrics(registry *prometheus.Registry) {
+	if finishedSizeCounter == nil {
+		return
+	}
 	registry.MustRegister(finishedSizeCounter)
 	registry.MustRegister(finishedRowsCounter)
 	registry.MustRegister(finishedTablesCounter)
@@ -76,6 +94,9 @@ func RegisterMetrics(registry *prometheus.Registry) {
 
 // RemoveLabelValuesWithTaskInMetrics removes metrics of specified labels.
 func RemoveLabelValuesWithTaskInMetrics(labels prometheus.Labels) {
+	if finishedSizeCounter == nil {
+		return
+	}
 	finishedSizeCounter.Delete(labels)
 	finishedRowsCounter.Delete(labels)
 	finishedTablesCounter.Delete(labels)

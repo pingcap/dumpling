@@ -64,6 +64,7 @@ func main() {
 	registry := prometheus.NewRegistry()
 	registry.MustRegister(prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
 	registry.MustRegister(prometheus.NewGoCollector())
+	export.InitMetricsVector(conf.Labels)
 	export.RegisterMetrics(registry)
 	prometheus.DefaultGatherer = registry
 	dumper, err := export.NewDumper(context.Background(), conf)
