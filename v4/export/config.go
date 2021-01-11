@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -73,10 +74,13 @@ const (
 
 	// FlagHelp represents the help flag
 	FlagHelp = "help"
+	// FlagVersion represents the version flag
+	FlagVersion = "version"
 )
 
 // Config is the dump config for dumpling
 type Config struct {
+	FlagSet *pflag.FlagSet
 	storage.BackendOptions
 
 	AllowCleartextPasswords  bool
@@ -134,39 +138,68 @@ type Config struct {
 
 // DefaultConfig returns the default export Config for dumpling
 func DefaultConfig() *Config {
-	allFilter, _ := filter.Parse([]string{"*.*"})
-	return &Config{
-		Databases:          nil,
-		Host:               "127.0.0.1",
-		User:               "root",
-		Port:               3306,
-		Password:           "",
-		Threads:            4,
-		Logger:             nil,
-		StatusAddr:         ":8281",
-		FileSize:           UnspecifiedSize,
-		StatementSize:      DefaultStatementSize,
-		OutputDirPath:      ".",
-		ServerInfo:         ServerInfoUnknown,
-		SortByPk:           true,
-		Tables:             nil,
-		Snapshot:           "",
-		Consistency:        consistencyTypeAuto,
-		NoViews:            true,
-		Rows:               UnspecifiedSize,
-		Where:              "",
-		FileType:           FileFormatSQLTextString,
-		NoHeader:           false,
-		NoSchemas:          false,
-		NoData:             false,
-		CsvNullValue:       "\\N",
-		SQL:                "",
-		TableFilter:        allFilter,
-		DumpEmptyDatabase:  true,
-		SessionParams:      make(map[string]interface{}),
-		OutputFileTemplate: DefaultOutputFileTemplate,
-		PosAfterConnect:    false,
+	cfg := &Config{}
+	cfg.FlagSet = pflag.NewFlagSet("dumpling", pflag.ContinueOnError)
+	cfg.FlagSet.Usage = func() {
+		fmt.Fprint(os.Stderr, "Dumpling is a CLI tool that helps you dump MySQL/TiDB data\n\nUsage:\n  dumpling [flags]\n\nFlags:\n")
+		cfg.FlagSet.PrintDefaults()
 	}
+
+	flags := cfg.FlagSet
+	flags.StringSliceVarP(&cfg.Databases, flagDatabase, "B", nil, "Databases to dump")
+	flags.StringVarP(&cfg.Host, flagHost, "h", "127.0.0.1", "The host to connect to")
+	flags.StringVarP(&cfg.User, flagUser, "u", "root", "Username with privileges to run the dump")
+	flags.IntVarP(&cfg.Port, flagPort, "P", 4000, "TCP/IP port to connect to")
+	flags.StringVarP(&cfg.Password, flagPassword, "p", "", "User password")
+	flags.BoolVar(&cfg.AllowCleartextPasswords, flagAllowCleartextPasswords, false, "Allow passwords to be sent in cleartext (warning: don't use without TLS)")
+	flags.IntVarP(&cfg.Threads, flagThreads, "t", 4, "Number of goroutines to use, default 4")
+	flags.Uint64VarP(&cfg.StatementSize, flagStatementSize, "s", DefaultStatementSize, "Attempted size of INSERT statement in bytes")
+	flags.StringVarP(&cfg.OutputDirPath, flagOutput, "o", timestampDirName(), "Output directory")
+	flags.StringVar(&cfg.LogLevel, flagLoglevel, "info", "Log level: {debug|info|warn|error|dpanic|panic|fatal}")
+	flags.StringVarP(&cfg.LogFile, flagLogfile, "L", "", "Log file `path`, leave empty to write to console")
+	flags.StringVar(&cfg.LogFormat, flagLogfmt, "text", "Log `format`: {text|json}")
+	flags.StringVar(&cfg.Consistency, flagConsistency, consistencyTypeAuto, "Consistency level during dumping: {auto|none|flush|lock|snapshot}")
+	flags.StringVar(&cfg.Snapshot, flagSnapshot, "", "Snapshot position (uint64 from pd timestamp for TiDB). Valid only when consistency=snapshot")
+	flags.BoolVarP(&cfg.NoViews, flagNoViews, "W", true, "Do not dump views")
+	flags.StringVar(&cfg.StatusAddr, flagStatusAddr, ":8281", "dumpling API server and pprof addr")
+	flags.Uint64VarP(&cfg.Rows, flagRows, "r", UnspecifiedSize, "Split table into chunks of this many rows, default unlimited")
+	flags.StringVar(&cfg.Where, flagWhere, "", "Dump only selected records")
+	flags.BoolVar(&cfg.EscapeBackslash, flagEscapeBackslash, true, "use backslash to escape special characters")
+	flags.StringVar(&cfg.FileType, flagFiletype, FileFormatSQLTextString, "The type of export file (sql/csv)")
+	flags.BoolVar(&cfg.NoHeader, flagNoHeader, false, "whether not to dump CSV table header")
+	flags.BoolVarP(&cfg.NoSchemas, flagNoSchemas, "m", false, "Do not dump table schemas with the data")
+	flags.BoolVarP(&cfg.NoData, flagNoData, "d", false, "Do not dump table data")
+	flags.StringVar(&cfg.CsvNullValue, flagCsvNullValue, "\\N", "The null value used when export to csv")
+	flags.StringVarP(&cfg.SQL, flagSQL, "S", "", "Dump data with given sql. This argument doesn't support concurrent dump")
+	flags.BoolVar(&cfg.DumpEmptyDatabase, flagDumpEmptyDatabase, true, "whether to dump empty database")
+	flags.Uint64Var(&cfg.TiDBMemQuotaQuery, flagTidbMemQuotaQuery, DefaultTiDBMemQuotaQuery, "The maximum memory limit for a single SQL statement, in bytes. Default: 32GB")
+	flags.StringVar(&cfg.Security.CAPath, flagCA, "", "The path name to the certificate authority file for TLS connection")
+	flags.StringVar(&cfg.Security.CertPath, flagCert, "", "The path name to the client certificate file for TLS connection")
+	flags.StringVar(&cfg.Security.KeyPath, flagKey, "", "The path name to the client private key file for TLS connection")
+	flags.StringVar(&cfg.CsvSeparator, flagCsvSeparator, ",", "The separator for csv files, default ','")
+	flags.StringVar(&cfg.CsvDelimiter, flagCsvDelimiter, "\"", "The delimiter for values in csv files, default '\"'")
+	flags.BoolVar(&cfg.CompleteInsert, flagCompleteInsert, false, "Use complete INSERT statements that include column names")
+	flags.DurationVar(&cfg.ReadTimeout, flagReadTimeout, 15*time.Minute, "I/O read timeout for db connection.")
+	_ = flags.MarkHidden(flagReadTimeout)
+	flags.BoolVar(&cfg.TransactionalConsistency, flagTransactionalConsistency, true, "Only support transactional consistency")
+
+	storage.DefineFlags(flags)
+	flags.StringSliceP(flagTablesList, "T", nil, "Comma delimited table list to dump; must be qualified table names")
+	flags.StringP(flagFilesize, "F", "", "The approximate size of output file")
+	flags.StringSliceP(flagFilter, "f", []string{"*.*", DefaultTableFilter}, "filter to select which tables to dump")
+	flags.Bool(flagCaseSensitive, false, "whether the filter should be case-sensitive")
+	flags.String(flagOutputFilenameTemplate, "", "The output filename template (without file extension)")
+	flags.StringToString(flagParams, nil, `Extra session variables used while dumping, accepted format: --params "character_set_client=latin1,character_set_connection=latin1"`)
+	flags.StringP(flagCompress, "c", "", "Compress output file type, support 'gzip', 'no-compression' now")
+	flags.Bool(FlagHelp, false, "Print help message and quit")
+	flags.BoolP(FlagVersion, "V", false, "Print Dumpling version")
+
+	cfg.ServerInfo = ServerInfoUnknown
+	cfg.SortByPk = true
+	cfg.SessionParams = make(map[string]interface{})
+	cfg.OutputFileTemplate = DefaultOutputFileTemplate
+
+	return cfg
 }
 
 // String returns dumpling's config in json format
@@ -197,197 +230,9 @@ func timestampDirName() string {
 	return fmt.Sprintf("./export-%s", time.Now().Format(time.RFC3339))
 }
 
-// DefineFlags defines flags of dumpling's configuration
-func (conf *Config) DefineFlags(flags *pflag.FlagSet) {
-	storage.DefineFlags(flags)
-	flags.StringSliceP(flagDatabase, "B", nil, "Databases to dump")
-	flags.StringSliceP(flagTablesList, "T", nil, "Comma delimited table list to dump; must be qualified table names")
-	flags.StringP(flagHost, "h", "127.0.0.1", "The host to connect to")
-	flags.StringP(flagUser, "u", "root", "Username with privileges to run the dump")
-	flags.IntP(flagPort, "P", 4000, "TCP/IP port to connect to")
-	flags.StringP(flagPassword, "p", "", "User password")
-	flags.Bool(flagAllowCleartextPasswords, false, "Allow passwords to be sent in cleartext (warning: don't use without TLS)")
-	flags.IntP(flagThreads, "t", 4, "Number of goroutines to use, default 4")
-	flags.StringP(flagFilesize, "F", "", "The approximate size of output file")
-	flags.Uint64P(flagStatementSize, "s", DefaultStatementSize, "Attempted size of INSERT statement in bytes")
-	flags.StringP(flagOutput, "o", timestampDirName(), "Output directory")
-	flags.String(flagLoglevel, "info", "Log level: {debug|info|warn|error|dpanic|panic|fatal}")
-	flags.StringP(flagLogfile, "L", "", "Log file `path`, leave empty to write to console")
-	flags.String(flagLogfmt, "text", "Log `format`: {text|json}")
-	flags.String(flagConsistency, consistencyTypeAuto, "Consistency level during dumping: {auto|none|flush|lock|snapshot}")
-	flags.String(flagSnapshot, "", "Snapshot position (uint64 from pd timestamp for TiDB). Valid only when consistency=snapshot")
-	flags.BoolP(flagNoViews, "W", true, "Do not dump views")
-	flags.String(flagStatusAddr, ":8281", "dumpling API server and pprof addr")
-	flags.Uint64P(flagRows, "r", UnspecifiedSize, "Split table into chunks of this many rows, default unlimited")
-	flags.String(flagWhere, "", "Dump only selected records")
-	flags.Bool(flagEscapeBackslash, true, "use backslash to escape special characters")
-	flags.String(flagFiletype, FileFormatSQLTextString, "The type of export file (sql/csv)")
-	flags.Bool(flagNoHeader, false, "whether not to dump CSV table header")
-	flags.BoolP(flagNoSchemas, "m", false, "Do not dump table schemas with the data")
-	flags.BoolP(flagNoData, "d", false, "Do not dump table data")
-	flags.String(flagCsvNullValue, "\\N", "The null value used when export to csv")
-	flags.StringP(flagSQL, "S", "", "Dump data with given sql. This argument doesn't support concurrent dump")
-	flags.StringSliceP(flagFilter, "f", []string{"*.*", DefaultTableFilter}, "filter to select which tables to dump")
-	flags.Bool(flagCaseSensitive, false, "whether the filter should be case-sensitive")
-	flags.Bool(flagDumpEmptyDatabase, true, "whether to dump empty database")
-	flags.Uint64(flagTidbMemQuotaQuery, DefaultTiDBMemQuotaQuery, "The maximum memory limit for a single SQL statement, in bytes. Default: 32GB")
-	flags.String(flagCA, "", "The path name to the certificate authority file for TLS connection")
-	flags.String(flagCert, "", "The path name to the client certificate file for TLS connection")
-	flags.String(flagKey, "", "The path name to the client private key file for TLS connection")
-	flags.String(flagCsvSeparator, ",", "The separator for csv files, default ','")
-	flags.String(flagCsvDelimiter, "\"", "The delimiter for values in csv files, default '\"'")
-	flags.String(flagOutputFilenameTemplate, "", "The output filename template (without file extension)")
-	flags.Bool(flagCompleteInsert, false, "Use complete INSERT statements that include column names")
-	flags.StringToString(flagParams, nil, `Extra session variables used while dumping, accepted format: --params "character_set_client=latin1,character_set_connection=latin1"`)
-	flags.Bool(FlagHelp, false, "Print help message and quit")
-	flags.Duration(flagReadTimeout, 15*time.Minute, "I/O read timeout for db connection.")
-	_ = flags.MarkHidden(flagReadTimeout)
-	flags.Bool(flagTransactionalConsistency, true, "Only support transactional consistency")
-	flags.StringP(flagCompress, "c", "", "Compress output file type, support 'gzip', 'no-compression' now")
-}
-
-// ParseFromFlags parses dumpling's export.Config from flags
-// nolint: gocyclo
-func (conf *Config) ParseFromFlags(flags *pflag.FlagSet) error {
-	var err error
-	conf.Databases, err = flags.GetStringSlice(flagDatabase)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	conf.Host, err = flags.GetString(flagHost)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	conf.User, err = flags.GetString(flagUser)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	conf.Port, err = flags.GetInt(flagPort)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	conf.Password, err = flags.GetString(flagPassword)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	conf.AllowCleartextPasswords, err = flags.GetBool(flagAllowCleartextPasswords)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	conf.Threads, err = flags.GetInt(flagThreads)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	conf.StatementSize, err = flags.GetUint64(flagStatementSize)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	conf.OutputDirPath, err = flags.GetString(flagOutput)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	conf.LogLevel, err = flags.GetString(flagLoglevel)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	conf.LogFile, err = flags.GetString(flagLogfile)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	conf.LogFormat, err = flags.GetString(flagLogfmt)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	conf.Consistency, err = flags.GetString(flagConsistency)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	conf.Snapshot, err = flags.GetString(flagSnapshot)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	conf.NoViews, err = flags.GetBool(flagNoViews)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	conf.StatusAddr, err = flags.GetString(flagStatusAddr)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	conf.Rows, err = flags.GetUint64(flagRows)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	conf.Where, err = flags.GetString(flagWhere)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	conf.EscapeBackslash, err = flags.GetBool(flagEscapeBackslash)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	conf.FileType, err = flags.GetString(flagFiletype)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	conf.NoHeader, err = flags.GetBool(flagNoHeader)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	conf.NoSchemas, err = flags.GetBool(flagNoSchemas)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	conf.NoData, err = flags.GetBool(flagNoData)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	conf.CsvNullValue, err = flags.GetString(flagCsvNullValue)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	conf.SQL, err = flags.GetString(flagSQL)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	conf.DumpEmptyDatabase, err = flags.GetBool(flagDumpEmptyDatabase)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	conf.Security.CAPath, err = flags.GetString(flagCA)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	conf.Security.CertPath, err = flags.GetString(flagCert)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	conf.Security.KeyPath, err = flags.GetString(flagKey)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	conf.CsvSeparator, err = flags.GetString(flagCsvSeparator)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	conf.CsvDelimiter, err = flags.GetString(flagCsvDelimiter)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	conf.CompleteInsert, err = flags.GetBool(flagCompleteInsert)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	conf.ReadTimeout, err = flags.GetDuration(flagReadTimeout)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	conf.TransactionalConsistency, err = flags.GetBool(flagTransactionalConsistency)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	conf.TiDBMemQuotaQuery, err = flags.GetUint64(flagTidbMemQuotaQuery)
-	if err != nil {
+// ParseAndAdjust parse flag set and adjust config
+func (conf *Config) ParseAndAdjust(args []string) error {
+	if err := conf.FlagSet.Parse(args); err != nil {
 		return errors.Trace(err)
 	}
 
@@ -398,31 +243,27 @@ func (conf *Config) ParseFromFlags(flags *pflag.FlagSet) error {
 		return errors.New("--csv-separator is set to \"\". It must not be an empty string")
 	}
 
-	if conf.SessionParams == nil {
-		conf.SessionParams = make(map[string]interface{})
-	}
-
-	tablesList, err := flags.GetStringSlice(flagTablesList)
+	tablesList, err := conf.FlagSet.GetStringSlice(flagTablesList)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	fileSizeStr, err := flags.GetString(flagFilesize)
+	fileSizeStr, err := conf.FlagSet.GetString(flagFilesize)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	filters, err := flags.GetStringSlice(flagFilter)
+	filters, err := conf.FlagSet.GetStringSlice(flagFilter)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	caseSensitive, err := flags.GetBool(flagCaseSensitive)
+	caseSensitive, err := conf.FlagSet.GetBool(flagCaseSensitive)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	outputFilenameFormat, err := flags.GetString(flagOutputFilenameTemplate)
+	outputFilenameFormat, err := conf.FlagSet.GetString(flagOutputFilenameTemplate)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	params, err := flags.GetStringToString(flagParams)
+	params, err := conf.FlagSet.GetStringToString(flagParams)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -450,7 +291,7 @@ func (conf *Config) ParseFromFlags(flags *pflag.FlagSet) error {
 	}
 	conf.OutputFileTemplate = tmpl
 
-	compressType, err := flags.GetString(flagCompress)
+	compressType, err := conf.FlagSet.GetString(flagCompress)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -463,7 +304,7 @@ func (conf *Config) ParseFromFlags(flags *pflag.FlagSet) error {
 		conf.SessionParams[k] = v
 	}
 
-	err = conf.BackendOptions.ParseFromFlags(pflag.CommandLine)
+	err = conf.BackendOptions.ParseFromFlags(conf.FlagSet)
 	if err != nil {
 		return errors.Trace(err)
 	}

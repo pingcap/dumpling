@@ -20,7 +20,6 @@ import (
 	"os"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/spf13/pflag"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/dumpling/v4/cli"
@@ -29,35 +28,29 @@ import (
 )
 
 func main() {
-	pflag.Usage = func() {
-		fmt.Fprint(os.Stderr, "Dumpling is a CLI tool that helps you dump MySQL/TiDB data\n\nUsage:\n  dumpling [flags]\n\nFlags:\n")
-		pflag.PrintDefaults()
-	}
-	printVersion := pflag.BoolP("version", "V", false, "Print Dumpling version")
-
 	conf := export.DefaultConfig()
-	conf.DefineFlags(pflag.CommandLine)
-
-	pflag.Parse()
-	if printHelp, err := pflag.CommandLine.GetBool(export.FlagHelp); printHelp || err != nil {
-		if err != nil {
-			fmt.Printf("\nGet help flag error: %s\n", err)
-		}
-		pflag.Usage()
-		return
-	}
-	println(cli.LongVersion())
-	if *printVersion {
-		return
-	}
-
-	err := conf.ParseFromFlags(pflag.CommandLine)
-	if err != nil {
+	if err := conf.ParseAndAdjust(os.Args[1:]); err != nil {
 		fmt.Printf("\nparse arguments failed: %+v\n", err)
 		os.Exit(1)
 	}
-	if pflag.NArg() > 0 {
-		fmt.Printf("\nmeet some unparsed arguments, please check again: %+v\n", pflag.Args())
+
+	if printHelp, err := conf.FlagSet.GetBool(export.FlagHelp); printHelp || err != nil {
+		if err != nil {
+			fmt.Printf("\nGet help flag error: %s\n", err)
+		}
+		conf.FlagSet.Usage()
+		return
+	}
+	println(cli.LongVersion())
+	if printVersion, err := conf.FlagSet.GetBool(export.FlagVersion); printVersion || err != nil {
+		if err != nil {
+			fmt.Printf("\nGet version flag error: %s\n", err)
+		}
+		return
+	}
+
+	if conf.FlagSet.NArg() > 0 {
+		fmt.Printf("\nmeet some unparsed arguments, please check again: %+v\n", conf.FlagSet.Args())
 		os.Exit(1)
 	}
 
