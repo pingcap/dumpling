@@ -230,7 +230,7 @@ func (conf *Config) DefineFlags(flags *pflag.FlagSet) {
 	flags.StringSliceP(flagFilter, "f", []string{"*.*", DefaultTableFilter}, "filter to select which tables to dump")
 	flags.Bool(flagCaseSensitive, false, "whether the filter should be case-sensitive")
 	flags.Bool(flagDumpEmptyDatabase, true, "whether to dump empty database")
-	flags.Uint64(flagTidbMemQuotaQuery, UnspecifiedSize, "The maximum memory limit for a single SQL statement, in bytes. Default: 32GB")
+	flags.Uint64(flagTidbMemQuotaQuery, UnspecifiedSize, "The maximum memory limit for a single SQL statement, in bytes.")
 	flags.String(flagCA, "", "The path name to the certificate authority file for TLS connection")
 	flags.String(flagCert, "", "The path name to the client certificate file for TLS connection")
 	flags.String(flagKey, "", "The path name to the client private key file for TLS connection")
