@@ -794,7 +794,7 @@ func setSessionParam(d *Dumper) error {
 	si := conf.ServerInfo
 	consistency, snapshot := conf.Consistency, conf.Snapshot
 	sessionParam := conf.SessionParams
-	if si.ServerType == ServerTypeTiDB {
+	if si.ServerType == ServerTypeTiDB && conf.TiDBMemQuotaQuery != UnspecifiedSize {
 		sessionParam[TiDBMemQuotaQueryName] = conf.TiDBMemQuotaQuery
 	}
 	if snapshot != "" {
