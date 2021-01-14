@@ -172,7 +172,7 @@ func DefaultConfig() *Config {
 	flags.StringVar(&cfg.CsvNullValue, flagCsvNullValue, "\\N", "The null value used when export to csv")
 	flags.StringVarP(&cfg.SQL, flagSQL, "S", "", "Dump data with given sql. This argument doesn't support concurrent dump")
 	flags.BoolVar(&cfg.DumpEmptyDatabase, flagDumpEmptyDatabase, true, "whether to dump empty database")
-	flags.Uint64Var(&cfg.TiDBMemQuotaQuery, flagTidbMemQuotaQuery, DefaultTiDBMemQuotaQuery, "The maximum memory limit for a single SQL statement, in bytes. Default: 32GB")
+	flags.Uint64Var(&cfg.TiDBMemQuotaQuery, flagTidbMemQuotaQuery, UnspecifiedSize, "The maximum memory limit for a single SQL statement, in bytes. Default: 32GB")
 	flags.StringVar(&cfg.Security.CAPath, flagCA, "", "The path name to the certificate authority file for TLS connection")
 	flags.StringVar(&cfg.Security.CertPath, flagCert, "", "The path name to the client certificate file for TLS connection")
 	flags.StringVar(&cfg.Security.KeyPath, flagKey, "", "The path name to the client private key file for TLS connection")
@@ -383,8 +383,6 @@ func (conf *Config) createExternalStorage(ctx context.Context) (storage.External
 const (
 	// UnspecifiedSize means the filesize/statement-size is unspecified
 	UnspecifiedSize = 0
-	// DefaultTiDBMemQuotaQuery is the default TiDBMemQuotaQuery size for TiDB
-	DefaultTiDBMemQuotaQuery = 32 << 30
 	// DefaultStatementSize is the default statement size
 	DefaultStatementSize = 1000000
 	// TiDBMemQuotaQueryName is the session variable TiDBMemQuotaQuery's name in TiDB
