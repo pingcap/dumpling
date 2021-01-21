@@ -46,4 +46,8 @@ func (s *testConfigSuite) TestParseAndAdjust(c *C) {
 	err = cfg.ParseAndAdjust(strings.Split(extraArgs, " "))
 	c.Assert(err, IsNil)
 	c.Assert(cfg.FileSize, Equals, uint64(0x100000))
+	c.Assert(cfg.Host, Equals, "255.255.255.255") // config manually
+	c.Assert(cfg.Password, Equals, "123456")      // config by extraArgs
+	c.Assert(cfg.Port, Equals, 1234)              // config both, overwrite by extraArgs
+	c.Assert(cfg.User, Equals, "root")            // default value
 }
