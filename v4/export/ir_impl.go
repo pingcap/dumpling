@@ -390,27 +390,31 @@ func tryDecodeRowKey(ctx context.Context, db *sql.Conn, key string) ([]string, e
 func getWhereConditions(ctx context.Context, db *sql.Conn, startKeys []string, counts []uint64, confRows uint64, dbName, tableName string) ([]string, error) {
 	whereConditions := make([]string, 0)
 	var (
-		cutoff     uint64 = 0
 		columnName []string
 		dataType   []string
 	)
-	lastStartKey := ""
-	rows, err := db.QueryContext(ctx, "SELECT s.COLUMN_NAME,t.DATA_TYPE FROM INFORMATION_SCHEMA.TIDB_INDEXES s, INFORMATION_SCHEMA.COLUMNS t WHERE s.KEY_NAME = 'PRIMARY' and s.TABLE_SCHEMA=t.TABLE_SCHEMA AND s.TABLE_NAME=t.TABLE_NAME AND s.COLUMN_NAME = t.COLUMN_NAME AND s.TABLE_SCHEMA=? AND s.TABLE_NAME=? ORDER BY s.SEQ_IN_INDEX;", dbName, tableName)
+	hasRowID, err := SelectTiDBRowID(db, dbName, tableName)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	var col, dType string
-	for rows.Next() {
-		err = rows.Scan(&col, &dType)
+	lastStartKey := ""
+	if !hasRowID {
+		rows, err := db.QueryContext(ctx, "SELECT s.COLUMN_NAME,t.DATA_TYPE FROM INFORMATION_SCHEMA.TIDB_INDEXES s, INFORMATION_SCHEMA.COLUMNS t WHERE s.KEY_NAME = 'PRIMARY' and s.TABLE_SCHEMA=t.TABLE_SCHEMA AND s.TABLE_NAME=t.TABLE_NAME AND s.COLUMN_NAME = t.COLUMN_NAME AND s.TABLE_SCHEMA=? AND s.TABLE_NAME=? ORDER BY s.SEQ_IN_INDEX;", dbName, tableName)
 		if err != nil {
 			return nil, err
 		}
-		columnName = append(columnName, fmt.Sprintf("`%s`", escapeString(col)))
-		dataType = append(dataType, dType)
-	}
-	rows.Close()
-	if len(columnName) == 0 {
+		defer rows.Close()
+		var col, dType string
+		for rows.Next() {
+			err = rows.Scan(&col, &dType)
+			if err != nil {
+				return nil, err
+			}
+			columnName = append(columnName, fmt.Sprintf("`%s`", escapeString(col)))
+			dataType = append(dataType, dType)
+		}
+		rows.Close()
+	} else {
 		columnName = append(columnName, "_tidb_rowid")
 		dataType = append(dataType, "int")
 	}
@@ -428,7 +432,6 @@ func getWhereConditions(ctx context.Context, db *sql.Conn, startKeys []string, c
 			where += fmt.Sprintf("(%s) < (%s)", field, endKey)
 		}
 		lastStartKey = endKey
-		cutoff = 0
 		whereConditions = append(whereConditions, where)
 	}
 	for i := 1; i < len(startKeys); i++ {
@@ -436,21 +439,18 @@ func getWhereConditions(ctx context.Context, db *sql.Conn, startKeys []string, c
 		if err != nil {
 			return nil, err
 		}
-		cutoff += counts[i-1]
-		if cutoff >= confRows {
-			if len(dataType) != len(keys) {
-				return nil, errors.Errorf("invalid column names %s and keys %s", columnName, keys)
-			}
-			var bf bytes.Buffer
-			for j := range keys {
-				if _, ok := dataTypeStringMap[strings.ToUpper(dataType[j])]; ok {
-					bf.Reset()
-					escape([]byte(keys[j]), &bf, nil)
-					keys[j] = fmt.Sprintf("'%s'", bf.String())
-				}
-			}
-			generateWhereCondition(strings.Join(keys, ","))
+		if len(dataType) != len(keys) {
+			return nil, errors.Errorf("invalid column names %s and keys %s", columnName, keys)
 		}
+		var bf bytes.Buffer
+		for j := range keys {
+			if _, ok := dataTypeStringMap[strings.ToUpper(dataType[j])]; ok {
+				bf.Reset()
+				escape([]byte(keys[j]), &bf, nil)
+				keys[j] = fmt.Sprintf("'%s'", bf.String())
+			}
+		}
+		generateWhereCondition(strings.Join(keys, ","))
 	}
 	generateWhereCondition("")
 	return whereConditions, nil
