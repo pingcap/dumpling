@@ -24,9 +24,6 @@ import (
 
 const lengthLimit = 1048576
 
-// TODO make this configurable, 5 mb is a good minimum size but on low latency/high bandwidth network you can go a lot bigger
-const hardcodedS3ChunkSize = 5 * 1024 * 1024
-
 var pool = sync.Pool{New: func() interface{} {
 	return &bytes.Buffer{}
 }}
