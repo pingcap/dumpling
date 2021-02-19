@@ -8,7 +8,6 @@ import (
 	"database/sql"
 	"fmt"
 	"math/big"
-	"math/rand"
 	"strings"
 	"time"
 
@@ -776,8 +775,7 @@ func tidbStartGCSavepointUpdateService(d *Dumper) error {
 func updateServiceSafePoint(ctx context.Context, pdClient pd.Client, ttl int64, snapshotTS uint64) {
 	updateInterval := time.Duration(ttl/2) * time.Second
 	tick := time.NewTicker(updateInterval)
-	rand.Seed(time.Now().UnixNano())
-	dumplingServiceSafePointID := fmt.Sprintf("%s_%04d", dumplingServiceSafePointPrefix, rand.Int()%10000)
+	dumplingServiceSafePointID := fmt.Sprintf("%s_%d", dumplingServiceSafePointPrefix, time.Now().UnixNano())
 	log.Info("generate dumpling gc safePoint id", zap.String("id", dumplingServiceSafePointID))
 
 	for {
