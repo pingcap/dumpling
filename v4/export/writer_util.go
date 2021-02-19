@@ -427,6 +427,8 @@ func buildInterceptFileWriter(pCtx context.Context, s storage.ExternalStorage, f
 	fullPath := path.Join(s.URI(), fileName)
 	fileWriter := &InterceptFileWriter{}
 	initRoutine := func() error {
+		// use separated context pCtx here to make sure context used in ExternalFile won't be canceled before close,
+		// which will cause a context canceled error when closing gcs's Writer
 		w, err := storage.WithCompression(s, compressType).Create(pCtx, fileName)
 		if err != nil {
 			log.Error("open file failed",
