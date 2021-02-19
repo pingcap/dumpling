@@ -777,15 +777,15 @@ func updateServiceSafePoint(ctx context.Context, pdClient pd.Client, ttl int64, 
 	updateInterval := time.Duration(ttl/2) * time.Second
 	tick := time.NewTicker(updateInterval)
 	rand.Seed(time.Now().UnixNano())
-	dumplingServiceSafePoint := dumplingServiceSafePointID + "_" + fmt.Sprintf("%04d", rand.Int()%10000)
-	log.Info("generate dumpling safePoint", zap.String("id", dumplingServiceSafePoint))
+	dumplingServiceSafePointID := fmt.Sprintf("%s_%04d", dumplingServiceSafePointPrefix, rand.Int()%10000)
+	log.Info("generate dumpling gc safePoint id", zap.String("id", dumplingServiceSafePointID))
 
 	for {
 		log.Debug("update PD safePoint limit with ttl",
 			zap.Uint64("safePoint", snapshotTS),
 			zap.Int64("ttl", ttl))
 		for retryCnt := 0; retryCnt <= 10; retryCnt++ {
-			_, err := pdClient.UpdateServiceGCSafePoint(ctx, dumplingServiceSafePoint, ttl, snapshotTS)
+			_, err := pdClient.UpdateServiceGCSafePoint(ctx, dumplingServiceSafePointID, ttl, snapshotTS)
 			if err == nil {
 				break
 			}
