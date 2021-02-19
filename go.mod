@@ -9,7 +9,6 @@ require (
 	github.com/fsouza/fake-gcs-server v1.19.0 // indirect
 	github.com/go-sql-driver/mysql v1.5.0
 	github.com/golang/mock v1.4.4 // indirect
-	github.com/google/uuid v1.1.1
 	github.com/mattn/go-colorable v0.1.7 // indirect
 	github.com/mattn/go-runewidth v0.0.9 // indirect
 	github.com/onsi/ginkgo v1.11.0 // indirect

@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"fmt"
 	"math/big"
+	"math/rand"
 	"strings"
 	"time"
 
@@ -15,7 +16,6 @@ import (
 
 	// import mysql driver
 	_ "github.com/go-sql-driver/mysql"
-	"github.com/google/uuid"
 	"github.com/pingcap/br/pkg/storage"
 	"github.com/pingcap/br/pkg/summary"
 	"github.com/pingcap/errors"
@@ -776,7 +776,9 @@ func tidbStartGCSavepointUpdateService(d *Dumper) error {
 func updateServiceSafePoint(ctx context.Context, pdClient pd.Client, ttl int64, snapshotTS uint64) {
 	updateInterval := time.Duration(ttl/2) * time.Second
 	tick := time.NewTicker(updateInterval)
-	dumplingServiceSafePoint := dumplingServiceSafePointID + "_" + uuid.New().String()
+	rand.Seed(time.Now().UnixNano())
+	dumplingServiceSafePoint := dumplingServiceSafePointID + "_" + fmt.Sprintf("%04d", rand.Int()%10000)
+	log.Info("generate dumpling safePoint", zap.String("id", dumplingServiceSafePoint))
 
 	for {
 		log.Debug("update PD safePoint limit with ttl",
