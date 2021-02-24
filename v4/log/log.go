@@ -3,6 +3,8 @@
 package log
 
 import (
+	"sync/atomic"
+
 	"github.com/pingcap/errors"
 	pclog "github.com/pingcap/log"
 	"go.uber.org/zap"
@@ -10,9 +12,13 @@ import (
 )
 
 var (
-	appLogger = Logger{zap.NewNop()}
+	appLogger atomic.Value
 	appLevel  = zap.NewAtomicLevel()
 )
+
+func init() {
+	appLogger.Store(Logger{zap.NewNop()})
+}
 
 // Logger wraps the zap logger.
 type Logger struct {
@@ -21,7 +27,7 @@ type Logger struct {
 
 // Zap returns the global logger.
 func Zap() Logger {
-	return appLogger
+	return appLogger.Load().(Logger)
 }
 
 // Config serializes log related config in toml/json.
@@ -57,14 +63,14 @@ func InitAppLogger(cfg *Config) error {
 		return errors.Trace(err)
 	}
 	logger = logger.WithOptions(zap.AddCallerSkip(1))
-	appLogger = Logger{logger}
+	appLogger.Store(Logger{logger})
 	appLevel = props.Level
 	return nil
 }
 
 // SetAppLogger sets the wrapped logger from config.
 func SetAppLogger(logger *zap.Logger) {
-	appLogger = Logger{logger}
+	appLogger.Store(Logger{logger})
 }
 
 // ChangeAppLogLevel changes the wrapped logger's log level.
@@ -74,30 +80,30 @@ func ChangeAppLogLevel(level zapcore.Level) {
 
 // Info wraps *zap.Logger's Info function.
 func Info(msg string, fields ...zap.Field) {
-	appLogger.Info(msg, fields...)
+	appLogger.Load().(Logger).Info(msg, fields...)
 }
 
 // Warn wraps *zap.Logger's Warn function.
 func Warn(msg string, fields ...zap.Field) {
-	appLogger.Warn(msg, fields...)
+	appLogger.Load().(Logger).Warn(msg, fields...)
 }
 
 // Error wraps *zap.Logger's Error function.
 func Error(msg string, fields ...zap.Field) {
-	appLogger.Error(msg, fields...)
+	appLogger.Load().(Logger).Error(msg, fields...)
 }
 
 // Debug wraps *zap.Logger's Debug function.
 func Debug(msg string, fields ...zap.Field) {
-	appLogger.Debug(msg, fields...)
+	appLogger.Load().(Logger).Debug(msg, fields...)
 }
 
 // Fatal wraps *zap.Logger's Fatal function.
 func Fatal(msg string, fields ...zap.Field) {
-	appLogger.Fatal(msg, fields...)
+	appLogger.Load().(Logger).Fatal(msg, fields...)
 }
 
 // Panic wraps *zap.Logger's Panic function.
 func Panic(msg string, fields ...zap.Field) {
-	appLogger.Panic(msg, fields...)
+	appLogger.Load().(Logger).Panic(msg, fields...)
 }
