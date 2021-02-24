@@ -177,14 +177,14 @@ func (w *Writer) WriteTableData(meta TableMeta, ir TableDataIR, currentChunk int
 			}
 		}
 		err = ir.Start(ctx, conn)
+		if err != nil {
+			return
+		}
 		if conf.SQL != "" {
 			meta, err = setTableMetaFromRows(ir.RawRows())
 			if err != nil {
 				return err
 			}
-		}
-		if err != nil {
-			return
 		}
 		defer ir.Close()
 		return w.tryToWriteTableData(ctx, meta, ir, currentChunk)
@@ -200,7 +200,7 @@ func (w *Writer) tryToWriteTableData(ctx context.Context, meta TableMeta, ir Tab
 	}
 
 	for {
-		fileWriter, tearDown := buildInterceptFileWriter(w.extStorage, fileName, conf.CompressType)
+		fileWriter, tearDown := buildInterceptFileWriter(ctx, w.extStorage, fileName, conf.CompressType)
 		err = format.WriteInsert(ctx, conf, meta, ir, fileWriter)
 		tearDown(ctx)
 		if err != nil {

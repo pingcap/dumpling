@@ -196,6 +196,18 @@ func (d *Dumper) Dump() (dumpErr error) {
 	defer logProgressCancel()
 
 	tableDataStartTime := time.Now()
+
+	failpoint.Inject("PrintTiDBMemQuotaQuery", func(_ failpoint.Value) {
+		row := d.dbHandle.QueryRowContext(ctx, "select @@tidb_mem_quota_query;")
+		var s string
+		err = row.Scan(&s)
+		if err != nil {
+			fmt.Println(errors.Trace(err))
+		} else {
+			fmt.Printf("tidb_mem_quota_query == %s\n", s)
+		}
+	})
+
 	if conf.SQL == "" {
 		if err = d.dumpDatabases(metaConn, taskChan); err != nil {
 			return err
@@ -763,6 +775,8 @@ func tidbStartGCSavepointUpdateService(d *Dumper) error {
 func updateServiceSafePoint(ctx context.Context, pdClient pd.Client, ttl int64, snapshotTS uint64) {
 	updateInterval := time.Duration(ttl/2) * time.Second
 	tick := time.NewTicker(updateInterval)
+	dumplingServiceSafePointID := fmt.Sprintf("%s_%d", dumplingServiceSafePointPrefix, time.Now().UnixNano())
+	log.Info("generate dumpling gc safePoint id", zap.String("id", dumplingServiceSafePointID))
 
 	for {
 		log.Debug("update PD safePoint limit with ttl",
@@ -794,7 +808,7 @@ func setSessionParam(d *Dumper) error {
 	si := conf.ServerInfo
 	consistency, snapshot := conf.Consistency, conf.Snapshot
 	sessionParam := conf.SessionParams
-	if si.ServerType == ServerTypeTiDB {
+	if si.ServerType == ServerTypeTiDB && conf.TiDBMemQuotaQuery != UnspecifiedSize {
 		sessionParam[TiDBMemQuotaQueryName] = conf.TiDBMemQuotaQuery
 	}
 	if snapshot != "" {

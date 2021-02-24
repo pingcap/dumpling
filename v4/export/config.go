@@ -182,7 +182,7 @@ func (conf *Config) String() string {
 func (conf *Config) GetDSN(db string) string {
 	// maxAllowedPacket=0 can be used to automatically fetch the max_allowed_packet variable from server on every connection.
 	// https://github.com/go-sql-driver/mysql#maxallowedpacket
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&readTimeout=%s&writeTimeout=30s&interpolateParams=true&maxAllowedPacket=0",
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?collation=utf8mb4_general_ci&readTimeout=%s&writeTimeout=30s&interpolateParams=true&maxAllowedPacket=0",
 		conf.User, conf.Password, conf.Host, conf.Port, db, conf.ReadTimeout)
 	if len(conf.Security.CAPath) > 0 {
 		dsn += "&tls=dumpling-tls-target"
@@ -230,7 +230,7 @@ func (conf *Config) DefineFlags(flags *pflag.FlagSet) {
 	flags.StringSliceP(flagFilter, "f", []string{"*.*", DefaultTableFilter}, "filter to select which tables to dump")
 	flags.Bool(flagCaseSensitive, false, "whether the filter should be case-sensitive")
 	flags.Bool(flagDumpEmptyDatabase, true, "whether to dump empty database")
-	flags.Uint64(flagTidbMemQuotaQuery, DefaultTiDBMemQuotaQuery, "The maximum memory limit for a single SQL statement, in bytes. Default: 32GB")
+	flags.Uint64(flagTidbMemQuotaQuery, UnspecifiedSize, "The maximum memory limit for a single SQL statement, in bytes.")
 	flags.String(flagCA, "", "The path name to the certificate authority file for TLS connection")
 	flags.String(flagCert, "", "The path name to the client certificate file for TLS connection")
 	flags.String(flagKey, "", "The path name to the client private key file for TLS connection")
@@ -542,8 +542,6 @@ func (conf *Config) createExternalStorage(ctx context.Context) (storage.External
 const (
 	// UnspecifiedSize means the filesize/statement-size is unspecified
 	UnspecifiedSize = 0
-	// DefaultTiDBMemQuotaQuery is the default TiDBMemQuotaQuery size for TiDB
-	DefaultTiDBMemQuotaQuery = 32 << 30
 	// DefaultStatementSize is the default statement size
 	DefaultStatementSize = 1000000
 	// TiDBMemQuotaQueryName is the session variable TiDBMemQuotaQuery's name in TiDB
@@ -551,10 +549,11 @@ const (
 	// DefaultTableFilter is the default exclude table filter. It will exclude all system databases
 	DefaultTableFilter = "!/^(mysql|sys|INFORMATION_SCHEMA|PERFORMANCE_SCHEMA|METRICS_SCHEMA|INSPECTION_SCHEMA)$/.*"
 
-	defaultDumpThreads         = 128
-	defaultDumpGCSafePointTTL  = 5 * 60
-	dumplingServiceSafePointID = "dumpling"
-	defaultEtcdDialTimeOut     = 3 * time.Second
+	defaultDumpThreads        = 128
+	defaultDumpGCSafePointTTL = 5 * 60
+	defaultEtcdDialTimeOut    = 3 * time.Second
+
+	dumplingServiceSafePointPrefix = "dumpling"
 )
 
 var (
