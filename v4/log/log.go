@@ -52,7 +52,7 @@ func InitAppLogger(cfg *Config) (Logger, error) {
 	if err != nil {
 		return appLogger, errors.Trace(err)
 	}
-	return Logger{logger.WithOptions(zap.AddCallerSkip(1))}, nil
+	return Logger{logger.WithOptions(zap.AddStacktrace(zap.DPanicLevel))}, nil
 }
 
 // NewAppLogger returns the wrapped logger from config.
