@@ -25,7 +25,6 @@ import (
 
 	"github.com/pingcap/dumpling/v4/cli"
 	"github.com/pingcap/dumpling/v4/export"
-	"github.com/pingcap/dumpling/v4/log"
 )
 
 func main() {
@@ -69,16 +68,15 @@ func main() {
 	prometheus.DefaultGatherer = registry
 	dumper, err := export.NewDumper(context.Background(), conf)
 	if err != nil {
-		log.Error("dump failed error stack info", zap.Error(err))
 		fmt.Printf("\ncreate dumper failed: %s\n", err.Error())
 		os.Exit(1)
 	}
 	err = dumper.Dump()
 	dumper.Close()
 	if err != nil {
-		log.Error("dump failed error stack info", zap.Error(err))
+		dumper.L().Error("dump failed error stack info", zap.Error(err))
 		fmt.Printf("\ndump failed: %s\n", err.Error())
 		os.Exit(1)
 	}
-	log.Info("dump data successfully, dumpling will exit now")
+	dumper.L().Info("dump data successfully, dumpling will exit now")
 }

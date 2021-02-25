@@ -19,7 +19,8 @@ var (
 	taskChannelCapacity            *prometheus.GaugeVec
 )
 
-// InitMetricsVector inits metrics vectors
+// InitMetricsVector inits metrics vectors.
+// This function much run before RegisterMetrics
 func InitMetricsVector(labels prometheus.Labels) {
 	labelNames := make([]string, 0, len(labels))
 	for name := range labels {

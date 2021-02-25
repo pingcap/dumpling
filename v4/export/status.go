@@ -3,20 +3,19 @@
 package export
 
 import (
-	"context"
 	"fmt"
 	"time"
 
+	tcontext "github.com/pingcap/dumpling/v4/context"
+
 	"github.com/docker/go-units"
 	"go.uber.org/zap"
-
-	"github.com/pingcap/dumpling/v4/log"
 )
 
 const logProgressTick = 2 * time.Minute
 
-func (d *Dumper) runLogProgress(ctx context.Context) {
-	conf := d.conf
+func (d *Dumper) runLogProgress(tctx *tcontext.Context) {
+	ctx, conf := tctx.Context(), d.conf
 	totalTables := float64(calculateTableCount(conf.Tables))
 	logProgressTicker := time.NewTicker(logProgressTick)
 	lastCheckpoint := time.Now()
@@ -25,7 +24,7 @@ func (d *Dumper) runLogProgress(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			log.Debug("stopping log progress")
+			tctx.L().Debug("stopping log progress")
 			return
 		case <-logProgressTicker.C:
 			nanoseconds := float64(time.Since(lastCheckpoint).Nanoseconds())
@@ -34,7 +33,7 @@ func (d *Dumper) runLogProgress(ctx context.Context) {
 			finishedBytes := ReadCounter(finishedSizeCounter, conf.Labels)
 			finishedRows := ReadCounter(finishedRowsCounter, conf.Labels)
 
-			log.Info("progress",
+			tctx.L().Info("progress",
 				zap.String("tables", fmt.Sprintf("%.0f/%.0f (%.1f%%)", completedTables, totalTables, completedTables/totalTables*100)),
 				zap.String("finished rows", fmt.Sprintf("%.0f", finishedRows)),
 				zap.String("finished size", units.HumanSize(finishedBytes)),
