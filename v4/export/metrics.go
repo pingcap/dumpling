@@ -16,7 +16,7 @@ var (
 	writeTimeHistogram             *prometheus.HistogramVec
 	receiveWriteChunkTimeHistogram *prometheus.HistogramVec
 	errorCount                     *prometheus.CounterVec
-	taskChannelCapacity            *prometheus.CounterVec
+	taskChannelCapacity            *prometheus.GaugeVec
 )
 
 // InitMetricsVector inits metrics vectors
@@ -69,8 +69,8 @@ func InitMetricsVector(labels prometheus.Labels) {
 			Name:      "error_count",
 			Help:      "Total error count during dumping progress",
 		}, labelNames)
-	taskChannelCapacity = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
+	taskChannelCapacity = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
 			Namespace: "dumpling",
 			Subsystem: "dump",
 			Name:      "channel_capacity",
@@ -107,10 +107,62 @@ func RemoveLabelValuesWithTaskInMetrics(labels prometheus.Labels) {
 }
 
 // ReadCounter reports the current value of the counter.
-func ReadCounter(counter prometheus.Counter) float64 {
+func ReadCounter(counterVec *prometheus.CounterVec, labels prometheus.Labels) float64 {
+	if counterVec == nil {
+		return math.NaN()
+	}
+	counter := counterVec.With(labels)
 	var metric dto.Metric
 	if err := counter.Write(&metric); err != nil {
 		return math.NaN()
 	}
 	return metric.Counter.GetValue()
+}
+
+// AddCounter adds a counter.
+func AddCounter(counterVec *prometheus.CounterVec, labels prometheus.Labels, v float64) {
+	if counterVec == nil {
+		return
+	}
+	counterVec.With(labels).Add(v)
+}
+
+// IncCounter incs a counter.
+func IncCounter(counterVec *prometheus.CounterVec, labels prometheus.Labels) {
+	if counterVec == nil {
+		return
+	}
+	counterVec.With(labels).Inc()
+}
+
+// ObserveHistogram observes a histogram
+func ObserveHistogram(histogramVec *prometheus.HistogramVec, labels prometheus.Labels, v float64) {
+	if histogramVec == nil {
+		return
+	}
+	histogramVec.With(labels).Observe(v)
+}
+
+// AddGauge adds a gauge
+func AddGauge(gaugeVec *prometheus.GaugeVec, labels prometheus.Labels, v float64) {
+	if gaugeVec == nil {
+		return
+	}
+	gaugeVec.With(labels).Add(v)
+}
+
+// IncGauge incs a gauge
+func IncGauge(gaugeVec *prometheus.GaugeVec, labels prometheus.Labels) {
+	if gaugeVec == nil {
+		return
+	}
+	gaugeVec.With(labels).Inc()
+}
+
+// DecGauge decs a gauge
+func DecGauge(gaugeVec *prometheus.GaugeVec, labels prometheus.Labels) {
+	if gaugeVec == nil {
+		return
+	}
+	gaugeVec.With(labels).Dec()
 }

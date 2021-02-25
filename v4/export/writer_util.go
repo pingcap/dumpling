@@ -72,11 +72,11 @@ func (b *writerPipe) Run(ctx context.Context) {
 			if errOccurs {
 				continue
 			}
-			receiveWriteChunkTimeHistogram.With(b.labels).Observe(time.Since(receiveChunkTime).Seconds())
+			ObserveHistogram(receiveWriteChunkTimeHistogram, b.labels, time.Since(receiveChunkTime).Seconds())
 			receiveChunkTime = time.Now()
 			err := writeBytes(ctx, b.w, s.Bytes())
-			writeTimeHistogram.With(b.labels).Observe(time.Since(receiveChunkTime).Seconds())
-			finishedSizeCounter.With(b.labels).Add(float64(s.Len()))
+			ObserveHistogram(writeTimeHistogram, b.labels, time.Since(receiveChunkTime).Seconds())
+			AddCounter(finishedSizeCounter, b.labels, float64(s.Len()))
 			b.finishedFileSize += uint64(s.Len())
 			s.Reset()
 			pool.Put(s)
@@ -228,7 +228,7 @@ func WriteInsert(pCtx context.Context, cfg *Config, meta TableMeta, tblIR TableD
 					if bfCap := bf.Cap(); bfCap < lengthLimit {
 						bf.Grow(lengthLimit - bfCap)
 					}
-					finishedRowsCounter.With(cfg.Labels).Add(float64(counter - lastCounter))
+					AddCounter(finishedRowsCounter, cfg.Labels, float64(counter-lastCounter))
 					lastCounter = counter
 				}
 			}
@@ -252,7 +252,7 @@ func WriteInsert(pCtx context.Context, cfg *Config, meta TableMeta, tblIR TableD
 	<-wp.closed
 	summary.CollectSuccessUnit(summary.TotalBytes, 1, wp.finishedFileSize)
 	summary.CollectSuccessUnit("total rows", 1, counter)
-	finishedRowsCounter.With(cfg.Labels).Add(float64(counter - lastCounter))
+	AddCounter(finishedRowsCounter, cfg.Labels, float64(counter-lastCounter))
 	if err = fileRowIter.Error(); err != nil {
 		return errors.Trace(err)
 	}
@@ -337,7 +337,7 @@ func WriteInsertInCsv(pCtx context.Context, cfg *Config, meta TableMeta, tblIR T
 				if bfCap := bf.Cap(); bfCap < lengthLimit {
 					bf.Grow(lengthLimit - bfCap)
 				}
-				finishedRowsCounter.With(cfg.Labels).Add(float64(counter - lastCounter))
+				AddCounter(finishedRowsCounter, cfg.Labels, float64(counter-lastCounter))
 				lastCounter = counter
 			}
 		}
@@ -359,7 +359,7 @@ func WriteInsertInCsv(pCtx context.Context, cfg *Config, meta TableMeta, tblIR T
 	<-wp.closed
 	summary.CollectSuccessUnit(summary.TotalBytes, 1, wp.finishedFileSize)
 	summary.CollectSuccessUnit("total rows", 1, counter)
-	finishedRowsCounter.With(cfg.Labels).Add(float64(counter - lastCounter))
+	AddCounter(finishedRowsCounter, cfg.Labels, float64(counter-lastCounter))
 	if err = fileRowIter.Error(); err != nil {
 		return errors.Trace(err)
 	}

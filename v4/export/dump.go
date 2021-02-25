@@ -160,7 +160,7 @@ func (d *Dumper) Dump() (dumpErr error) {
 	}
 
 	taskChan := make(chan Task, defaultDumpThreads)
-	taskChannelCapacity.With(conf.Labels).Add(defaultDumpThreads)
+	AddGauge(taskChannelCapacity, conf.Labels, defaultDumpThreads)
 	wg, writingCtx := errgroup.WithContext(ctx)
 	writers, tearDownWriters, err := d.startWriters(writingCtx, wg, taskChan, rebuildConn)
 	if err != nil {
@@ -240,14 +240,14 @@ func (d *Dumper) startWriters(ctx context.Context, wg *errgroup.Group, taskChan 
 		writer.rebuildConnFn = rebuildConnFn
 		writer.setFinishTableCallBack(func(task Task) {
 			if td, ok := task.(*TaskTableData); ok {
-				finishedTablesCounter.With(conf.Labels).Inc()
+				IncCounter(finishedTablesCounter, conf.Labels)
 				log.Debug("finished dumping table data",
 					zap.String("database", td.Meta.DatabaseName()),
 					zap.String("table", td.Meta.TableName()))
 			}
 		})
 		writer.setFinishTaskCallBack(func(task Task) {
-			taskChannelCapacity.With(conf.Labels).Inc()
+			IncGauge(taskChannelCapacity, conf.Labels)
 		})
 		wg.Go(func() error {
 			return writer.run(taskChan)
@@ -414,7 +414,7 @@ func (d *Dumper) sendTaskToChan(task Task, taskChan chan<- Task) (ctxDone bool) 
 	case taskChan <- task:
 		log.Debug("send task to writer",
 			zap.String("task", task.Brief()))
-		taskChannelCapacity.With(conf.Labels).Desc()
+		DecGauge(taskChannelCapacity, conf.Labels)
 		return false
 	}
 }

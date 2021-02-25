@@ -30,9 +30,9 @@ func (d *Dumper) runLogProgress(ctx context.Context) {
 		case <-logProgressTicker.C:
 			nanoseconds := float64(time.Since(lastCheckpoint).Nanoseconds())
 
-			completedTables := ReadCounter(finishedTablesCounter.With(conf.Labels))
-			finishedBytes := ReadCounter(finishedSizeCounter.With(conf.Labels))
-			finishedRows := ReadCounter(finishedRowsCounter.With(conf.Labels))
+			completedTables := ReadCounter(finishedTablesCounter, conf.Labels)
+			finishedBytes := ReadCounter(finishedSizeCounter, conf.Labels)
+			finishedRows := ReadCounter(finishedRowsCounter, conf.Labels)
 
 			log.Info("progress",
 				zap.String("tables", fmt.Sprintf("%.0f/%.0f (%.1f%%)", completedTables, totalTables, completedTables/totalTables*100)),

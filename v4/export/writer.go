@@ -162,7 +162,7 @@ func (w *Writer) WriteTableData(meta TableMeta, ir TableDataIR, currentChunk int
 		defer func() {
 			lastErr = err
 			if err != nil {
-				errorCount.With(conf.Labels).Inc()
+				IncCounter(errorCount, conf.Labels)
 			}
 		}()
 		retryTime++
