@@ -485,6 +485,7 @@ func (d *Dumper) concurrentDumpTiDBTables(conn *sql.Conn, meta TableMeta, taskCh
 	return nil
 }
 
+// L returns real logger
 func (d *Dumper) L() log.Logger {
 	return d.tctx.L()
 }
