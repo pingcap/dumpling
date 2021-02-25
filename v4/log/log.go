@@ -16,6 +16,7 @@ var (
 	appLevel  = zap.NewAtomicLevel()
 )
 
+//nolint:gochecknoinits
 func init() {
 	appLogger.Store(Logger{zap.NewNop()})
 }
