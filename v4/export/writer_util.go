@@ -85,7 +85,7 @@ func (b *writerPipe) Run(tctx *tcontext.Context) {
 				b.errCh <- err
 			}
 			receiveChunkTime = time.Now()
-		case <-tctx.Context().Done():
+		case <-tctx.Done():
 			return
 		}
 	}
@@ -148,11 +148,11 @@ func WriteInsert(pCtx *tcontext.Context, cfg *Config, meta TableMeta, tblIR Tabl
 	wp := newWriterPipe(w, cfg.FileSize, cfg.StatementSize, cfg.Labels)
 
 	// use context.Background here to make sure writerPipe can deplete all the chunks in pipeline
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := tcontext.Background().WithLogger(pCtx.L()).WithCancel()
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
-		wp.Run(pCtx.WithContext(ctx))
+		wp.Run(ctx)
 		wg.Done()
 	}()
 	defer func() {
@@ -219,8 +219,8 @@ func WriteInsert(pCtx *tcontext.Context, cfg *Config, meta TableMeta, tblIR Tabl
 			}
 			if bf.Len() >= lengthLimit {
 				select {
-				case <-pCtx.Context().Done():
-					return pCtx.Context().Err()
+				case <-pCtx.Done():
+					return pCtx.Err()
 				case err = <-wp.errCh:
 					return err
 				case wp.input <- bf:
@@ -279,11 +279,11 @@ func WriteInsertInCsv(pCtx *tcontext.Context, cfg *Config, meta TableMeta, tblIR
 	}
 
 	// use context.Background here to make sure writerPipe can deplete all the chunks in pipeline
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := tcontext.Background().WithLogger(pCtx.L()).WithCancel()
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
-		wp.Run(pCtx.WithContext(ctx))
+		wp.Run(ctx)
 		wg.Done()
 	}()
 	defer func() {
@@ -328,8 +328,8 @@ func WriteInsertInCsv(pCtx *tcontext.Context, cfg *Config, meta TableMeta, tblIR
 		bf.WriteByte('\n')
 		if bf.Len() >= lengthLimit {
 			select {
-			case <-pCtx.Context().Done():
-				return pCtx.Context().Err()
+			case <-pCtx.Done():
+				return pCtx.Err()
 			case err = <-wp.errCh:
 				return err
 			case wp.input <- bf:
@@ -367,7 +367,7 @@ func WriteInsertInCsv(pCtx *tcontext.Context, cfg *Config, meta TableMeta, tblIR
 }
 
 func write(tctx *tcontext.Context, writer storage.ExternalFileWriter, str string) error {
-	_, err := writer.Write(tctx.Context(), []byte(str))
+	_, err := writer.Write(tctx, []byte(str))
 	if err != nil {
 		// str might be very long, only output the first 200 chars
 		outputLength := len(str)
@@ -382,7 +382,7 @@ func write(tctx *tcontext.Context, writer storage.ExternalFileWriter, str string
 }
 
 func writeBytes(tctx *tcontext.Context, writer storage.ExternalFileWriter, p []byte) error {
-	_, err := writer.Write(tctx.Context(), p)
+	_, err := writer.Write(tctx, p)
 	if err != nil {
 		// str might be very long, only output the first 200 chars
 		outputLength := len(p)
@@ -400,7 +400,7 @@ func writeBytes(tctx *tcontext.Context, writer storage.ExternalFileWriter, p []b
 func buildFileWriter(tctx *tcontext.Context, s storage.ExternalStorage, fileName string, compressType storage.CompressType) (storage.ExternalFileWriter, func(ctx context.Context), error) {
 	fileName += compressFileSuffix(compressType)
 	fullPath := path.Join(s.URI(), fileName)
-	writer, err := storage.WithCompression(s, compressType).Create(tctx.Context(), fileName)
+	writer, err := storage.WithCompression(s, compressType).Create(tctx, fileName)
 	if err != nil {
 		tctx.L().Error("open file failed",
 			zap.String("path", fullPath),
@@ -429,7 +429,7 @@ func buildInterceptFileWriter(pCtx *tcontext.Context, s storage.ExternalStorage,
 	initRoutine := func() error {
 		// use separated context pCtx here to make sure context used in ExternalFile won't be canceled before close,
 		// which will cause a context canceled error when closing gcs's Writer
-		w, err := storage.WithCompression(s, compressType).Create(pCtx.Context(), fileName)
+		w, err := storage.WithCompression(s, compressType).Create(pCtx, fileName)
 		if err != nil {
 			pCtx.L().Error("open file failed",
 				zap.String("path", fullPath),

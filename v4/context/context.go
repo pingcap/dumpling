@@ -4,8 +4,7 @@
 package context
 
 import (
-	"context"
-	"time"
+	gcontext "context"
 
 	"github.com/pingcap/dumpling/v4/log"
 )
@@ -14,53 +13,48 @@ import (
 // * go context
 // * logger
 type Context struct {
-	ctx    context.Context
+	gcontext.Context
 	logger log.Logger
 }
 
 // Background return a nop context
 func Background() *Context {
 	return &Context{
-		ctx:    context.Background(),
-		logger: log.Zap(),
+		Context: gcontext.Background(),
+		logger:  log.Zap(),
 	}
 }
 
 // NewContext return a new Context
-func NewContext(ctx context.Context, logger log.Logger) *Context {
+func NewContext(ctx gcontext.Context, logger log.Logger) *Context {
 	return &Context{
-		ctx:    ctx,
-		logger: logger,
+		Context: ctx,
+		logger:  logger,
 	}
 }
 
 // WithContext set go context
-func (c *Context) WithContext(ctx context.Context) *Context {
+func (c *Context) WithContext(ctx gcontext.Context) *Context {
 	return &Context{
-		ctx:    ctx,
-		logger: c.logger,
+		Context: ctx,
+		logger:  c.logger,
 	}
 }
 
-// WithTimeout sets a timeout associated context.
-func (c *Context) WithTimeout(timeout time.Duration) (*Context, context.CancelFunc) {
-	ctx, cancel := context.WithTimeout(c.ctx, timeout)
+// WithCancel sets a cancel context.
+func (c *Context) WithCancel() (*Context, gcontext.CancelFunc) {
+	ctx, cancel := gcontext.WithCancel(c.Context)
 	return &Context{
-		ctx:    ctx,
-		logger: c.logger,
+		Context: ctx,
+		logger:  c.logger,
 	}, cancel
-}
-
-// Context returns real context
-func (c *Context) Context() context.Context {
-	return c.ctx
 }
 
 // WithLogger set logger
 func (c *Context) WithLogger(logger log.Logger) *Context {
 	return &Context{
-		ctx:    c.ctx,
-		logger: logger,
+		Context: c.Context,
+		logger:  logger,
 	}
 }
 

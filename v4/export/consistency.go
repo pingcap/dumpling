@@ -85,7 +85,7 @@ func (c *ConsistencyFlushTableWithReadLock) Setup(tctx *tcontext.Context) error 
 	if c.serverType == ServerTypeTiDB {
 		return errors.New("'flush table with read lock' cannot be used to ensure the consistency in TiDB")
 	}
-	return FlushTableWithReadLock(tctx.Context(), c.conn)
+	return FlushTableWithReadLock(tctx, c.conn)
 }
 
 // TearDown implements ConsistencyController.TearDown
@@ -117,9 +117,9 @@ type ConsistencyLockDumpingTables struct {
 // Setup implements ConsistencyController.Setup
 func (c *ConsistencyLockDumpingTables) Setup(tctx *tcontext.Context) error {
 	blockList := make(map[string]map[string]interface{})
-	return utils.WithRetry(tctx.Context(), func() error {
+	return utils.WithRetry(tctx, func() error {
 		lockTablesSQL := buildLockTablesSQL(c.allTables, blockList)
-		_, err := c.conn.ExecContext(tctx.Context(), lockTablesSQL)
+		_, err := c.conn.ExecContext(tctx, lockTablesSQL)
 		return errors.Trace(err)
 	}, newLockTablesBackoffer(tctx, blockList))
 }

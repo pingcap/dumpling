@@ -15,7 +15,7 @@ import (
 const logProgressTick = 2 * time.Minute
 
 func (d *Dumper) runLogProgress(tctx *tcontext.Context) {
-	ctx, conf := tctx.Context(), d.conf
+	conf := d.conf
 	totalTables := float64(calculateTableCount(conf.Tables))
 	logProgressTicker := time.NewTicker(logProgressTick)
 	lastCheckpoint := time.Now()
@@ -23,7 +23,7 @@ func (d *Dumper) runLogProgress(tctx *tcontext.Context) {
 	defer logProgressTicker.Stop()
 	for {
 		select {
-		case <-ctx.Done():
+		case <-tctx.Done():
 			tctx.L().Debug("stopping log progress")
 			return
 		case <-logProgressTicker.C:

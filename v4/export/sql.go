@@ -432,7 +432,7 @@ func GetSpecifiedColumnValue(rows *sql.Rows, columnName string) ([]string, error
 // GetPdAddrs gets PD address from TiDB
 func GetPdAddrs(tctx *tcontext.Context, db *sql.DB) ([]string, error) {
 	query := "SELECT * FROM information_schema.cluster_info where type = 'pd';"
-	rows, err := db.QueryContext(tctx.Context(), query)
+	rows, err := db.QueryContext(tctx, query)
 	if err != nil {
 		tctx.L().Warn("can't execute query from db",
 			zap.String("query", query), zap.Error(err))
@@ -445,7 +445,7 @@ func GetPdAddrs(tctx *tcontext.Context, db *sql.DB) ([]string, error) {
 // GetTiDBDDLIDs gets DDL IDs from TiDB
 func GetTiDBDDLIDs(tctx *tcontext.Context, db *sql.DB) ([]string, error) {
 	query := "SELECT * FROM information_schema.tidb_servers_info;"
-	rows, err := db.QueryContext(tctx.Context(), query)
+	rows, err := db.QueryContext(tctx, query)
 	if err != nil {
 		tctx.L().Warn("can't execute query from db",
 			zap.String("query", query), zap.Error(err))
@@ -483,7 +483,7 @@ func resetDBWithSessionParams(tctx *tcontext.Context, db *sql.DB, dsn string, pa
 	support := make(map[string]interface{})
 	for k, v := range params {
 		s := fmt.Sprintf("SET SESSION %s = ?", k)
-		_, err := db.ExecContext(tctx.Context(), s, v)
+		_, err := db.ExecContext(tctx, s, v)
 		if err != nil {
 			if isUnknownSystemVariableErr(err) {
 				tctx.L().Info("session variable is not supported by db", zap.String("variable", k), zap.Reflect("value", v))
@@ -730,7 +730,7 @@ func estimateCount(tctx *tcontext.Context, dbName, tableName string, db *sql.Con
 }
 
 func detectEstimateRows(tctx *tcontext.Context, db *sql.Conn, query string, fieldNames []string) uint64 {
-	rows, err := db.QueryContext(tctx.Context(), query)
+	rows, err := db.QueryContext(tctx, query)
 	if err != nil {
 		tctx.L().Warn("can't execute query from db",
 			zap.String("query", query), zap.Error(err))

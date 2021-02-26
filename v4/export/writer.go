@@ -73,7 +73,7 @@ func countTotalTask(writers []*Writer) int {
 func (w *Writer) run(taskStream <-chan Task) error {
 	for {
 		select {
-		case <-w.tctx.Context().Done():
+		case <-w.tctx.Done():
 			w.tctx.L().Warn("context has been done, the writer will exit",
 				zap.Int64("writer ID", w.id))
 			return nil
@@ -157,7 +157,7 @@ func (w *Writer) WriteTableData(meta TableMeta, ir TableDataIR, currentChunk int
 	tctx, conf, conn := w.tctx, w.conf, w.conn
 	retryTime := 0
 	var lastErr error
-	return utils.WithRetry(tctx.Context(), func() (err error) {
+	return utils.WithRetry(tctx, func() (err error) {
 		defer func() {
 			lastErr = err
 			if err != nil {
@@ -175,7 +175,7 @@ func (w *Writer) WriteTableData(meta TableMeta, ir TableDataIR, currentChunk int
 				return
 			}
 		}
-		err = ir.Start(tctx.Context(), conn)
+		err = ir.Start(tctx, conn)
 		if err != nil {
 			return
 		}
@@ -201,7 +201,7 @@ func (w *Writer) tryToWriteTableData(tctx *tcontext.Context, meta TableMeta, ir 
 	for {
 		fileWriter, tearDown := buildInterceptFileWriter(tctx, w.extStorage, fileName, conf.CompressType)
 		err = format.WriteInsert(tctx, conf, meta, ir, fileWriter)
-		tearDown(tctx.Context())
+		tearDown(tctx)
 		if err != nil {
 			return err
 		}
@@ -226,7 +226,7 @@ func writeMetaToFile(tctx *tcontext.Context, target, metaSQL string, s storage.E
 	if err != nil {
 		return errors.Trace(err)
 	}
-	defer tearDown(tctx.Context())
+	defer tearDown(tctx)
 
 	return WriteMeta(tctx, &metaData{
 		target:  target,

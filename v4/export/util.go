@@ -45,7 +45,7 @@ func checkSameCluster(tctx *tcontext.Context, db *sql.DB, pdAddrs []string) (boo
 	if err != nil {
 		return false, err
 	}
-	pdDDLIDs, err := getPdDDLIDs(tctx.Context(), cli)
+	pdDDLIDs, err := getPdDDLIDs(tctx, cli)
 	if err != nil {
 		return false, err
 	}

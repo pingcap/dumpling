@@ -219,7 +219,7 @@ func (m *globalMetadata) writeGlobalMetaData() error {
 	if err != nil {
 		return err
 	}
-	defer tearDown(m.tctx.Context())
+	defer tearDown(m.tctx)
 
 	return write(m.tctx, fileWriter, m.String())
 }
