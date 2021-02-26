@@ -20,7 +20,7 @@ var (
 )
 
 // InitMetricsVector inits metrics vectors.
-// This function much run before RegisterMetrics
+// This function must run before RegisterMetrics
 func InitMetricsVector(labels prometheus.Labels) {
 	labelNames := make([]string, 0, len(labels))
 	for name := range labels {

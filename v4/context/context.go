@@ -14,57 +14,57 @@ import (
 // * go context
 // * logger
 type Context struct {
-	Ctx    context.Context
-	Logger log.Logger
+	ctx    context.Context
+	logger log.Logger
 }
 
 // Background return a nop context
 func Background() *Context {
 	return &Context{
-		Ctx:    context.Background(),
-		Logger: log.Zap(),
+		ctx:    context.Background(),
+		logger: log.Zap(),
 	}
 }
 
 // NewContext return a new Context
 func NewContext(ctx context.Context, logger log.Logger) *Context {
 	return &Context{
-		Ctx:    ctx,
-		Logger: logger,
+		ctx:    ctx,
+		logger: logger,
 	}
 }
 
 // WithContext set go context
 func (c *Context) WithContext(ctx context.Context) *Context {
 	return &Context{
-		Ctx:    ctx,
-		Logger: c.Logger,
+		ctx:    ctx,
+		logger: c.logger,
 	}
 }
 
 // WithTimeout sets a timeout associated context.
 func (c *Context) WithTimeout(timeout time.Duration) (*Context, context.CancelFunc) {
-	ctx, cancel := context.WithTimeout(c.Ctx, timeout)
+	ctx, cancel := context.WithTimeout(c.ctx, timeout)
 	return &Context{
-		Ctx:    ctx,
-		Logger: c.Logger,
+		ctx:    ctx,
+		logger: c.logger,
 	}, cancel
 }
 
 // Context returns real context
 func (c *Context) Context() context.Context {
-	return c.Ctx
+	return c.ctx
 }
 
 // WithLogger set logger
 func (c *Context) WithLogger(logger log.Logger) *Context {
 	return &Context{
-		Ctx:    c.Ctx,
-		Logger: logger,
+		ctx:    c.ctx,
+		logger: logger,
 	}
 }
 
 // L returns real logger
 func (c *Context) L() log.Logger {
-	return c.Logger
+	return c.logger
 }
