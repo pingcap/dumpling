@@ -26,7 +26,7 @@ func (s *testConsistencySuite) assertNil(err error, c *C) {
 
 func (s *testConsistencySuite) assertLifetimeErrNil(tctx *tcontext.Context, ctrl ConsistencyController, c *C) {
 	s.assertNil(ctrl.Setup(tctx), c)
-	s.assertNil(ctrl.TearDown(tctx.Context()), c)
+	s.assertNil(ctrl.TearDown(tctx), c)
 }
 
 func (s *testConsistencySuite) TestConsistencyController(c *C) {
