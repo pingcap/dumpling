@@ -72,6 +72,7 @@ var (
 	tidbMemQuotaQuery    uint64
 	outputFilenameFormat string
 	chunkByRegion        bool
+	sortByPk             bool
 )
 
 var defaultOutputDir = timestampDirName()
@@ -125,6 +126,7 @@ func main() {
 	pflag.StringVar(&outputFilenameFormat, "output-filename-template", "", "The output filename template (without file extension)")
 	pflag.BoolVar(&completeInsert, "complete-insert", false, "Use complete INSERT statements that include column names")
 	pflag.BoolVar(&chunkByRegion, "chunk-by-region", false, "whether to use region info to split table chunks")
+	pflag.BoolVar(&sortByPk, "sort", true, "whether to sort the dumped data by primary key")
 
 	printVersion := pflag.BoolP("version", "V", false, "Print Dumpling version")
 
@@ -209,6 +211,7 @@ func main() {
 	conf.OutputFileTemplate = tmpl
 	conf.CompleteInsert = completeInsert
 	conf.ChunkByRegion = chunkByRegion
+	conf.SortByPk = sortByPk
 
 	err = export.Dump(context.Background(), conf)
 	if err != nil {

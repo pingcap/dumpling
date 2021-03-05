@@ -219,9 +219,9 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 	return nil
 }
 
-func dumpDatabases(ctx context.Context, conf *Config, connectPool *connectionsPool, writer Writer) error {
+func dumpDatabases(pCtx context.Context, conf *Config, connectPool *connectionsPool, writer Writer) error {
 	allTables := conf.Tables
-	var g errgroup.Group
+	g, ctx := errgroup.WithContext(pCtx)
 	for dbName, tables := range allTables {
 		conn := connectPool.getConn()
 		createDatabaseSQL, err := ShowCreateDatabase(conn, dbName)
@@ -336,15 +336,15 @@ func dumpTable(ctx context.Context, conf *Config, db *sql.Conn, dbName string, t
 	return []TableDataIR{tableIR}, nil
 }
 
-func concurrentDumpTable(ctx context.Context, conf *Config, db *sql.Conn, dbName string, tableName string) (bool, []TableDataIR, error) {
+func concurrentDumpTable(pCtx context.Context, conf *Config, db *sql.Conn, dbName string, tableName string) (bool, []TableDataIR, error) {
 	// try dump table concurrently by split table to chunks
 	chunksIterCh := make(chan TableDataIR, defaultDumpThreads)
 	errCh := make(chan error, defaultDumpThreads)
 	linear := make(chan struct{})
 
-	ctx1, cancel1 := context.WithCancel(ctx)
+	ctx1, cancel1 := context.WithCancel(pCtx)
 	defer cancel1()
-	var g errgroup.Group
+	g, ctx := errgroup.WithContext(ctx1)
 	chunksIterArray := make([]TableDataIR, 0)
 	g.Go(func() error {
 		splitTableDataIntoChunks(ctx1, chunksIterCh, errCh, linear, dbName, tableName, db, conf)

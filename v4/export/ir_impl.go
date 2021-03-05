@@ -299,16 +299,32 @@ func splitTableDataIntoChunksByRegion(
 		return
 	}
 
-	startKeys, estimatedCounts, err := getTableRegionInfo(ctx, db, dbName, tableName)
+	partitions, err := getPartitionInfos(ctx, db, dbName, tableName)
 	if err != nil {
-		errCh <- errors.WithMessage(err, "fail to get TiDB table regions info")
-		return
+		errCh <- errors.WithMessagef(err, "fail to get TiDB table partitions info, db: %s, tb: %s", dbName, tableName)
 	}
+	if len(partitions) == 0 {
+		partitions = append(partitions, "")
+	}
+	var (
+		whereConditions     = make([]string, 0)
+		partitionConditions = make([]int, 0)
+	)
+	for _, partitionName := range partitions {
+		startKeys, estimatedCounts, err := getTableRegionInfo(ctx, db, dbName, tableName, partitionName)
+		if err != nil {
+			errCh <- errors.WithMessage(err, "fail to get TiDB table regions info")
+			return
+		}
 
-	whereConditions, err := getWhereConditions(ctx, db, startKeys, estimatedCounts, conf.Rows, dbName, tableName)
-	if err != nil {
-		errCh <- errors.WithMessage(err, "fail to generate whereConditions")
-		return
+		currWhereConditions, err := getWhereConditions(ctx, db, startKeys, estimatedCounts, conf.Rows, dbName, tableName, partitionName)
+		if err != nil {
+			errCh <- errors.WithMessage(err, "fail to generate whereConditions")
+			return
+		}
+
+		whereConditions = append(whereConditions, currWhereConditions...)
+		partitionConditions = append(partitionConditions, len(whereConditions))
 	}
 	if len(whereConditions) <= 1 {
 		linear <- struct{}{}
@@ -333,10 +349,18 @@ func splitTableDataIntoChunksByRegion(
 	}
 
 	chunkIndex := 0
+	partitionIndex := 0
 LOOP:
-	for _, whereCondition := range whereConditions {
+	for whereIndex, whereCondition := range whereConditions {
 		chunkIndex += 1
-		query := buildSelectQuery(dbName, tableName, selectedField, buildWhereCondition(conf, whereCondition), orderByClause)
+		if partitionIndex < len(partitions) && whereIndex >= partitionConditions[partitionIndex] {
+			partitionIndex += 1
+		}
+		partitionClause := ""
+		if len(partitions[partitionIndex]) > 0 {
+			partitionClause = fmt.Sprintf("partition(`%s`) ", escapeString(partitions[partitionIndex]))
+		}
+		query := buildSelectQuery(dbName, tableName, selectedField, partitionClause+buildWhereCondition(conf, whereCondition), orderByClause)
 		log.Debug("build region chunk query", zap.String("query", query), zap.Int("chunkIndex", chunkIndex),
 			zap.String("db", dbName), zap.String("table", tableName))
 		td := &tableData{
@@ -387,7 +411,7 @@ func tryDecodeRowKey(ctx context.Context, db *sql.Conn, key string) ([]string, e
 	return []string{"_tidb_rowid"}, nil
 }
 
-func getWhereConditions(ctx context.Context, db *sql.Conn, startKeys []string, counts []uint64, confRows uint64, dbName, tableName string) ([]string, error) {
+func getWhereConditions(ctx context.Context, db *sql.Conn, startKeys []string, counts []uint64, confRows uint64, dbName, tableName, partitionName string) ([]string, error) {
 	whereConditions := make([]string, 0)
 	var (
 		columnName []string
@@ -435,9 +459,17 @@ func getWhereConditions(ctx context.Context, db *sql.Conn, startKeys []string, c
 		whereConditions = append(whereConditions, where)
 	}
 	for i := 1; i < len(startKeys); i++ {
-		keys, err := tryDecodeRowKey(ctx, db, startKeys[i])
-		if err != nil {
-			return nil, err
+		var (
+			keys []string
+			err  error
+		)
+		if len(partitionName) == 0 {
+			keys, err = tryDecodeRowKey(ctx, db, startKeys[i])
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			keys = []string{startKeys[i]}
 		}
 		if len(dataType) != len(keys) {
 			return nil, errors.Errorf("invalid column names %s and keys %s", columnName, keys)

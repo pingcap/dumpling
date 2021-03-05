@@ -683,26 +683,105 @@ func escapeString(s string) string {
 	return strings.ReplaceAll(s, "`", "``")
 }
 
-func getTableRegionInfo(ctx context.Context, db *sql.Conn, schema, table string) (startKeys []string, counts []uint64, err error) {
+func getTableRegionInfo(ctx context.Context, db *sql.Conn, schema, table, partition string) (startKeys []string, counts []uint64, err error) {
 	startKeys = make([]string, 0)
 	counts = make([]uint64, 0)
-	rows, err := db.QueryContext(ctx, "SELECT START_KEY, APPROXIMATE_KEYS from INFORMATION_SCHEMA.TIKV_REGION_STATUS s WHERE s.DB_NAME = ? AND s.TABLE_NAME = ? AND IS_INDEX = 0 ORDER BY START_KEY;", schema, table)
+	var (
+		startKey sql.NullString
+		count    uint64
+		rows     *sql.Rows
+	)
+	if len(partition) == 0 {
+		rows, err = db.QueryContext(ctx, "SELECT START_KEY, APPROXIMATE_KEYS from INFORMATION_SCHEMA.TIKV_REGION_STATUS s WHERE s.DB_NAME = ? AND s.TABLE_NAME = ? AND IS_INDEX = 0 ORDER BY START_KEY;", schema, table)
+		if err != nil {
+			return
+		}
+		defer rows.Close()
+		for rows.Next() {
+			err = rows.Scan(&startKey, &count)
+			if err != nil {
+				return
+			}
+
+			if startKey.Valid {
+				startKeys = append(startKeys, startKey.String)
+				counts = append(counts, count)
+			}
+		}
+		return
+	}
+	rows, err = db.QueryContext(ctx, fmt.Sprintf("SHOW TABLE `%s`.`%s` PARTITION (`%s`) regions", schema, table, escapeString(partition)))
 	if err != nil {
 		return
 	}
 	defer rows.Close()
-	var (
-		startKey string
-		count    uint64
-	)
+	columns, err := rows.Columns()
+	if err != nil {
+		return
+	}
+	colVals := make([]sql.NullString, len(columns))
+	args := make([]interface{}, len(columns))
+	for i := range columns {
+		args[i] = &colVals[i]
+	}
+	startKeys = append(startKeys, "")
 	for rows.Next() {
-		err = rows.Scan(&startKey, &count)
+		err = rows.Scan(args...)
 		if err != nil {
 			return
 		}
+		startKey := ""
+		var count uint64
+		for i, colName := range columns {
+			colName = strings.ToUpper(colName)
+			switch colName {
+			case "START_KEY":
+				startKey = getRowId(colVals[i].String)
+			case "APPROXIMATE_KEYS":
+				count, err = strconv.ParseUint(colVals[i].String, 10, 64)
+				if err != nil {
+					return
+				}
+			}
+		}
+		if len(startKey) > 0 {
+			startKeys = append(startKeys, startKey)
+			counts = append(counts, count)
+		}
+	}
+	return
+}
 
-		startKeys = append(startKeys, startKey)
-		counts = append(counts, count)
+func getRowId(s string) string {
+	keys := strings.Split(s, "_")
+	for i, key := range keys {
+		if key == "r" {
+			if i+1 < len(keys) {
+				return keys[i+1]
+			} else {
+				break
+			}
+		}
+	}
+	return ""
+}
+
+func getPartitionInfos(ctx context.Context, db *sql.Conn, schema, table string) (partitions []string, err error) {
+	partitions = make([]string, 0)
+	rows, err := db.QueryContext(ctx, "SELECT PARTITION_NAME from INFORMATION_SCHEMA.PARTITIONS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?", schema, table)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+	var partitionName sql.NullString
+	for rows.Next() {
+		err = rows.Scan(&partitionName)
+		if err != nil {
+			return
+		}
+		if partitionName.Valid {
+			partitions = append(partitions, partitionName.String)
+		}
 	}
 	return
 }
