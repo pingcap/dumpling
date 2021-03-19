@@ -121,9 +121,9 @@ func (s *testPrepareSuite) TestConfigValidation(c *C) {
 	c.Assert(validateSpecifiedSQL(conf), IsNil)
 
 	conf.FileType = FileFormatSQLTextString
-	c.Assert(validateFileFormat(conf), IsNil)
+	c.Assert(adjustFileFormat(conf), IsNil)
 	conf.FileType = FileFormatCSVString
-	c.Assert(validateFileFormat(conf), IsNil)
+	c.Assert(adjustFileFormat(conf), IsNil)
 	conf.FileType = "rand_str"
-	c.Assert(validateFileFormat(conf), ErrorMatches, "unknown config.FileType 'rand_str'")
+	c.Assert(adjustFileFormat(conf), ErrorMatches, "unknown config.FileType 'rand_str'")
 }
