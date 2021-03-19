@@ -41,7 +41,7 @@ func (s *testWriterSuite) newWriter(conf *Config, c *C) *Writer {
 func (s *testWriterSuite) TestWriteDatabaseMeta(c *C) {
 	dir := c.MkDir()
 
-	config := DefaultConfig()
+	config := defaultConfigForTest(c)
 	config.OutputDirPath = dir
 
 	writer := s.newWriter(config, c)
