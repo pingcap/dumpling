@@ -27,7 +27,7 @@ func (s *testPrepareSuite) TestPrepareDumpingDatabases(c *C) {
 		AddRow("db3").
 		AddRow("db5")
 	mock.ExpectQuery("SHOW DATABASES").WillReturnRows(rows)
-	conf := DefaultConfig()
+	conf := defaultConfigForTest(c)
 	conf.Databases = []string{"db1", "db2", "db3"}
 	result, err := prepareDumpingDatabases(conf, conn)
 	c.Assert(err, IsNil)
@@ -113,7 +113,7 @@ func (s *testPrepareSuite) TestListAllTables(c *C) {
 }
 
 func (s *testPrepareSuite) TestConfigValidation(c *C) {
-	conf := DefaultConfig()
+	conf := defaultConfigForTest(c)
 	conf.Where = "id < 5"
 	conf.SQL = "select * from t where id > 3"
 	c.Assert(validateSpecifiedSQL(conf), ErrorMatches, "can't specify both --sql and --where at the same time. Please try to combine them into --sql")
