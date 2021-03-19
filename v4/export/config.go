@@ -692,7 +692,6 @@ func adjustFileFormat(conf *Config) error {
 		} else {
 			conf.FileType = FileFormatSQLTextString
 		}
-		break
 	case FileFormatSQLTextString:
 		if conf.SQL != "" {
 			return errors.Errorf("unsupported config.FileType '%s' when we specify --sql, please unset --filetype or set it to 'csv'", conf.FileType)
