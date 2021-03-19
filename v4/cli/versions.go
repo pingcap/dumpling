@@ -50,6 +50,7 @@ func LongVersion() string {
 	)
 }
 
+// LogLongVersion logs the version information of this program to the logger.
 func LogLongVersion(logger log.Logger) {
 	logger.Info("Welcome to dumpling",
 		zap.String("Release Version", ReleaseVersion),
