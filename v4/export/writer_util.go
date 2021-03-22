@@ -137,7 +137,7 @@ func WriteMeta(tctx *tcontext.Context, meta MetaIR, w storage.ExternalFileWriter
 func WriteInsert(pCtx *tcontext.Context, cfg *Config, meta TableMeta, tblIR TableDataIR, w storage.ExternalFileWriter) error {
 	fileRowIter := tblIR.Rows()
 	if !fileRowIter.HasNext() {
-		return nil
+		return fileRowIter.Error()
 	}
 
 	bf := pool.Get().(*bytes.Buffer)
@@ -254,7 +254,7 @@ func WriteInsert(pCtx *tcontext.Context, cfg *Config, meta TableMeta, tblIR Tabl
 	summary.CollectSuccessUnit("total rows", 1, counter)
 	AddCounter(finishedRowsCounter, cfg.Labels, float64(counter-lastCounter))
 	if err = fileRowIter.Error(); err != nil {
-		return errors.Trace(err)
+		return err
 	}
 	return wp.Error()
 }
@@ -263,7 +263,7 @@ func WriteInsert(pCtx *tcontext.Context, cfg *Config, meta TableMeta, tblIR Tabl
 func WriteInsertInCsv(pCtx *tcontext.Context, cfg *Config, meta TableMeta, tblIR TableDataIR, w storage.ExternalFileWriter) error {
 	fileRowIter := tblIR.Rows()
 	if !fileRowIter.HasNext() {
-		return nil
+		return fileRowIter.Error()
 	}
 
 	bf := pool.Get().(*bytes.Buffer)
@@ -361,7 +361,7 @@ func WriteInsertInCsv(pCtx *tcontext.Context, cfg *Config, meta TableMeta, tblIR
 	summary.CollectSuccessUnit("total rows", 1, counter)
 	AddCounter(finishedRowsCounter, cfg.Labels, float64(counter-lastCounter))
 	if err = fileRowIter.Error(); err != nil {
-		return errors.Trace(err)
+		return err
 	}
 	return wp.Error()
 }
