@@ -220,10 +220,12 @@ func (w *Writer) tryToWriteTableData(tctx *tcontext.Context, meta TableMeta, ir 
 			return err
 		}
 	}
-	tctx.L().Debug("no data written in table chunk",
-		zap.String("database", meta.DatabaseName()),
-		zap.String("table", meta.TableName()),
-		zap.Int("chunkIdx", curChkIdx))
+	if somethingIsWritten {
+		tctx.L().Debug("no data written in table chunk",
+			zap.String("database", meta.DatabaseName()),
+			zap.String("table", meta.TableName()),
+			zap.Int("chunkIdx", curChkIdx))
+	}
 	return nil
 }
 

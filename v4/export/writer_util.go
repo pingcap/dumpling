@@ -254,7 +254,7 @@ func WriteInsert(pCtx *tcontext.Context, cfg *Config, meta TableMeta, tblIR Tabl
 	summary.CollectSuccessUnit("total rows", 1, counter)
 	AddCounter(finishedRowsCounter, cfg.Labels, float64(counter-lastCounter))
 	if err = fileRowIter.Error(); err != nil {
-		return err
+		return errors.Trace(err)
 	}
 	return wp.Error()
 }
@@ -361,7 +361,7 @@ func WriteInsertInCsv(pCtx *tcontext.Context, cfg *Config, meta TableMeta, tblIR
 	summary.CollectSuccessUnit("total rows", 1, counter)
 	AddCounter(finishedRowsCounter, cfg.Labels, float64(counter-lastCounter))
 	if err = fileRowIter.Error(); err != nil {
-		return err
+		return errors.Trace(err)
 	}
 	return wp.Error()
 }
