@@ -198,6 +198,7 @@ func (w *Writer) tryToWriteTableData(tctx *tcontext.Context, meta TableMeta, ir 
 		return err
 	}
 
+	somethingIsWritten := false
 	for {
 		fileWriter, tearDown := buildInterceptFileWriter(tctx, w.extStorage, fileName, conf.CompressType)
 		err = format.WriteInsert(tctx, conf, meta, ir, fileWriter)
@@ -209,6 +210,7 @@ func (w *Writer) tryToWriteTableData(tctx *tcontext.Context, meta TableMeta, ir 
 		if w, ok := fileWriter.(*InterceptFileWriter); ok && !w.SomethingIsWritten {
 			break
 		}
+		somethingIsWritten = true
 
 		if conf.FileSize == UnspecifiedSize {
 			break
@@ -218,6 +220,10 @@ func (w *Writer) tryToWriteTableData(tctx *tcontext.Context, meta TableMeta, ir 
 			return err
 		}
 	}
+	tctx.L().Debug("no data written in table chunk",
+		zap.String("database", meta.DatabaseName()),
+		zap.String("table", meta.TableName()),
+		zap.Int("chunkIdx", curChkIdx))
 	return nil
 }
 

@@ -9,6 +9,7 @@ import (
 	"fmt"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	tcontext "github.com/pingcap/dumpling/v4/context"
 )
 
 type mockPoisonWriter struct {
@@ -82,7 +83,7 @@ func (m *mockTableIR) ShowCreateView() string {
 	return ""
 }
 
-func (m *mockTableIR) Start(ctx context.Context, conn *sql.Conn) error {
+func (m *mockTableIR) Start(tctx *tcontext.Context, conn *sql.Conn) error {
 	return nil
 }
 
