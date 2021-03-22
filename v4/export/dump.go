@@ -246,7 +246,7 @@ func (d *Dumper) startWriters(tctx *tcontext.Context, wg *errgroup.Group, taskCh
 				// FIXME: actually finishing the last chunk doesn't means this table is 'finished'.
 				//  We can call this table is 'finished' if all its chunks are finished.
 				//  Comment this log now to avoid ambiguity.
-				//tctx.L().Debug("finished dumping table data",
+				// tctx.L().Debug("finished dumping table data",
 				//	zap.String("database", td.Meta.DatabaseName()),
 				//	zap.String("table", td.Meta.TableName()))
 			}
