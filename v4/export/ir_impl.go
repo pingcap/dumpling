@@ -104,11 +104,11 @@ func (td *tableData) Start(tctx *tcontext.Context, conn *sql.Conn) error {
 	}
 	td.SQLRowIter = nil
 	td.rows = rows
-	ns, err := rows.Columns()
-	if err != nil {
-		return errors.Trace(err)
-	}
 	if td.needColTypes {
+		ns, err := rows.Columns()
+		if err != nil {
+			return errors.Trace(err)
+		}
 		td.colLen = len(ns)
 		td.colTypes = make([]string, 0, td.colLen)
 		colTps, err := rows.ColumnTypes()

@@ -254,7 +254,7 @@ func (d *Dumper) startWriters(tctx *tcontext.Context, wg *errgroup.Group, taskCh
 		writer.setFinishTaskCallBack(func(task Task) {
 			IncGauge(taskChannelCapacity, conf.Labels)
 			if td, ok := task.(*TaskTableData); ok {
-				tctx.L().Debug("finish dumping table chunk",
+				tctx.L().Debug("finish dumping table data task",
 					zap.String("database", td.Meta.DatabaseName()),
 					zap.String("table", td.Meta.TableName()),
 					zap.Int("chunkIdx", td.ChunkIndex))
