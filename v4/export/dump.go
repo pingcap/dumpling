@@ -384,7 +384,7 @@ func (d *Dumper) concurrentDumpTable(conn *sql.Conn, meta TableMeta, taskChan ch
 	cutoff := new(big.Int).Set(min)
 	totalChunks := estimatedChunks
 	if estimatedStep == 1 {
-		totalChunks = new(big.Int).Sub(max, min).Uint64()
+		totalChunks = new(big.Int).Sub(max, min).Uint64() + 1
 	}
 
 	selectField, selectLen, err := buildSelectField(conn, db, tbl, conf.CompleteInsert)
@@ -398,7 +398,10 @@ func (d *Dumper) concurrentDumpTable(conn *sql.Conn, meta TableMeta, taskChan ch
 	}
 
 	chunkIndex := 0
-	nullValueCondition := fmt.Sprintf("`%s` IS NULL OR ", escapeString(field))
+	nullValueCondition := ""
+	if conf.Where == "" {
+		nullValueCondition = fmt.Sprintf("`%s` IS NULL OR ", escapeString(field))
+	}
 	for max.Cmp(cutoff) >= 0 {
 		nextCutOff := new(big.Int).Add(cutoff, bigEstimatedStep)
 		where := fmt.Sprintf("%s(`%s` >= %d AND `%s` < %d)", nullValueCondition, escapeString(field), cutoff, escapeString(field), nextCutOff)
