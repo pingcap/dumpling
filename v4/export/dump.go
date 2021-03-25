@@ -241,11 +241,8 @@ func (d *Dumper) startWriters(tctx *tcontext.Context, wg *errgroup.Group, taskCh
 		writer := NewWriter(tctx, int64(i), conf, conn, d.extStore)
 		writer.rebuildConnFn = rebuildConnFn
 		writer.setFinishTableCallBack(func(task Task) {
-			if td, ok := task.(*TaskTableData); ok {
+			if _, ok := task.(*TaskTableData); ok {
 				IncCounter(finishedTablesCounter, conf.Labels)
-				tctx.L().Debug("finished dumping table data",
-					zap.String("database", td.Meta.DatabaseName()),
-					zap.String("table", td.Meta.TableName()))
 			}
 		})
 		writer.setFinishTaskCallBack(func(task Task) {
