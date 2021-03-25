@@ -209,6 +209,12 @@ func (d *Dumper) Dump() (dumpErr error) {
 		}
 	})
 
+	// get estimate total count
+	err = d.getEstimateTotalRowsCount(tctx, metaConn)
+	if err != nil {
+		return err
+	}
+
 	if conf.SQL == "" {
 		if err = d.dumpDatabases(metaConn, taskChan); err != nil {
 			return err
