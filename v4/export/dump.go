@@ -212,7 +212,7 @@ func (d *Dumper) Dump() (dumpErr error) {
 	// get estimate total count
 	err = d.getEstimateTotalRowsCount(tctx, metaConn)
 	if err != nil {
-		return err
+		tctx.L().Error("fail to get estimate total count", zap.Error(err))
 	}
 
 	if conf.SQL == "" {
