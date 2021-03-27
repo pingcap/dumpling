@@ -18,6 +18,7 @@ var (
 )
 
 func initColTypeRowReceiverMap() {
+	colTypeRowReceiverMap = map[string]func() RowReceiverStringer{}
 	for _, s := range dataTypeString {
 		colTypeRowReceiverMap[s] = SQLTypeStringMaker
 	}
