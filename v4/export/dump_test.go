@@ -39,7 +39,7 @@ func (s *testSQLSuite) TestDumpBlock(c *C) {
 	writerErr := errors.New("writer error")
 
 	wg.Go(func() error {
-		return writerErr
+		return errors.Trace(writerErr)
 	})
 	wg.Go(func() error {
 		time.Sleep(time.Second)
