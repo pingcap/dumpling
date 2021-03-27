@@ -7,13 +7,12 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/pingcap/errors"
-	"golang.org/x/sync/errgroup"
-
 	tcontext "github.com/pingcap/dumpling/v4/context"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	. "github.com/pingcap/check"
+	"github.com/pingcap/errors"
+	"golang.org/x/sync/errgroup"
 )
 
 func (s *testSQLSuite) TestDumpBlock(c *C) {
