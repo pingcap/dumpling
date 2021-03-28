@@ -408,7 +408,6 @@ func (d *Dumper) buildConcatTask(tctx *tcontext.Context, conn *sql.Conn, meta Ta
 
 func (d *Dumper) sequentialDumpTable(tctx *tcontext.Context, conn *sql.Conn, meta TableMeta, taskChan chan<- Task, linear bool) error {
 	conf := d.conf
-	var err error
 	if !linear && conf.ServerInfo.ServerType == ServerTypeTiDB {
 		task, err := d.buildConcatTask(tctx, conn, meta)
 		if err != nil {

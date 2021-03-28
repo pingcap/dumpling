@@ -107,6 +107,9 @@ func (iter *rowIterChunks) nextRows() {
 		if err != nil {
 			return
 		}
+		if err = rows.Err(); err != nil {
+			return
+		}
 		iter.id++
 		iter.rows = rows
 		iter.hasNext = iter.rows.Next()
