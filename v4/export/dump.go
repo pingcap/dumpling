@@ -79,6 +79,7 @@ func (d *Dumper) Dump() (dumpErr error) {
 		conCtrl ConsistencyController
 	)
 	tctx, conf, pool := d.tctx, d.conf, d.dbHandle
+	d.L().Info("begin to run Dump", zap.Stringer("conf", conf))
 	m := newGlobalMetadata(tctx, d.extStore, conf.Snapshot)
 	defer func() {
 		if dumpErr == nil {
@@ -320,16 +321,96 @@ func (d *Dumper) dumpTableData(conn *sql.Conn, meta TableMeta, taskChan chan<- T
 	if conf.NoData {
 		return nil
 	}
-	if conf.Rows == UnspecifiedSize {
-		return d.sequentialDumpTable(conn, meta, taskChan)
+	var (
+		linear = false
+		err    error
+	)
+	if conf.Rows != UnspecifiedSize {
+		linear, err = d.concurrentDumpTable(conn, meta, taskChan)
+		if err != nil {
+			return err
+		}
+		if !linear {
+			return nil
+		}
 	}
-	return d.concurrentDumpTable(conn, meta, taskChan)
+	return d.sequentialDumpTable(conn, meta, taskChan, linear)
 }
 
-func (d *Dumper) sequentialDumpTable(conn *sql.Conn, meta TableMeta, taskChan chan<- Task) error {
+func (d *Dumper) buildConcatTask(conn *sql.Conn, meta TableMeta) (*TaskTableData, error) {
+	tableChan := make(chan Task, 128)
+	errCh := make(chan error, 1)
+	var (
+		linear bool
+		err    error
+	)
+	go func() {
+		d.conf.Rows = GetSuitableRows(conn, meta.DatabaseName(), meta.TableName())
+		defer func() {
+			d.conf.Rows = UnspecifiedSize
+		}()
+		linear, err = d.concurrentDumpTable(conn, meta, tableChan)
+		if err != nil {
+			errCh <- err
+		} else {
+			close(errCh)
+		}
+	}()
+	tableDataArr := make([]*tableData, 0)
+	for {
+		select {
+		case err, ok := <-errCh:
+			if !ok {
+				if !linear || len(tableDataArr) == 0 {
+					return nil, nil
+				}
+				queries := make([]string, 0, len(tableDataArr))
+				colLen := tableDataArr[0].colLen
+				for _, tableDataInst := range tableDataArr {
+					queries = append(queries, tableDataInst.query)
+					if colLen != tableDataInst.colLen {
+						d.L().Warn("colLen varies for same table",
+							zap.Int("oldColLen", colLen),
+							zap.String("oldQuery", queries[0]),
+							zap.Int("newColLen", tableDataInst.colLen),
+							zap.String("newQuery", tableDataInst.query))
+						return nil, nil
+					}
+				}
+				return NewTaskTableData(meta, newTableDataChunks(queries, colLen), 0, 1), nil
+			}
+			return nil, err
+		case task := <-tableChan:
+			tableTask, ok := task.(*TaskTableData)
+			if !ok {
+				d.L().Warn("unexpected task when splitting table chunks", zap.String("task", tableTask.Brief()))
+				continue
+			}
+			tableDataInst, ok := tableTask.Data.(*tableData)
+			if !ok {
+				d.L().Warn("unexpected task.Data when splitting table chunks", zap.String("task", tableTask.Brief()))
+				continue
+			}
+			tableDataArr = append(tableDataArr, tableDataInst)
+		}
+	}
+}
+
+func (d *Dumper) sequentialDumpTable(conn *sql.Conn, meta TableMeta, taskChan chan<- Task, linear bool) error {
 	conf := d.conf
-	db, tbl := meta.DatabaseName(), meta.TableName()
-	tableIR, err := SelectAllFromTable(conf, conn, db, tbl)
+	var err error
+	if !linear && conf.ServerInfo.ServerType == ServerTypeTiDB {
+		task, err := d.buildConcatTask(conn, meta)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if task != nil {
+			d.sendTaskToChan(task, taskChan)
+			return nil
+		}
+	}
+
+	tableIR, err := SelectAllFromTable(conf, conn, meta)
 	if err != nil {
 		return err
 	}
@@ -339,7 +420,9 @@ func (d *Dumper) sequentialDumpTable(conn *sql.Conn, meta TableMeta, taskChan ch
 	return nil
 }
 
-func (d *Dumper) concurrentDumpTable(conn *sql.Conn, meta TableMeta, taskChan chan<- Task) error {
+// concurrentDumpTable tries to split table into several chunks to dump
+// return (whether we can split this table, error)
+func (d *Dumper) concurrentDumpTable(conn *sql.Conn, meta TableMeta, taskChan chan<- Task) (bool, error) {
 	conf := d.conf
 	db, tbl := meta.DatabaseName(), meta.TableName()
 	if conf.ServerInfo.ServerType == ServerTypeTiDB &&
@@ -347,22 +430,23 @@ func (d *Dumper) concurrentDumpTable(conn *sql.Conn, meta TableMeta, taskChan ch
 		conf.ServerInfo.ServerVersion.Compare(*tableSampleVersion) >= 0 {
 		d.L().Debug("dumping TiDB tables with TABLESAMPLE",
 			zap.String("database", db), zap.String("table", tbl))
-		return d.concurrentDumpTiDBTables(conn, meta, taskChan)
+		err := d.concurrentDumpTiDBTables(conn, meta, taskChan)
+		return false, err
 	}
 	field, err := pickupPossibleField(db, tbl, conn, conf)
 	if err != nil {
-		return nil
+		return false, err
 	}
 	if field == "" {
 		// skip split chunk logic if not found proper field
 		d.L().Warn("fallback to sequential dump due to no proper field",
 			zap.String("database", db), zap.String("table", tbl))
-		return d.sequentialDumpTable(conn, meta, taskChan)
+		return true, nil
 	}
 
 	min, max, err := d.selectMinAndMaxIntValue(conn, db, tbl, field)
 	if err != nil {
-		return err
+		return false, err
 	}
 	d.L().Debug("get int bounding values",
 		zap.String("lower", min.String()),
@@ -380,7 +464,7 @@ func (d *Dumper) concurrentDumpTable(conn *sql.Conn, meta TableMeta, taskChan ch
 			zap.Uint64("conf.rows", conf.Rows),
 			zap.String("database", db),
 			zap.String("table", tbl))
-		return d.sequentialDumpTable(conn, meta, taskChan)
+		return true, nil
 	}
 
 	// every chunk would have eventual adjustments
@@ -395,12 +479,12 @@ func (d *Dumper) concurrentDumpTable(conn *sql.Conn, meta TableMeta, taskChan ch
 
 	selectField, selectLen, err := buildSelectField(conn, db, tbl, conf.CompleteInsert)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	orderByClause, err := buildOrderByClause(conf, conn, db, tbl)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	chunkIndex := 0
@@ -423,7 +507,7 @@ func (d *Dumper) concurrentDumpTable(conn *sql.Conn, meta TableMeta, taskChan ch
 		cutoff = nextCutOff
 		chunkIndex++
 	}
-	return nil
+	return false, nil
 }
 
 func (d *Dumper) sendTaskToChan(task Task, taskChan chan<- Task) (ctxDone bool) {

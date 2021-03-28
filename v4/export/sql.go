@@ -186,7 +186,8 @@ func SelectVersion(db *sql.DB) (string, error) {
 }
 
 // SelectAllFromTable dumps data serialized from a specified table
-func SelectAllFromTable(conf *Config, db *sql.Conn, database, table string) (TableDataIR, error) {
+func SelectAllFromTable(conf *Config, db *sql.Conn, meta TableMeta) (TableDataIR, error) {
+	database, table := meta.DatabaseName(), meta.TableName()
 	selectedField, selectLen, err := buildSelectField(db, database, table, conf.CompleteInsert)
 	if err != nil {
 		return nil, err
@@ -265,6 +266,38 @@ func SelectTiDBRowID(db *sql.Conn, database, table string) (bool, error) {
 		return false, errors.Annotatef(err, "sql: %s", tiDBRowIDQuery)
 	}
 	return true, nil
+}
+
+// GetAVGRowLength gets suitable rows for each table
+func GetSuitableRows(db *sql.Conn, database, table string) uint64 {
+	const (
+		defaultRows = 200000
+		maxRows     = 1000000
+		sizePerFile = 128 * 1024 * 1024
+	)
+	avgRowLength, err := GetAVGRowLength(db, database, table)
+	if err != nil || avgRowLength == 0 {
+		return defaultRows
+	}
+	estimateRows := sizePerFile / avgRowLength
+	if estimateRows > maxRows {
+		return maxRows
+	}
+	return estimateRows
+}
+
+// GetAVGRowLength gets whether this table's average row length
+func GetAVGRowLength(db *sql.Conn, database, table string) (uint64, error) {
+	query := fmt.Sprintf("SELECT AVG_ROW_LENGTH from `%s`.`%s` LIMIT 1", escapeString(database), escapeString(table))
+	var avgRowLength uint64
+	row := db.QueryRowContext(context.Background(), query)
+	err := row.Scan(&avgRowLength)
+	if errors.Cause(err) == sql.ErrNoRows {
+		return 0, nil
+	} else if err != nil {
+		return 0, errors.Annotatef(err, "sql: %s", query)
+	}
+	return avgRowLength, nil
 }
 
 // GetColumnTypes gets *sql.ColumnTypes from a specified table

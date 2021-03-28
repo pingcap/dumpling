@@ -51,6 +51,107 @@ func (iter *rowIter) HasNext() bool {
 	return iter.hasNext
 }
 
+// rowIter implements the SQLRowIter interface.
+// Note: To create a rowIter, please use `newRowIter()` instead of struct literal.
+type rowIterChunks struct {
+	tctx    *tcontext.Context
+	conn    *sql.Conn
+	rows    *sql.Rows
+	hasNext bool
+	id      int
+	queries []string
+	args    []interface{}
+	err     error
+}
+
+func newRowIterChunks(tctx *tcontext.Context, conn *sql.Conn, queries []string, argLen int) *rowIterChunks {
+	r := &rowIterChunks{
+		tctx:    tctx,
+		conn:    conn,
+		queries: queries,
+		id:      0,
+		args:    make([]interface{}, argLen),
+	}
+	r.nextRows()
+	return r
+}
+
+func (iter *rowIterChunks) nextRows() {
+	if iter.id >= len(iter.queries) {
+		iter.hasNext = false
+		return
+	}
+	var err error
+	defer func() {
+		if err != nil {
+			iter.hasNext = false
+			iter.err = errors.Trace(err)
+		}
+	}()
+	tctx, conn, rows := iter.tctx, iter.conn, iter.rows
+	if rows != nil {
+		err = rows.Close()
+		if err != nil {
+			return
+		}
+		err = rows.Err()
+		if err != nil {
+			return
+		}
+	}
+	tctx.L().Debug("try to start nextRows", zap.String("query", iter.queries[iter.id]))
+	rows, err = conn.QueryContext(tctx, iter.queries[iter.id])
+	if err != nil {
+		return
+	}
+	iter.id++
+	iter.rows = rows
+	iter.hasNext = iter.rows.Next()
+}
+
+func (iter *rowIterChunks) Close() error {
+	if iter.err != nil {
+		return iter.err
+	}
+	if iter.rows != nil {
+		return iter.rows.Close()
+	}
+	return nil
+}
+
+func (iter *rowIterChunks) Decode(row RowReceiver) error {
+	if iter.err != nil {
+		return iter.err
+	}
+	if iter.rows == nil {
+		return errors.Errorf("no valid rows found, id: %d", iter.id)
+	}
+	return decodeFromRows(iter.rows, iter.args, row)
+}
+
+func (iter *rowIterChunks) Error() error {
+	if iter.err != nil {
+		return iter.err
+	}
+	if iter.rows != nil {
+		return errors.Trace(iter.rows.Err())
+	}
+	return nil
+}
+
+func (iter *rowIterChunks) Next() {
+	if iter.err == nil {
+		iter.hasNext = iter.rows.Next()
+		if !iter.hasNext {
+			iter.nextRows()
+		}
+	}
+}
+
+func (iter *rowIterChunks) HasNext() bool {
+	return iter.hasNext
+}
+
 type stringIter struct {
 	idx int
 	ss  []string
@@ -131,7 +232,7 @@ func (td *tableData) Rows() SQLRowIter {
 }
 
 func (td *tableData) Close() error {
-	return td.rows.Close()
+	return td.SQLRowIter.Close()
 }
 
 func (td *tableData) RawRows() *sql.Rows {
@@ -214,4 +315,40 @@ func (m *metaData) MetaSQL() string {
 		m.metaSQL += ";\n"
 	}
 	return m.metaSQL
+}
+
+type tableDataChunks struct {
+	tctx    *tcontext.Context
+	conn    *sql.Conn
+	queries []string
+	colLen  int
+	SQLRowIter
+}
+
+func newTableDataChunks(queries []string, colLength int) *tableDataChunks {
+	return &tableDataChunks{
+		queries: queries,
+		colLen:  colLength,
+	}
+}
+
+func (td *tableDataChunks) Start(tctx *tcontext.Context, conn *sql.Conn) error {
+	td.tctx = tctx
+	td.conn = conn
+	return nil
+}
+
+func (td *tableDataChunks) Rows() SQLRowIter {
+	if td.SQLRowIter == nil {
+		td.SQLRowIter = newRowIterChunks(td.tctx, td.conn, td.queries, td.colLen)
+	}
+	return td.SQLRowIter
+}
+
+func (td *tableDataChunks) Close() error {
+	return td.SQLRowIter.Close()
+}
+
+func (td *tableDataChunks) RawRows() *sql.Rows {
+	return nil
 }
