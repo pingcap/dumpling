@@ -88,25 +88,32 @@ func (iter *rowIterChunks) nextRows() {
 			iter.err = errors.Trace(err)
 		}
 	}()
-	tctx, conn, rows := iter.tctx, iter.conn, iter.rows
-	if rows != nil {
-		err = rows.Close()
+	tctx, conn := iter.tctx, iter.conn
+	// avoid the empty chunk
+	for iter.id < len(iter.queries) {
+		rows := iter.rows
+		if rows != nil {
+			err = rows.Close()
+			if err != nil {
+				return
+			}
+			err = rows.Err()
+			if err != nil {
+				return
+			}
+		}
+		tctx.L().Debug("try to start nextRows", zap.String("query", iter.queries[iter.id]))
+		rows, err = conn.QueryContext(tctx, iter.queries[iter.id])
 		if err != nil {
 			return
 		}
-		err = rows.Err()
-		if err != nil {
+		iter.id++
+		iter.rows = rows
+		iter.hasNext = iter.rows.Next()
+		if iter.hasNext {
 			return
 		}
 	}
-	tctx.L().Debug("try to start nextRows", zap.String("query", iter.queries[iter.id]))
-	rows, err = conn.QueryContext(tctx, iter.queries[iter.id])
-	if err != nil {
-		return
-	}
-	iter.id++
-	iter.rows = rows
-	iter.hasNext = iter.rows.Next()
 }
 
 func (iter *rowIterChunks) Close() error {

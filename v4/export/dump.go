@@ -371,7 +371,7 @@ func (d *Dumper) buildConcatTask(tctx *tcontext.Context, conn *sql.Conn, meta Ta
 		select {
 		case err, ok := <-errCh:
 			if !ok {
-				if !linear || len(tableDataArr) == 0 {
+				if linear || len(tableDataArr) == 0 {
 					return nil, nil
 				}
 				queries := make([]string, 0, len(tableDataArr))
@@ -419,7 +419,11 @@ func (d *Dumper) sequentialDumpTable(tctx *tcontext.Context, conn *sql.Conn, met
 			if ctxDone {
 				return tctx.Err()
 			}
+			return nil
 		}
+		tctx.L().Info("didn't build tidb concat sqls, will select all from table now",
+			zap.String("database", meta.DatabaseName()),
+			zap.String("table", meta.TableName()))
 	}
 
 	tableIR, err := SelectAllFromTable(conf, conn, meta)
