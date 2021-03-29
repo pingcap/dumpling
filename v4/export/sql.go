@@ -273,7 +273,7 @@ func GetSuitableRows(db *sql.Conn, database, table string) uint64 {
 	const (
 		defaultRows = 200000
 		maxRows     = 1000000
-		sizePerFile = 128 * 1024 * 1024
+		sizePerFile = 128 * 1024 * 1024 // 128MB per file by default
 	)
 	avgRowLength, err := GetAVGRowLength(db, database, table)
 	if err != nil || avgRowLength == 0 {
@@ -288,13 +288,11 @@ func GetSuitableRows(db *sql.Conn, database, table string) uint64 {
 
 // GetAVGRowLength gets whether this table's average row length
 func GetAVGRowLength(db *sql.Conn, database, table string) (uint64, error) {
-	query := fmt.Sprintf("SELECT AVG_ROW_LENGTH from `%s`.`%s` LIMIT 1", escapeString(database), escapeString(table))
+	const query = "select AVG_ROW_LENGTH from INFORMATION_SCHEMA.TABLES where table_schema=? and table_name=?;"
 	var avgRowLength uint64
-	row := db.QueryRowContext(context.Background(), query)
+	row := db.QueryRowContext(context.Background(), query, database, table)
 	err := row.Scan(&avgRowLength)
-	if errors.Cause(err) == sql.ErrNoRows {
-		return 0, nil
-	} else if err != nil {
+	if err != nil {
 		return 0, errors.Annotatef(err, "sql: %s", query)
 	}
 	return avgRowLength, nil
