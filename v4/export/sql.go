@@ -268,7 +268,7 @@ func SelectTiDBRowID(db *sql.Conn, database, table string) (bool, error) {
 	return true, nil
 }
 
-// GetAVGRowLength gets suitable rows for each table
+// GetSuitableRows gets suitable rows for each table
 func GetSuitableRows(db *sql.Conn, database, table string) uint64 {
 	const (
 		defaultRows = 200000

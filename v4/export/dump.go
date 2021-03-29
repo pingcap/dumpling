@@ -406,7 +406,7 @@ func (d *Dumper) buildConcatTask(tctx *tcontext.Context, conn *sql.Conn, meta Ta
 	}
 }
 
-func (d *Dumper) sequentialDumpTable(tctx *tcontext.Context, conn *sql.Conn, meta TableMeta, taskChan chan<- Task, linear bool) error {
+func (d *Dumper) sequentialDumpTable(tctx *tcontext.Context, conn *sql.Conn, meta TableMeta, taskChan chan<- Task, linear bool) error { // revive:disable-line:flag-parameter
 	conf := d.conf
 	if !linear && conf.ServerInfo.ServerType == ServerTypeTiDB {
 		task, err := d.buildConcatTask(tctx, conn, meta)
