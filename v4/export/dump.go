@@ -338,9 +338,7 @@ func (d *Dumper) dumpTableData(tctx *tcontext.Context, conn *sql.Conn, meta Tabl
 }
 
 func (d *Dumper) buildConcatTask(tctx *tcontext.Context, conn *sql.Conn, meta TableMeta) (*TaskTableData, error) {
-	// set tableChan's cap to 0 to make sure when d.concurrentDumpTable finished,
-	// all subtasks sent to tableChan have been handled
-	tableChan := make(chan Task)
+	tableChan := make(chan Task, 128)
 	errCh := make(chan error, 1)
 	go func() {
 		// adjust rows to suitable rows for this table
@@ -354,10 +352,28 @@ func (d *Dumper) buildConcatTask(tctx *tcontext.Context, conn *sql.Conn, meta Ta
 		}
 	}()
 	tableDataArr := make([]*tableData, 0)
+	handleSubTask := func(task Task) {
+		tableTask, ok := task.(*TaskTableData)
+		if !ok {
+			tctx.L().Warn("unexpected task when splitting table chunks", zap.String("task", tableTask.Brief()))
+			return
+		}
+		tableDataInst, ok := tableTask.Data.(*tableData)
+		if !ok {
+			tctx.L().Warn("unexpected task.Data when splitting table chunks", zap.String("task", tableTask.Brief()))
+			return
+		}
+		tableDataArr = append(tableDataArr, tableDataInst)
+	}
 	for {
 		select {
 		case err, ok := <-errCh:
 			if !ok {
+				// make sure all the subtasks in tableChan are handled
+				for len(tableChan) > 0 {
+					task := <-tableChan
+					handleSubTask(task)
+				}
 				if len(tableDataArr) <= 1 {
 					return nil, nil
 				}
@@ -378,17 +394,7 @@ func (d *Dumper) buildConcatTask(tctx *tcontext.Context, conn *sql.Conn, meta Ta
 			}
 			return nil, err
 		case task := <-tableChan:
-			tableTask, ok := task.(*TaskTableData)
-			if !ok {
-				tctx.L().Warn("unexpected task when splitting table chunks", zap.String("task", tableTask.Brief()))
-				continue
-			}
-			tableDataInst, ok := tableTask.Data.(*tableData)
-			if !ok {
-				tctx.L().Warn("unexpected task.Data when splitting table chunks", zap.String("task", tableTask.Brief()))
-				continue
-			}
-			tableDataArr = append(tableDataArr, tableDataInst)
+			handleSubTask(task)
 		}
 	}
 }
