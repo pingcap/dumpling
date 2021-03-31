@@ -603,6 +603,9 @@ const (
 	equal   = '='
 )
 
+// buildCompareClause build clause with specified bounds. Usually we will use the following two conditions:
+// (compare, writeEqual) == (less, false), return quotaCols < bound clause. In other words, (-inf, bound)
+// (compare, writeEqual) == (greater, true), return quotaCols >= bound clause. In other words, [bound, +inf)
 func buildCompareClause(buf *bytes.Buffer, quotaCols []string, bound []string, compare byte, writeEqual bool) {
 	for i, col := range quotaCols {
 		if i > 0 {
@@ -622,12 +625,36 @@ func buildCompareClause(buf *bytes.Buffer, quotaCols []string, bound []string, c
 		buf.WriteString(bound[i])
 		if i > 0 {
 			buf.WriteByte(')')
-		} else {
+		} else if i != len(quotaCols)-1 {
 			buf.WriteByte(' ')
 		}
 	}
 }
 
+// Compare returns an integer comparing two string arrays lexicographically.
+// return (compare result, common prefix length)
+// return -1 if low < up
+// return  0 if low == up
+// return  1 if low > up
+func compareArrString(low []string, up []string) (int, int) {
+	l := len(low)
+	c := -1
+	if u := len(up); u < l {
+		l = u
+		c = 1
+	} else if u == l {
+		c = 0
+	}
+	for i := 0; i < l; i++ {
+		if d := strings.Compare(low[i], up[i]); d != 0 {
+			return d, i
+		}
+	}
+	return c, l
+}
+
+// buildBetweenClause build clause in a specified table range.
+// the result where clause will be low <= quotaCols < up. In other words, [low, up)
 func buildBetweenClause(buf *bytes.Buffer, quotaCols []string, low []string, up []string) {
 	singleBetween := func(writeEqual bool) {
 		buf.WriteString(quotaCols[0])
@@ -641,6 +668,30 @@ func buildBetweenClause(buf *bytes.Buffer, quotaCols []string, low []string, up 
 		buf.WriteByte(less)
 		buf.WriteString(up[0])
 	}
+	// handle special cases with common prefix
+	compare, commonLen := compareArrString(low, up)
+	// unexpected case for low >= up, return empty result
+	if compare >= 0 {
+		buf.WriteString("false")
+		return
+	}
+	if commonLen > 0 {
+		for i := 0; i < commonLen; i++ {
+			if i > 0 {
+				buf.WriteString(" and ")
+			}
+			buf.WriteString(quotaCols[i])
+			buf.WriteByte(equal)
+			buf.WriteString(low[i])
+		}
+		buf.WriteString(" and(")
+		defer buf.WriteByte(')')
+		quotaCols = quotaCols[commonLen:]
+		low = low[commonLen:]
+		up = up[commonLen:]
+	}
+
+	// handle special cases with only one column
 	if len(quotaCols) == 1 {
 		singleBetween(true)
 		return
