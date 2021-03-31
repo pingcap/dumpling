@@ -368,7 +368,8 @@ func (s *testSQLSuite) TestBuildWhereClauses(c *C) {
 			[][]string{
 				{"1"},
 				{"2"},
-				{"3"}},
+				{"3"},
+			},
 			[]string{"`a`<1", "`a`>=1 and `a`<2", "`a`>=2 and `a`<3", "`a`>=3"},
 		},
 		{

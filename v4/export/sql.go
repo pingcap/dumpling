@@ -606,7 +606,7 @@ const (
 // buildCompareClause build clause with specified bounds. Usually we will use the following two conditions:
 // (compare, writeEqual) == (less, false), return quotaCols < bound clause. In other words, (-inf, bound)
 // (compare, writeEqual) == (greater, true), return quotaCols >= bound clause. In other words, [bound, +inf)
-func buildCompareClause(buf *bytes.Buffer, quotaCols []string, bound []string, compare byte, writeEqual bool) {
+func buildCompareClause(buf *bytes.Buffer, quotaCols []string, bound []string, compare byte, writeEqual bool) { // revive:disable-line:flag-parameter
 	for i, col := range quotaCols {
 		if i > 0 {
 			buf.WriteString("or(")
@@ -636,7 +636,7 @@ func buildCompareClause(buf *bytes.Buffer, quotaCols []string, bound []string, c
 // return -1 if low < up
 // return  0 if low == up
 // return  1 if low > up
-func compareArrString(low []string, up []string) (int, int) {
+func compareArrString(low []string, up []string) (compareRes, commonLength int) {
 	l := len(low)
 	c := -1
 	if u := len(up); u < l {
