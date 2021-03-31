@@ -555,7 +555,6 @@ func selectTiDBTableSample(conn *sql.Conn, dbName, tableName string) (pkFields [
 			pkValRow = append(pkValRow, buf.String())
 			buf.Reset()
 		}
-		rowRec.WriteToBuffer(buf, true)
 		pkVals = append(pkVals, pkValRow)
 		iter.Next()
 	}
