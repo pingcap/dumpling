@@ -570,23 +570,96 @@ func buildSelectField(db *sql.Conn, dbName, tableName string, completeInsert boo
 	return "*", len(availableFields), nil
 }
 
-func buildWhereClauses(handleColNames, handleVals []string) []string {
-	if len(handleVals) == 0 {
+func buildWhereClauses(handleColNames []string, handleVals [][]string) []string {
+	if len(handleColNames) == 0 {
 		return nil
 	}
 	quotaCols := make([]string, len(handleColNames))
 	for i, s := range handleColNames {
 		quotaCols[i] = fmt.Sprintf("`%s`", escapeString(s))
 	}
-	handleCols := strings.Join(quotaCols, ",")
 	where := make([]string, 0, len(handleVals)+1)
-	where = append(where, fmt.Sprintf("(%s) < %s", handleCols, handleVals[0]))
+	buf := &bytes.Buffer{}
+	buildCompareClause(buf, quotaCols, handleVals[0], less, false)
+	where = append(where, buf.String())
+	buf.Reset()
 	for i := 1; i < len(handleVals); i++ {
 		low, up := handleVals[i-1], handleVals[i]
-		where = append(where, fmt.Sprintf("(%s) >= (%s) AND (%s) < (%s)", handleCols, low, handleCols, up))
+		buildBetweenClause(buf, quotaCols, low, up)
+		where = append(where, buf.String())
+		buf.Reset()
 	}
-	where = append(where, fmt.Sprintf("(%s) >= (%s)", handleCols, handleVals[len(handleVals)-1]))
+	buildCompareClause(buf, quotaCols, handleVals[len(handleVals)-1], greater, true)
+	where = append(where, buf.String())
+	buf.Reset()
 	return where
+}
+
+// return greater than TableRangeScan where clause
+// the result doesn't contain brackets
+const (
+	greater = '>'
+	less    = '<'
+	equal   = '='
+)
+
+func buildCompareClause(buf *bytes.Buffer, quotaCols []string, bound []string, compare byte, writeEqual bool) {
+	for i, col := range quotaCols {
+		if i > 0 {
+			buf.WriteString("or(")
+		}
+		for j := 0; j < i; j++ {
+			buf.WriteString(quotaCols[j])
+			buf.WriteByte(equal)
+			buf.WriteString(bound[j])
+			buf.WriteString(" and ")
+		}
+		buf.WriteString(col)
+		buf.WriteByte(compare)
+		if writeEqual && i == len(quotaCols)-1 {
+			buf.WriteByte(equal)
+		}
+		buf.WriteString(bound[i])
+		if i > 0 {
+			buf.WriteByte(')')
+		} else {
+			buf.WriteByte(' ')
+		}
+	}
+}
+
+func buildBetweenClause(buf *bytes.Buffer, quotaCols []string, low []string, up []string) {
+	singleBetween := func(writeEqual bool) {
+		buf.WriteString(quotaCols[0])
+		buf.WriteByte(greater)
+		if writeEqual {
+			buf.WriteByte(equal)
+		}
+		buf.WriteString(low[0])
+		buf.WriteString(" and ")
+		buf.WriteString(quotaCols[0])
+		buf.WriteByte(less)
+		buf.WriteString(up[0])
+	}
+	if len(quotaCols) == 1 {
+		singleBetween(true)
+		return
+	}
+	buf.WriteByte('(')
+	singleBetween(false)
+	buf.WriteString(")or(")
+	buf.WriteString(quotaCols[0])
+	buf.WriteByte(equal)
+	buf.WriteString(low[0])
+	buf.WriteString(" and(")
+	buildCompareClause(buf, quotaCols[1:], low[1:], greater, true)
+	buf.WriteString("))or(")
+	buf.WriteString(quotaCols[0])
+	buf.WriteByte(equal)
+	buf.WriteString(up[0])
+	buf.WriteString(" and(")
+	buildCompareClause(buf, quotaCols[1:], up[1:], less, false)
+	buf.WriteString("))")
 }
 
 func buildOrderByClauseString(handleColNames []string) string {
