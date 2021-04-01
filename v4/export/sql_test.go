@@ -440,6 +440,19 @@ func (s *testSQLSuite) TestBuildWhereClauses(c *C) {
 				"`a`>1 or(`a`=1 and `b`>2)or(`a`=1 and `b`=2 and `c`>=3)",
 			},
 		},
+		// special case: numbers has bigger lexicographically order but lower number
+		{
+			[]string{"a", "b", "c"},
+			[][]string{
+				{"12", "2", "3"},
+				{"111", "4", "5"},
+			},
+			[]string{
+				"`a`<12 or(`a`=12 and `b`<2)or(`a`=12 and `b`=2 and `c`<3)",
+				"(`a`>12 and `a`<111)or(`a`=12 and(`b`>2 or(`b`=2 and `c`>=3)))or(`a`=111 and(`b`<4 or(`b`=4 and `c`<5)))", // should return sql correctly
+				"`a`>111 or(`a`=111 and `b`>4)or(`a`=111 and `b`=4 and `c`>=5)",
+			},
+		},
 		// test string fields
 		{
 			[]string{"a", "b", "c"},
