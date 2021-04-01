@@ -342,7 +342,7 @@ func (d *Dumper) buildConcatTask(tctx *tcontext.Context, conn *sql.Conn, meta Ta
 	errCh := make(chan error, 1)
 	go func() {
 		// adjust rows to suitable rows for this table
-		d.conf.Rows = GetSuitableRows(conn, meta.DatabaseName(), meta.TableName())
+		d.conf.Rows = GetSuitableRows(tctx, conn, meta.DatabaseName(), meta.TableName())
 		err := d.concurrentDumpTable(tctx, conn, meta, tableChan)
 		d.conf.Rows = UnspecifiedSize
 		if err != nil {

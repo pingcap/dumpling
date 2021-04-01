@@ -355,6 +355,8 @@ func (s *testSQLSuite) TestGetSuitableRows(c *C) {
 	conn, err := db.Conn(context.Background())
 	c.Assert(err, IsNil)
 	const query = "select AVG_ROW_LENGTH from INFORMATION_SCHEMA.TABLES where table_schema=\\? and table_name=\\?;"
+	tctx, cancel := tcontext.Background().WithCancel()
+	defer cancel()
 	database := "foo"
 	table := "bar"
 
@@ -398,7 +400,7 @@ func (s *testSQLSuite) TestGetSuitableRows(c *C) {
 			mock.ExpectQuery(query).WithArgs(database, table).
 				WillReturnError(testCase.returnErr)
 		}
-		rows := GetSuitableRows(conn, database, table)
+		rows := GetSuitableRows(tctx, conn, database, table)
 		c.Assert(rows, Equals, testCase.expectedRows)
 	}
 }
