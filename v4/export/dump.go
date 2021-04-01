@@ -79,6 +79,7 @@ func (d *Dumper) Dump() (dumpErr error) {
 		conCtrl ConsistencyController
 	)
 	tctx, conf, pool := d.tctx, d.conf, d.dbHandle
+	tctx.L().Info("begin to run Dump", zap.Stringer("conf", conf))
 	m := newGlobalMetadata(tctx, d.extStore, conf.Snapshot)
 	defer func() {
 		if dumpErr == nil {
