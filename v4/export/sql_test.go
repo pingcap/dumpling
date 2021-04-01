@@ -607,34 +607,34 @@ func (s *testSQLSuite) TestBuildWhereClauses(c *C) {
 		c.Assert(whereClauses, DeepEquals, testCase.expectedWhereClauses)
 
 		// Test build tasks through table sample
-		taskChan := make(chan Task, 128)
-		quotaCols := make([]string, 0, len(handleColNames))
-		for _, col := range quotaCols {
-			quotaCols = append(quotaCols, wrapBackTicks(col))
-		}
-		selectFields := strings.Join(quotaCols, ",")
-		meta := &tableMeta{
-			database:      database,
-			table:         table,
-			selectedField: selectFields,
-			specCmts: []string{
-				"/*!40101 SET NAMES binary*/;",
-			},
-		}
-
-		rows := sqlmock.NewRows([]string{"COLUMN_NAME", "DATA_TYPE"})
-		for i := range handleColNames {
-			rows.AddRow(handleColNames[i], handleColTypes[i])
-		}
-		mock.ExpectQuery("SELECT c.COLUMN_NAME, DATA_TYPE FROM").WithArgs(database, table).WillReturnRows(rows)
-		mock.ExpectExec(fmt.Sprintf("SELECT _tidb_rowid from `%s`.`%s` LIMIT 0", database, table)).
-			WillReturnError(&mysql.MyError{
-				Code:    mysql.ER_BAD_FIELD_ERROR,
-				State:   "42S22",
-				Message: "Unknown column '_tidb_rowid' in 'field list'",
-			})
-
 		if len(handleColNames) > 0 {
+			taskChan := make(chan Task, 128)
+			quotaCols := make([]string, 0, len(handleColNames))
+			for _, col := range quotaCols {
+				quotaCols = append(quotaCols, wrapBackTicks(col))
+			}
+			selectFields := strings.Join(quotaCols, ",")
+			meta := &tableMeta{
+				database:      database,
+				table:         table,
+				selectedField: selectFields,
+				specCmts: []string{
+					"/*!40101 SET NAMES binary*/;",
+				},
+			}
+
+			rows := sqlmock.NewRows([]string{"COLUMN_NAME", "DATA_TYPE"})
+			for i := range handleColNames {
+				rows.AddRow(handleColNames[i], handleColTypes[i])
+			}
+			mock.ExpectQuery("SELECT c.COLUMN_NAME, DATA_TYPE FROM").WithArgs(database, table).WillReturnRows(rows)
+			mock.ExpectExec(fmt.Sprintf("SELECT _tidb_rowid from `%s`.`%s` LIMIT 0", database, table)).
+				WillReturnError(&mysql.MyError{
+					Code:    mysql.ER_BAD_FIELD_ERROR,
+					State:   "42S22",
+					Message: "Unknown column '_tidb_rowid' in 'field list'",
+				})
+
 			rows = sqlmock.NewRows(handleColNames)
 			for _, handleVal := range handleVals {
 				rows.AddRow(handleVal...)
@@ -647,21 +647,21 @@ func (s *testSQLSuite) TestBuildWhereClauses(c *C) {
 			}
 			mock.ExpectQuery("SELECT COLUMN_NAME,EXTRA FROM INFORMATION_SCHEMA.COLUMNS").WithArgs(database, table).
 				WillReturnRows(rows)
-		}
 
-		c.Assert(d.concurrentDumpTable(tctx, conn, meta, taskChan), IsNil)
-		c.Assert(mock.ExpectationsWereMet(), IsNil)
-		orderByClause := buildOrderByClauseString(handleColNames)
+			c.Assert(d.concurrentDumpTable(tctx, conn, meta, taskChan), IsNil)
+			c.Assert(mock.ExpectationsWereMet(), IsNil)
+			orderByClause := buildOrderByClauseString(handleColNames)
 
-		for i, w := range testCase.expectedWhereClauses {
-			query := buildSelectQuery(database, table, "*", buildWhereCondition(d.conf, w), orderByClause)
-			task := <-taskChan
-			taskTableData, ok := task.(*TaskTableData)
-			c.Assert(ok, IsTrue)
-			c.Assert(taskTableData.ChunkIndex, Equals, i)
-			data, ok := taskTableData.Data.(*tableData)
-			c.Assert(ok, IsTrue)
-			c.Assert(data.query, Equals, query)
+			for i, w := range testCase.expectedWhereClauses {
+				query := buildSelectQuery(database, table, "*", buildWhereCondition(d.conf, w), orderByClause)
+				task := <-taskChan
+				taskTableData, ok := task.(*TaskTableData)
+				c.Assert(ok, IsTrue)
+				c.Assert(taskTableData.ChunkIndex, Equals, i)
+				data, ok := taskTableData.Data.(*tableData)
+				c.Assert(ok, IsTrue)
+				c.Assert(data.query, Equals, query)
+			}
 		}
 	}
 }
