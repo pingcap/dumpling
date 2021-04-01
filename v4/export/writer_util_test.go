@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/pingcap/dumpling/v4/log"
+
 	tcontext "github.com/pingcap/dumpling/v4/context"
 
 	"github.com/pingcap/br/pkg/storage"
@@ -15,8 +17,20 @@ import (
 	"github.com/pingcap/errors"
 )
 
+var appLogger log.Logger
+
 func TestT(t *testing.T) {
 	initColTypeRowReceiverMap()
+	logger, err := log.InitAppLogger(&log.Config{
+		Level:  "info",
+		File:   "",
+		Format: "text",
+	})
+	if err != nil {
+		t.Log("fail to init logger, err: " + err.Error())
+		t.Fail()
+	}
+	appLogger = logger
 	TestingT(t)
 }
 

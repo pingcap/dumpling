@@ -4,13 +4,17 @@ package export
 
 import (
 	"context"
+	"database/sql/driver"
 	"errors"
+	"fmt"
+	"strings"
 
 	tcontext "github.com/pingcap/dumpling/v4/context"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/coreos/go-semver/semver"
 	. "github.com/pingcap/check"
+	"github.com/siddontang/go-mysql/mysql"
 )
 
 var _ = Suite(&testSQLSuite{})
@@ -348,41 +352,66 @@ func (s *testSQLSuite) TestShowCreateView(c *C) {
 }
 
 func (s *testSQLSuite) TestBuildWhereClauses(c *C) {
+	db, mock, err := sqlmock.New()
+	c.Assert(err, IsNil)
+	defer db.Close()
+	conn, err := db.Conn(context.Background())
+	c.Assert(err, IsNil)
+	tctx, cancel := tcontext.Background().WithLogger(appLogger).WithCancel()
+
+	d := &Dumper{
+		tctx:      tctx,
+		conf:      DefaultConfig(),
+		cancelCtx: cancel,
+	}
+	d.conf.ServerInfo = ServerInfo{
+		ServerType:    ServerTypeTiDB,
+		ServerVersion: tableSampleVersion,
+	}
+	database := "foo"
+	table := "bar"
+
 	testCases := []struct {
 		handleColNames       []string
-		handleVals           [][]string
+		handleColTypes       []string
+		handleVals           [][]driver.Value
 		expectedWhereClauses []string
 	}{
 		{
 			[]string{},
-			[][]string{},
+			[]string{},
+			[][]driver.Value{},
 			nil,
 		},
 		{
 			[]string{"a"},
-			[][]string{{"1"}},
+			[]string{"bigint"},
+			[][]driver.Value{{1}},
 			[]string{"`a`<1", "`a`>=1"},
 		},
 		{
 			[]string{"a"},
-			[][]string{
-				{"1"},
-				{"2"},
-				{"3"},
+			[]string{"bigint"},
+			[][]driver.Value{
+				{1},
+				{2},
+				{3},
 			},
 			[]string{"`a`<1", "`a`>=1 and `a`<2", "`a`>=2 and `a`<3", "`a`>=3"},
 		},
 		{
 			[]string{"a", "b"},
-			[][]string{{"1", "2"}},
+			[]string{"bigint", "bigint"},
+			[][]driver.Value{{1, 2}},
 			[]string{"`a`<1 or(`a`=1 and `b`<2)", "`a`>1 or(`a`=1 and `b`>=2)"},
 		},
 		{
 			[]string{"a", "b"},
-			[][]string{
-				{"1", "2"},
-				{"3", "4"},
-				{"5", "6"},
+			[]string{"bigint", "bigint"},
+			[][]driver.Value{
+				{1, 2},
+				{3, 4},
+				{5, 6},
 			},
 			[]string{
 				"`a`<1 or(`a`=1 and `b`<2)",
@@ -393,9 +422,10 @@ func (s *testSQLSuite) TestBuildWhereClauses(c *C) {
 		},
 		{
 			[]string{"a", "b", "c"},
-			[][]string{
-				{"1", "2", "3"},
-				{"4", "5", "6"},
+			[]string{"bigint", "bigint", "bigint"},
+			[][]driver.Value{
+				{1, 2, 3},
+				{4, 5, 6},
 			},
 			[]string{
 				"`a`<1 or(`a`=1 and `b`<2)or(`a`=1 and `b`=2 and `c`<3)",
@@ -405,9 +435,10 @@ func (s *testSQLSuite) TestBuildWhereClauses(c *C) {
 		},
 		{
 			[]string{"a", "b", "c"},
-			[][]string{
-				{"1", "2", "3"},
-				{"1", "4", "5"},
+			[]string{"bigint", "bigint", "bigint"},
+			[][]driver.Value{
+				{1, 2, 3},
+				{1, 4, 5},
 			},
 			[]string{
 				"`a`<1 or(`a`=1 and `b`<2)or(`a`=1 and `b`=2 and `c`<3)",
@@ -417,9 +448,10 @@ func (s *testSQLSuite) TestBuildWhereClauses(c *C) {
 		},
 		{
 			[]string{"a", "b", "c"},
-			[][]string{
-				{"1", "2", "3"},
-				{"1", "2", "8"},
+			[]string{"bigint", "bigint", "bigint"},
+			[][]driver.Value{
+				{1, 2, 3},
+				{1, 2, 8},
 			},
 			[]string{
 				"`a`<1 or(`a`=1 and `b`<2)or(`a`=1 and `b`=2 and `c`<3)",
@@ -430,9 +462,10 @@ func (s *testSQLSuite) TestBuildWhereClauses(c *C) {
 		// special case: avoid return same samples
 		{
 			[]string{"a", "b", "c"},
-			[][]string{
-				{"1", "2", "3"},
-				{"1", "2", "3"},
+			[]string{"bigint", "bigint", "bigint"},
+			[][]driver.Value{
+				{1, 2, 3},
+				{1, 2, 3},
 			},
 			[]string{
 				"`a`<1 or(`a`=1 and `b`<2)or(`a`=1 and `b`=2 and `c`<3)",
@@ -443,9 +476,10 @@ func (s *testSQLSuite) TestBuildWhereClauses(c *C) {
 		// special case: numbers has bigger lexicographically order but lower number
 		{
 			[]string{"a", "b", "c"},
-			[][]string{
-				{"12", "2", "3"},
-				{"111", "4", "5"},
+			[]string{"bigint", "bigint", "bigint"},
+			[][]driver.Value{
+				{12, 2, 3},
+				{111, 4, 5},
 			},
 			[]string{
 				"`a`<12 or(`a`=12 and `b`<2)or(`a`=12 and `b`=2 and `c`<3)",
@@ -456,9 +490,10 @@ func (s *testSQLSuite) TestBuildWhereClauses(c *C) {
 		// test string fields
 		{
 			[]string{"a", "b", "c"},
-			[][]string{
-				{"1", "2", "\"3\""},
-				{"1", "4", "\"5\""},
+			[]string{"bigint", "bigint", "varchar"},
+			[][]driver.Value{
+				{1, 2, "3"},
+				{1, 4, "5"},
 			},
 			[]string{
 				"`a`<1 or(`a`=1 and `b`<2)or(`a`=1 and `b`=2 and `c`<\"3\")",
@@ -468,9 +503,10 @@ func (s *testSQLSuite) TestBuildWhereClauses(c *C) {
 		},
 		{
 			[]string{"a", "b", "c", "d"},
-			[][]string{
-				{"1", "2", "3", "4"},
-				{"5", "6", "7", "8"},
+			[]string{"bigint", "bigint", "bigint", "bigint"},
+			[][]driver.Value{
+				{1, 2, 3, 4},
+				{5, 6, 7, 8},
 			},
 			[]string{
 				"`a`<1 or(`a`=1 and `b`<2)or(`a`=1 and `b`=2 and `c`<3)or(`a`=1 and `b`=2 and `c`=3 and `d`<4)",
@@ -479,9 +515,95 @@ func (s *testSQLSuite) TestBuildWhereClauses(c *C) {
 			},
 		},
 	}
+	transferHandleValStrings := func(handleColTypes []string, handleVals [][]driver.Value) [][]string {
+		handleValStrings := make([][]string, 0, len(handleVals))
+		for _, handleVal := range handleVals {
+			handleValString := make([]string, 0, len(handleVal))
+			for i, val := range handleVal {
+				rec := colTypeRowReceiverMap[strings.ToUpper(handleColTypes[i])]()
+				var valStr string
+				switch rec.(type) {
+				case *SQLTypeString:
+					valStr = fmt.Sprintf(`"%s"`, val)
+				case *SQLTypeBytes:
+					valStr = fmt.Sprintf("x'%x'", val)
+				case *SQLTypeNumber:
+					valStr = fmt.Sprintf("%d", val)
+				}
+				handleValString = append(handleValString, valStr)
+			}
+			handleValStrings = append(handleValStrings, handleValString)
+		}
+		return handleValStrings
+	}
+
 	for _, testCase := range testCases {
-		whereClauses := buildWhereClauses(testCase.handleColNames, testCase.handleVals)
+		handleColNames := testCase.handleColNames
+		handleColTypes := testCase.handleColTypes
+		handleVals := testCase.handleVals
+		handleValStrings := transferHandleValStrings(handleColTypes, handleVals)
+
+		// Test build whereClauses
+		whereClauses := buildWhereClauses(handleColNames, handleValStrings)
 		c.Assert(whereClauses, DeepEquals, testCase.expectedWhereClauses)
+
+		// Test build tasks through table sample
+		taskChan := make(chan Task, 128)
+		quotaCols := make([]string, 0, len(handleColNames))
+		for _, col := range quotaCols {
+			quotaCols = append(quotaCols, wrapBackTicks(col))
+		}
+		selectFields := strings.Join(quotaCols, ",")
+		meta := &tableMeta{
+			database:      database,
+			table:         table,
+			selectedField: selectFields,
+			specCmts: []string{
+				"/*!40101 SET NAMES binary*/;",
+			},
+		}
+
+		rows := sqlmock.NewRows([]string{"COLUMN_NAME", "DATA_TYPE"})
+		for i := range handleColNames {
+			rows.AddRow(handleColNames[i], handleColTypes[i])
+		}
+		mock.ExpectQuery("SELECT c.COLUMN_NAME, DATA_TYPE FROM").WithArgs(database, table).WillReturnRows(rows)
+		mock.ExpectExec(fmt.Sprintf("SELECT _tidb_rowid from `%s`.`%s` LIMIT 0", database, table)).
+			WillReturnError(&mysql.MyError{
+				Code:    mysql.ER_BAD_FIELD_ERROR,
+				State:   "42S22",
+				Message: "Unknown column '_tidb_rowid' in 'field list'",
+			})
+
+		rows = sqlmock.NewRows(handleColNames)
+		for _, handleVal := range handleVals {
+			rows.AddRow(handleVal...)
+		}
+		mock.ExpectQuery(fmt.Sprintf("SELECT .* FROM `%s`.`%s` TABLESAMPLE REGIONS", database, table)).WillReturnRows(rows)
+
+		if len(handleColNames) > 0 {
+			rows = sqlmock.NewRows([]string{"COLUMN_NAME", "EXTRA"})
+			for _, handleCol := range handleColNames {
+				rows.AddRow(handleCol, "")
+			}
+			mock.ExpectQuery(fmt.Sprintf("SELECT COLUMN_NAME,EXTRA FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='%s' AND TABLE_NAME='%s' ORDER BY ORDINAL_POSITION;", database, table)).
+				WillReturnRows(rows)
+		}
+
+		c.Assert(d.concurrentDumpTable(tctx, conn, meta, taskChan), IsNil)
+		c.Assert(mock.ExpectationsWereMet(), IsNil)
+		orderByClause := buildOrderByClauseString(handleColNames)
+
+		for i, w := range testCase.expectedWhereClauses {
+			query := buildSelectQuery(database, table, "*", buildWhereCondition(d.conf, w), orderByClause)
+			task := <-taskChan
+			taskTableData, ok := task.(*TaskTableData)
+			c.Assert(ok, IsTrue)
+			c.Assert(taskTableData.ChunkIndex, Equals, i)
+			data, ok := taskTableData.Data.(*tableData)
+			c.Assert(ok, IsTrue)
+			c.Assert(data.query, Equals, query)
+		}
 	}
 }
 
