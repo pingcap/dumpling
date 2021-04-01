@@ -534,6 +534,9 @@ func selectTiDBTableSample(conn *sql.Conn, dbName, tableName string) (pkFields [
 	if hasImplicitRowID {
 		pkFields, pkColTypes = []string{"_tidb_rowid"}, []string{"BIGINT"}
 	}
+	if len(pkFields) == 0 {
+		return pkFields, pkVals, nil
+	}
 	query := buildTiDBTableSampleQuery(pkFields, dbName, tableName)
 	rows, err := conn.QueryContext(context.Background(), query)
 	if err != nil {

@@ -496,9 +496,9 @@ func (s *testSQLSuite) TestBuildWhereClauses(c *C) {
 				{1, 4, "5"},
 			},
 			[]string{
-				"`a`<1 or(`a`=1 and `b`<2)or(`a`=1 and `b`=2 and `c`<\"3\")",
-				"`a`=1 and((`b`>2 and `b`<4)or(`b`=2 and(`c`>=\"3\"))or(`b`=4 and(`c`<\"5\")))",
-				"`a`>1 or(`a`=1 and `b`>4)or(`a`=1 and `b`=4 and `c`>=\"5\")",
+				"`a`<1 or(`a`=1 and `b`<2)or(`a`=1 and `b`=2 and `c`<'3')",
+				"`a`=1 and((`b`>2 and `b`<4)or(`b`=2 and(`c`>='3'))or(`b`=4 and(`c`<'5')))",
+				"`a`>1 or(`a`=1 and `b`>4)or(`a`=1 and `b`=4 and `c`>='5')",
 			},
 		},
 		{
@@ -524,7 +524,7 @@ func (s *testSQLSuite) TestBuildWhereClauses(c *C) {
 				var valStr string
 				switch rec.(type) {
 				case *SQLTypeString:
-					valStr = fmt.Sprintf(`"%s"`, val)
+					valStr = fmt.Sprintf("'%s'", val)
 				case *SQLTypeBytes:
 					valStr = fmt.Sprintf("x'%x'", val)
 				case *SQLTypeNumber:
@@ -537,7 +537,8 @@ func (s *testSQLSuite) TestBuildWhereClauses(c *C) {
 		return handleValStrings
 	}
 
-	for _, testCase := range testCases {
+	for i, testCase := range testCases {
+		c.Log(fmt.Sprintf("case #%d", i))
 		handleColNames := testCase.handleColNames
 		handleColTypes := testCase.handleColTypes
 		handleVals := testCase.handleVals
@@ -575,18 +576,18 @@ func (s *testSQLSuite) TestBuildWhereClauses(c *C) {
 				Message: "Unknown column '_tidb_rowid' in 'field list'",
 			})
 
-		rows = sqlmock.NewRows(handleColNames)
-		for _, handleVal := range handleVals {
-			rows.AddRow(handleVal...)
-		}
-		mock.ExpectQuery(fmt.Sprintf("SELECT .* FROM `%s`.`%s` TABLESAMPLE REGIONS", database, table)).WillReturnRows(rows)
-
 		if len(handleColNames) > 0 {
+			rows = sqlmock.NewRows(handleColNames)
+			for _, handleVal := range handleVals {
+				rows.AddRow(handleVal...)
+			}
+			mock.ExpectQuery(fmt.Sprintf("SELECT .* FROM `%s`.`%s` TABLESAMPLE REGIONS", database, table)).WillReturnRows(rows)
+
 			rows = sqlmock.NewRows([]string{"COLUMN_NAME", "EXTRA"})
 			for _, handleCol := range handleColNames {
 				rows.AddRow(handleCol, "")
 			}
-			mock.ExpectQuery(fmt.Sprintf("SELECT COLUMN_NAME,EXTRA FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='%s' AND TABLE_NAME='%s' ORDER BY ORDINAL_POSITION;", database, table)).
+			mock.ExpectQuery("SELECT COLUMN_NAME,EXTRA FROM INFORMATION_SCHEMA.COLUMNS").WithArgs(database, table).
 				WillReturnRows(rows)
 		}
 
