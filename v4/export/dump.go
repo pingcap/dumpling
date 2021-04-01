@@ -390,7 +390,7 @@ func (d *Dumper) buildConcatTask(tctx *tcontext.Context, conn *sql.Conn, meta Ta
 						return nil, nil
 					}
 				}
-				return NewTaskTableData(meta, newTableDataChunks(queries, colLen), 0, 1), nil
+				return NewTaskTableData(meta, newMultiQueriesChunk(queries, colLen), 0, 1), nil
 			}
 			return nil, err
 		case task := <-tableChan:
@@ -435,7 +435,6 @@ func (d *Dumper) sequentialDumpTable(tctx *tcontext.Context, conn *sql.Conn, met
 }
 
 // concurrentDumpTable tries to split table into several chunks to dump
-// return (whether we should try to dump table serial, error)
 func (d *Dumper) concurrentDumpTable(tctx *tcontext.Context, conn *sql.Conn, meta TableMeta, taskChan chan<- Task) error {
 	conf := d.conf
 	db, tbl := meta.DatabaseName(), meta.TableName()

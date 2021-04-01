@@ -51,9 +51,9 @@ func (iter *rowIter) HasNext() bool {
 	return iter.hasNext
 }
 
-// rowIter implements the SQLRowIter interface.
+// multiQueriesChunkIter implements the SQLRowIter interface.
 // Note: To create a rowIter, please use `newRowIter()` instead of struct literal.
-type rowIterChunks struct {
+type multiQueriesChunkIter struct {
 	tctx    *tcontext.Context
 	conn    *sql.Conn
 	rows    *sql.Rows
@@ -64,8 +64,8 @@ type rowIterChunks struct {
 	err     error
 }
 
-func newRowIterChunks(tctx *tcontext.Context, conn *sql.Conn, queries []string, argLen int) *rowIterChunks {
-	r := &rowIterChunks{
+func newMultiQueryChunkIter(tctx *tcontext.Context, conn *sql.Conn, queries []string, argLen int) *multiQueriesChunkIter {
+	r := &multiQueriesChunkIter{
 		tctx:    tctx,
 		conn:    conn,
 		queries: queries,
@@ -76,7 +76,7 @@ func newRowIterChunks(tctx *tcontext.Context, conn *sql.Conn, queries []string, 
 	return r
 }
 
-func (iter *rowIterChunks) nextRows() {
+func (iter *multiQueriesChunkIter) nextRows() {
 	if iter.id >= len(iter.queries) {
 		iter.hasNext = false
 		return
@@ -119,7 +119,7 @@ func (iter *rowIterChunks) nextRows() {
 	}
 }
 
-func (iter *rowIterChunks) Close() error {
+func (iter *multiQueriesChunkIter) Close() error {
 	if iter.err != nil {
 		return iter.err
 	}
@@ -129,7 +129,7 @@ func (iter *rowIterChunks) Close() error {
 	return nil
 }
 
-func (iter *rowIterChunks) Decode(row RowReceiver) error {
+func (iter *multiQueriesChunkIter) Decode(row RowReceiver) error {
 	if iter.err != nil {
 		return iter.err
 	}
@@ -139,7 +139,7 @@ func (iter *rowIterChunks) Decode(row RowReceiver) error {
 	return decodeFromRows(iter.rows, iter.args, row)
 }
 
-func (iter *rowIterChunks) Error() error {
+func (iter *multiQueriesChunkIter) Error() error {
 	if iter.err != nil {
 		return iter.err
 	}
@@ -149,7 +149,7 @@ func (iter *rowIterChunks) Error() error {
 	return nil
 }
 
-func (iter *rowIterChunks) Next() {
+func (iter *multiQueriesChunkIter) Next() {
 	if iter.err == nil {
 		iter.hasNext = iter.rows.Next()
 		if !iter.hasNext {
@@ -158,7 +158,7 @@ func (iter *rowIterChunks) Next() {
 	}
 }
 
-func (iter *rowIterChunks) HasNext() bool {
+func (iter *multiQueriesChunkIter) HasNext() bool {
 	return iter.hasNext
 }
 
@@ -327,7 +327,7 @@ func (m *metaData) MetaSQL() string {
 	return m.metaSQL
 }
 
-type tableDataChunks struct {
+type multiQueriesChunk struct {
 	tctx    *tcontext.Context
 	conn    *sql.Conn
 	queries []string
@@ -335,30 +335,30 @@ type tableDataChunks struct {
 	SQLRowIter
 }
 
-func newTableDataChunks(queries []string, colLength int) *tableDataChunks {
-	return &tableDataChunks{
+func newMultiQueriesChunk(queries []string, colLength int) *multiQueriesChunk {
+	return &multiQueriesChunk{
 		queries: queries,
 		colLen:  colLength,
 	}
 }
 
-func (td *tableDataChunks) Start(tctx *tcontext.Context, conn *sql.Conn) error {
+func (td *multiQueriesChunk) Start(tctx *tcontext.Context, conn *sql.Conn) error {
 	td.tctx = tctx
 	td.conn = conn
 	return nil
 }
 
-func (td *tableDataChunks) Rows() SQLRowIter {
+func (td *multiQueriesChunk) Rows() SQLRowIter {
 	if td.SQLRowIter == nil {
-		td.SQLRowIter = newRowIterChunks(td.tctx, td.conn, td.queries, td.colLen)
+		td.SQLRowIter = newMultiQueryChunkIter(td.tctx, td.conn, td.queries, td.colLen)
 	}
 	return td.SQLRowIter
 }
 
-func (td *tableDataChunks) Close() error {
+func (td *multiQueriesChunk) Close() error {
 	return td.SQLRowIter.Close()
 }
 
-func (td *tableDataChunks) RawRows() *sql.Rows {
+func (td *multiQueriesChunk) RawRows() *sql.Rows {
 	return nil
 }

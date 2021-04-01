@@ -271,15 +271,15 @@ func SelectTiDBRowID(db *sql.Conn, database, table string) (bool, error) {
 // GetSuitableRows gets suitable rows for each table
 func GetSuitableRows(db *sql.Conn, database, table string) uint64 {
 	const (
-		defaultRows = 200000
-		maxRows     = 1000000
-		sizePerFile = 128 * 1024 * 1024 // 128MB per file by default
+		defaultRows  = 200000
+		maxRows      = 1000000
+		bytesPerFile = 128 * 1024 * 1024 // 128MB per file by default
 	)
 	avgRowLength, err := GetAVGRowLength(db, database, table)
 	if err != nil || avgRowLength == 0 {
 		return defaultRows
 	}
-	estimateRows := sizePerFile / avgRowLength
+	estimateRows := bytesPerFile / avgRowLength
 	if estimateRows > maxRows {
 		return maxRows
 	}
