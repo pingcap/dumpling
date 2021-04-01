@@ -79,6 +79,7 @@ func (d *Dumper) Dump() (dumpErr error) {
 		conCtrl ConsistencyController
 	)
 	tctx, conf, pool := d.tctx, d.conf, d.dbHandle
+	tctx.L().Info("begin to run Dump", zap.Stringer("conf", conf))
 	m := newGlobalMetadata(tctx, d.extStore, conf.Snapshot)
 	defer func() {
 		if dumpErr == nil {
@@ -515,7 +516,7 @@ func (d *Dumper) L() log.Logger {
 	return d.tctx.L()
 }
 
-func selectTiDBTableSample(conn *sql.Conn, dbName, tableName string) (pkFields []string, pkVals []string, err error) {
+func selectTiDBTableSample(conn *sql.Conn, dbName, tableName string) (pkFields []string, pkVals [][]string, err error) {
 	pkFields, pkColTypes, err := GetPrimaryKeyAndColumnTypes(conn, dbName, tableName)
 	if err != nil {
 		return nil, nil, errors.Trace(err)
@@ -532,18 +533,24 @@ func selectTiDBTableSample(conn *sql.Conn, dbName, tableName string) (pkFields [
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}
-	iter := newRowIter(rows, len(pkFields))
+	pkValNum := len(pkFields)
+	iter := newRowIter(rows, pkValNum)
 	defer iter.Close()
 	rowRec := MakeRowReceiver(pkColTypes)
 	buf := new(bytes.Buffer)
+
 	for iter.HasNext() {
 		err = iter.Decode(rowRec)
 		if err != nil {
 			return nil, nil, errors.Trace(err)
 		}
-		rowRec.WriteToBuffer(buf, true)
-		pkVals = append(pkVals, buf.String())
-		buf.Reset()
+		pkValRow := make([]string, 0, pkValNum)
+		for _, rec := range rowRec.receivers {
+			rec.WriteToBuffer(buf, true)
+			pkValRow = append(pkValRow, buf.String())
+			buf.Reset()
+		}
+		pkVals = append(pkVals, pkValRow)
 		iter.Next()
 	}
 	return pkFields, pkVals, nil
