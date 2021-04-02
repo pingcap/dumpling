@@ -4,6 +4,7 @@ package export
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 
 	tcontext "github.com/pingcap/dumpling/v4/context"
@@ -63,7 +64,7 @@ func (s *testSQLSuite) TestBuildSelectAllQuery(c *C) {
 	conn, err := db.Conn(context.Background())
 	c.Assert(err, IsNil)
 
-	mockConf := DefaultConfig()
+	mockConf := defaultConfigForTest(c)
 	mockConf.SortByPk = true
 
 	// Test TiDB server.
@@ -181,7 +182,7 @@ func (s *testSQLSuite) TestBuildOrderByClause(c *C) {
 	conn, err := db.Conn(context.Background())
 	c.Assert(err, IsNil)
 
-	mockConf := DefaultConfig()
+	mockConf := defaultConfigForTest(c)
 	mockConf.SortByPk = true
 
 	// Test TiDB server.
@@ -345,6 +346,188 @@ func (s *testSQLSuite) TestShowCreateView(c *C) {
 	c.Assert(createTableSQL, Equals, "CREATE TABLE `v`(\n`a` int\n)ENGINE=MyISAM;\n")
 	c.Assert(createViewSQL, Equals, "DROP TABLE IF EXISTS `v`;\nDROP VIEW IF EXISTS `v`;\nSET @PREV_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT;\nSET @PREV_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS;\nSET @PREV_COLLATION_CONNECTION=@@COLLATION_CONNECTION;\nSET character_set_client = utf8;\nSET character_set_results = utf8;\nSET collation_connection = utf8_general_ci;\nCREATE ALGORITHM=UNDEFINED DEFINER=`root`@`localhost` SQL SECURITY DEFINER VIEW `v` (`a`) AS SELECT `t`.`a` AS `a` FROM `test`.`t`;\nSET character_set_client = @PREV_CHARACTER_SET_CLIENT;\nSET character_set_results = @PREV_CHARACTER_SET_RESULTS;\nSET collation_connection = @PREV_COLLATION_CONNECTION;\n")
 	c.Assert(mock.ExpectationsWereMet(), IsNil)
+}
+
+func (s *testSQLSuite) TestGetSuitableRows(c *C) {
+	db, mock, err := sqlmock.New()
+	c.Assert(err, IsNil)
+	defer db.Close()
+	conn, err := db.Conn(context.Background())
+	c.Assert(err, IsNil)
+	const query = "select AVG_ROW_LENGTH from INFORMATION_SCHEMA.TABLES where table_schema=\\? and table_name=\\?;"
+	tctx, cancel := tcontext.Background().WithCancel()
+	defer cancel()
+	database := "foo"
+	table := "bar"
+
+	testCases := []struct {
+		avgRowLength uint64
+		expectedRows uint64
+		returnErr    error
+	}{
+		{
+			32,
+			200000,
+			sql.ErrNoRows,
+		},
+		{
+			0,
+			200000,
+			nil,
+		},
+		{
+			32,
+			1000000,
+			nil,
+		},
+		{
+			1024,
+			131072,
+			nil,
+		},
+		{
+			4096,
+			32768,
+			nil,
+		},
+	}
+	for _, testCase := range testCases {
+		if testCase.returnErr == nil {
+			mock.ExpectQuery(query).WithArgs(database, table).
+				WillReturnRows(sqlmock.NewRows([]string{"AVG_ROW_LENGTH"}).
+					AddRow(testCase.avgRowLength))
+		} else {
+			mock.ExpectQuery(query).WithArgs(database, table).
+				WillReturnError(testCase.returnErr)
+		}
+		rows := GetSuitableRows(tctx, conn, database, table)
+		c.Assert(rows, Equals, testCase.expectedRows)
+	}
+}
+
+func (s *testSQLSuite) TestBuildWhereClauses(c *C) {
+	testCases := []struct {
+		handleColNames       []string
+		handleVals           [][]string
+		expectedWhereClauses []string
+	}{
+		{
+			[]string{},
+			[][]string{},
+			nil,
+		},
+		{
+			[]string{"a"},
+			[][]string{{"1"}},
+			[]string{"`a`<1", "`a`>=1"},
+		},
+		{
+			[]string{"a"},
+			[][]string{
+				{"1"},
+				{"2"},
+				{"3"},
+			},
+			[]string{"`a`<1", "`a`>=1 and `a`<2", "`a`>=2 and `a`<3", "`a`>=3"},
+		},
+		{
+			[]string{"a", "b"},
+			[][]string{{"1", "2"}},
+			[]string{"`a`<1 or(`a`=1 and `b`<2)", "`a`>1 or(`a`=1 and `b`>=2)"},
+		},
+		{
+			[]string{"a", "b"},
+			[][]string{
+				{"1", "2"},
+				{"3", "4"},
+				{"5", "6"},
+			},
+			[]string{
+				"`a`<1 or(`a`=1 and `b`<2)",
+				"(`a`>1 and `a`<3)or(`a`=1 and(`b`>=2))or(`a`=3 and(`b`<4))",
+				"(`a`>3 and `a`<5)or(`a`=3 and(`b`>=4))or(`a`=5 and(`b`<6))",
+				"`a`>5 or(`a`=5 and `b`>=6)",
+			},
+		},
+		{
+			[]string{"a", "b", "c"},
+			[][]string{
+				{"1", "2", "3"},
+				{"4", "5", "6"},
+			},
+			[]string{
+				"`a`<1 or(`a`=1 and `b`<2)or(`a`=1 and `b`=2 and `c`<3)",
+				"(`a`>1 and `a`<4)or(`a`=1 and(`b`>2 or(`b`=2 and `c`>=3)))or(`a`=4 and(`b`<5 or(`b`=5 and `c`<6)))",
+				"`a`>4 or(`a`=4 and `b`>5)or(`a`=4 and `b`=5 and `c`>=6)",
+			},
+		},
+		{
+			[]string{"a", "b", "c"},
+			[][]string{
+				{"1", "2", "3"},
+				{"1", "4", "5"},
+			},
+			[]string{
+				"`a`<1 or(`a`=1 and `b`<2)or(`a`=1 and `b`=2 and `c`<3)",
+				"`a`=1 and((`b`>2 and `b`<4)or(`b`=2 and(`c`>=3))or(`b`=4 and(`c`<5)))",
+				"`a`>1 or(`a`=1 and `b`>4)or(`a`=1 and `b`=4 and `c`>=5)",
+			},
+		},
+		{
+			[]string{"a", "b", "c"},
+			[][]string{
+				{"1", "2", "3"},
+				{"1", "2", "8"},
+			},
+			[]string{
+				"`a`<1 or(`a`=1 and `b`<2)or(`a`=1 and `b`=2 and `c`<3)",
+				"`a`=1 and `b`=2 and(`c`>=3 and `c`<8)",
+				"`a`>1 or(`a`=1 and `b`>2)or(`a`=1 and `b`=2 and `c`>=8)",
+			},
+		},
+		// special case: avoid return same samples
+		{
+			[]string{"a", "b", "c"},
+			[][]string{
+				{"1", "2", "3"},
+				{"1", "2", "3"},
+			},
+			[]string{
+				"`a`<1 or(`a`=1 and `b`<2)or(`a`=1 and `b`=2 and `c`<3)",
+				"false",
+				"`a`>1 or(`a`=1 and `b`>2)or(`a`=1 and `b`=2 and `c`>=3)",
+			},
+		},
+		// test string fields
+		{
+			[]string{"a", "b", "c"},
+			[][]string{
+				{"1", "2", "\"3\""},
+				{"1", "4", "\"5\""},
+			},
+			[]string{
+				"`a`<1 or(`a`=1 and `b`<2)or(`a`=1 and `b`=2 and `c`<\"3\")",
+				"`a`=1 and((`b`>2 and `b`<4)or(`b`=2 and(`c`>=\"3\"))or(`b`=4 and(`c`<\"5\")))",
+				"`a`>1 or(`a`=1 and `b`>4)or(`a`=1 and `b`=4 and `c`>=\"5\")",
+			},
+		},
+		{
+			[]string{"a", "b", "c", "d"},
+			[][]string{
+				{"1", "2", "3", "4"},
+				{"5", "6", "7", "8"},
+			},
+			[]string{
+				"`a`<1 or(`a`=1 and `b`<2)or(`a`=1 and `b`=2 and `c`<3)or(`a`=1 and `b`=2 and `c`=3 and `d`<4)",
+				"(`a`>1 and `a`<5)or(`a`=1 and(`b`>2 or(`b`=2 and `c`>3)or(`b`=2 and `c`=3 and `d`>=4)))or(`a`=5 and(`b`<6 or(`b`=6 and `c`<7)or(`b`=6 and `c`=7 and `d`<8)))",
+				"`a`>5 or(`a`=5 and `b`>6)or(`a`=5 and `b`=6 and `c`>7)or(`a`=5 and `b`=6 and `c`=7 and `d`>=8)",
+			},
+		},
+	}
+	for _, testCase := range testCases {
+		whereClauses := buildWhereClauses(testCase.handleColNames, testCase.handleVals)
+		c.Assert(whereClauses, DeepEquals, testCase.expectedWhereClauses)
+	}
 }
 
 func makeVersion(major, minor, patch int64, preRelease string) *semver.Version {
