@@ -8,9 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pingcap/dumpling/v4/log"
-
 	tcontext "github.com/pingcap/dumpling/v4/context"
+	"github.com/pingcap/dumpling/v4/log"
 
 	"github.com/pingcap/br/pkg/storage"
 	. "github.com/pingcap/check"
