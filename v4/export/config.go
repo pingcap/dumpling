@@ -127,7 +127,7 @@ type Config struct {
 	TiDBMemQuotaQuery  uint64
 	FileSize           uint64
 	StatementSize      uint64
-	SessionParams      map[string]string
+	SessionParams      map[string]interface{}
 	Labels             prometheus.Labels `json:"-"`
 	Tables             DatabaseTables
 }
@@ -163,7 +163,7 @@ func DefaultConfig() *Config {
 		SQL:                "",
 		TableFilter:        allFilter,
 		DumpEmptyDatabase:  true,
-		SessionParams:      make(map[string]string),
+		SessionParams:      make(map[string]interface{}),
 		OutputFileTemplate: DefaultOutputFileTemplate,
 		PosAfterConnect:    false,
 	}
@@ -392,16 +392,16 @@ func (conf *Config) ParseFromFlags(flags *pflag.FlagSet) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	conf.SessionParams, err = flags.GetStringToString(flagParams)
-	if err != nil {
-		return errors.Trace(err)
-	}
 
 	if conf.Threads <= 0 {
 		return errors.Errorf("--threads is set to %d. It should be greater than 0", conf.Threads)
 	}
 	if len(conf.CsvSeparator) == 0 {
 		return errors.New("--csv-separator is set to \"\". It must not be an empty string")
+	}
+
+	if conf.SessionParams == nil {
+		conf.SessionParams = make(map[string]interface{})
 	}
 
 	tablesList, err := flags.GetStringSlice(flagTablesList)
@@ -421,6 +421,10 @@ func (conf *Config) ParseFromFlags(flags *pflag.FlagSet) error {
 		return errors.Trace(err)
 	}
 	outputFilenameFormat, err := flags.GetString(flagOutputFilenameTemplate)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	params, err := flags.GetStringToString(flagParams)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -455,6 +459,10 @@ func (conf *Config) ParseFromFlags(flags *pflag.FlagSet) error {
 	conf.CompressType, err = ParseCompressType(compressType)
 	if err != nil {
 		return errors.Trace(err)
+	}
+
+	for k, v := range params {
+		conf.SessionParams[k] = v
 	}
 
 	err = conf.BackendOptions.ParseFromFlags(pflag.CommandLine)

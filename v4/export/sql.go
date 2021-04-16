@@ -511,23 +511,44 @@ func isUnknownSystemVariableErr(err error) bool {
 	return strings.Contains(err.Error(), "Unknown system variable")
 }
 
-func resetDBWithSessionParams(tctx *tcontext.Context, db *sql.DB, dsn string, params map[string]string) (*sql.DB, error) {
-	support := make(map[string]string)
-	for param, val := range params {
-		_, err := db.ExecContext(tctx, "SET "+param+"="+val+"")
+func resetDBWithSessionParams(tctx *tcontext.Context, db *sql.DB, dsn string, params map[string]interface{}) (*sql.DB, error) {
+	support := make(map[string]interface{})
+	for k, v := range params {
+		var pv interface{}
+		if str, ok := v.(string); ok {
+			if pvi, err := strconv.ParseInt(str, 10, 64); err == nil {
+				pv = pvi
+			} else if pvf, err := strconv.ParseFloat(str, 64); err == nil {
+				pv = pvf
+			} else {
+				pv = str
+			}
+		} else {
+			pv = v
+		}
+		s := fmt.Sprintf("SET SESSION %s = ?", k)
+		_, err := db.ExecContext(tctx, s, pv)
 		if err != nil {
 			if isUnknownSystemVariableErr(err) {
-				tctx.L().Info("session variable is not supported by db", zap.String("variable", param), zap.Reflect("value", val))
+				tctx.L().Info("session variable is not supported by db", zap.String("variable", k), zap.Reflect("value", v))
 				continue
 			}
 			return nil, errors.Trace(err)
 		}
 
-		support[param] = val
+		support[k] = pv
 	}
 
-	for param, val := range support {
-		dsn += fmt.Sprintf("&%s=%s", param, url.QueryEscape(val))
+	for k, v := range support {
+		var s string
+		// Wrap string with quote to handle string with space. For example, '2020-10-20 13:41:40'
+		// For --params argument, quote doesn't matter because it doesn't affect the actual value
+		if str, ok := v.(string); ok {
+			s = wrapStringWith(str, "'")
+		} else {
+			s = fmt.Sprintf("%v", v)
+		}
+		dsn += fmt.Sprintf("&%s=%s", k, url.QueryEscape(s))
 	}
 
 	newDB, err := sql.Open("mysql", dsn)

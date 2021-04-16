@@ -8,7 +8,6 @@ import (
 	"database/sql"
 	"fmt"
 	"math/big"
-	"strconv"
 	"strings"
 	"time"
 
@@ -965,8 +964,9 @@ func setSessionParam(d *Dumper) error {
 	conf, pool := d.conf, d.dbHandle
 	si := conf.ServerInfo
 	consistency, snapshot := conf.Consistency, conf.Snapshot
+	sessionParam := conf.SessionParams
 	if si.ServerType == ServerTypeTiDB && conf.TiDBMemQuotaQuery != UnspecifiedSize {
-		conf.SessionParams[TiDBMemQuotaQueryName] = strconv.FormatUint(conf.TiDBMemQuotaQuery, 10)
+		sessionParam[TiDBMemQuotaQueryName] = conf.TiDBMemQuotaQuery
 	}
 	if snapshot != "" {
 		if si.ServerType != ServerTypeTiDB {
@@ -978,7 +978,7 @@ func setSessionParam(d *Dumper) error {
 				return err
 			}
 			if hasTiKV {
-				conf.SessionParams["tidb_snapshot"] = wrapStringWith(snapshot, "'")
+				sessionParam["tidb_snapshot"] = snapshot
 			}
 		}
 	}
