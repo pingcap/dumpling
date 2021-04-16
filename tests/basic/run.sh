@@ -102,7 +102,6 @@ echo "expect contain Error 1064, actual ${actual}"
 #snapshot=$(run_sql "show master status" | grep "Position" | sed 's/.*Position: \([0-9]*\).*/\1/g')
 #echo "snapshot #1 is ${snapshot}"
 #run_sql "insert into \`$DB_NAME\`.\`$TABLE_NAME\` values (2);"
-#read -p "hello"
 #run_dumpling -f "$DB_NAME.$TABLE_NAME" -L ${DUMPLING_OUTPUT_DIR}/dumpling.log --snapshot $snapshot
 #cnt=$(grep -w "(.*)" ${DUMPLING_OUTPUT_DIR}/${DB_NAME}.${TABLE_NAME}.000000000.sql|wc -l)
 #echo "records count is ${cnt}"
@@ -131,7 +130,7 @@ echo "expect contain Error 1064, actual ${actual}"
 run_sql "drop database if exists \`$DB_NAME\`;"
 run_sql "create database \`$DB_NAME\`;"
 run_sql "create table \`$DB_NAME\`.\`$TABLE_NAME\` (a timestamp);"
-run_sql "insert into \`$DB_NAME\`.\`$TABLE_NAME\` values ('2020-11-01 00:00:00');"
+run_sql "set time_zone='+08:00'; insert into \`$DB_NAME\`.\`$TABLE_NAME\` values ('2020-11-01 00:00:00');"
 run_dumpling -f "$DB_NAME.$TABLE_NAME" -L ${DUMPLING_OUTPUT_DIR}/dumpling.log --params "net_read_timeout=86400,interactive_timeout=28800,wait_timeout=2147483,net_write_timeout=86400,time_zone='+00:00'"
 cnt=$(grep -w "2020-10-31 16:00:00" ${DUMPLING_OUTPUT_DIR}/${DB_NAME}.${TABLE_NAME}.000000000.sql|wc -l)
 echo "records count is ${cnt}"
