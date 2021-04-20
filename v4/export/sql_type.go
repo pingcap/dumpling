@@ -18,37 +18,42 @@ var (
 )
 
 func initColTypeRowReceiverMap() {
-	for _, s := range dataTypeString {
+	var dataTypeStringArr = []string{
+		"CHAR", "NCHAR", "VARCHAR", "NVARCHAR", "CHARACTER", "VARCHARACTER",
+		"TIMESTAMP", "DATETIME", "DATE", "TIME", "YEAR", "SQL_TSI_YEAR",
+		"TEXT", "TINYTEXT", "MEDIUMTEXT", "LONGTEXT",
+		"ENUM", "SET", "JSON",
+	}
+
+	var dataTypeNumArr = []string{
+		"INTEGER", "BIGINT", "TINYINT", "SMALLINT", "MEDIUMINT",
+		"INT", "INT1", "INT2", "INT3", "INT8",
+		"FLOAT", "REAL", "DOUBLE", "DOUBLE PRECISION",
+		"DECIMAL", "NUMERIC", "FIXED",
+		"BOOL", "BOOLEAN",
+	}
+
+	var dataTypeBinArr = []string{
+		"BLOB", "TINYBLOB", "MEDIUMBLOB", "LONGBLOB", "LONG",
+		"BINARY", "VARBINARY",
+		"BIT",
+	}
+
+	for _, s := range dataTypeStringArr {
+		dataTypeString[s] = struct{}{}
 		colTypeRowReceiverMap[s] = SQLTypeStringMaker
 	}
-	for _, s := range dataTypeNum {
+	for _, s := range dataTypeNumArr {
+		dataTypeNum[s] = struct{}{}
 		colTypeRowReceiverMap[s] = SQLTypeNumberMaker
 	}
-	for _, s := range dataTypeBin {
+	for _, s := range dataTypeBinArr {
+		dataTypeBin[s] = struct{}{}
 		colTypeRowReceiverMap[s] = SQLTypeBytesMaker
 	}
 }
 
-var dataTypeString = []string{
-	"CHAR", "NCHAR", "VARCHAR", "NVARCHAR", "CHARACTER", "VARCHARACTER",
-	"TIMESTAMP", "DATETIME", "DATE", "TIME", "YEAR", "SQL_TSI_YEAR",
-	"TEXT", "TINYTEXT", "MEDIUMTEXT", "LONGTEXT",
-	"ENUM", "SET", "JSON",
-}
-
-var dataTypeNum = []string{
-	"INTEGER", "BIGINT", "TINYINT", "SMALLINT", "MEDIUMINT",
-	"INT", "INT1", "INT2", "INT3", "INT8",
-	"FLOAT", "REAL", "DOUBLE", "DOUBLE PRECISION",
-	"DECIMAL", "NUMERIC", "FIXED",
-	"BOOL", "BOOLEAN",
-}
-
-var dataTypeBin = []string{
-	"BLOB", "TINYBLOB", "MEDIUMBLOB", "LONGBLOB", "LONG",
-	"BINARY", "VARBINARY",
-	"BIT",
-}
+var dataTypeString, dataTypeNum, dataTypeBin = make(map[string]struct{}), make(map[string]struct{}), make(map[string]struct{})
 
 func escapeBackslashSQL(s []byte, bf *bytes.Buffer) {
 	var (
