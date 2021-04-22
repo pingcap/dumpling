@@ -400,9 +400,9 @@ func (d *Dumper) buildConcatTask(tctx *tcontext.Context, conn *sql.Conn, meta Ta
 	}
 }
 
-func (d *Dumper) dumpWholeTableDirectly(tctx *tcontext.Context, conn *sql.Conn, meta TableMeta, taskChan chan<- Task) error {
+func (d *Dumper) dumpWholeTableDirectly(tctx *tcontext.Context, conn *sql.Conn, meta TableMeta, taskChan chan<- Task, partition string) error {
 	conf := d.conf
-	tableIR, err := SelectAllFromTable(conf, conn, meta)
+	tableIR, err := SelectAllFromTable(conf, conn, meta, partition)
 	if err != nil {
 		return err
 	}
@@ -432,7 +432,7 @@ func (d *Dumper) sequentialDumpTable(tctx *tcontext.Context, conn *sql.Conn, met
 			zap.String("database", meta.DatabaseName()),
 			zap.String("table", meta.TableName()))
 	}
-	return d.dumpWholeTableDirectly(tctx, conn, meta, taskChan)
+	return d.dumpWholeTableDirectly(tctx, conn, meta, taskChan, "")
 }
 
 // concurrentDumpTable tries to split table into several chunks to dump
@@ -452,7 +452,7 @@ func (d *Dumper) concurrentDumpTable(tctx *tcontext.Context, conn *sql.Conn, met
 		// skip split chunk logic if not found proper field
 		tctx.L().Warn("fallback to sequential dump due to no proper field",
 			zap.String("database", db), zap.String("table", tbl))
-		return d.dumpWholeTableDirectly(tctx, conn, meta, taskChan)
+		return d.dumpWholeTableDirectly(tctx, conn, meta, taskChan, "")
 	}
 
 	min, max, err := d.selectMinAndMaxIntValue(conn, db, tbl, field)
@@ -475,7 +475,7 @@ func (d *Dumper) concurrentDumpTable(tctx *tcontext.Context, conn *sql.Conn, met
 			zap.Uint64("conf.rows", conf.Rows),
 			zap.String("database", db),
 			zap.String("table", tbl))
-		return d.dumpWholeTableDirectly(tctx, conn, meta, taskChan)
+		return d.dumpWholeTableDirectly(tctx, conn, meta, taskChan, "")
 	}
 
 	// every chunk would have eventual adjustments
@@ -506,7 +506,7 @@ func (d *Dumper) concurrentDumpTable(tctx *tcontext.Context, conn *sql.Conn, met
 	for max.Cmp(cutoff) >= 0 {
 		nextCutOff := new(big.Int).Add(cutoff, bigEstimatedStep)
 		where := fmt.Sprintf("%s(`%s` >= %d AND `%s` < %d)", nullValueCondition, escapeString(field), cutoff, escapeString(field), nextCutOff)
-		query := buildSelectQuery(db, tbl, selectField, buildWhereCondition(conf, where), orderByClause)
+		query := buildSelectQuery(db, tbl, selectField, "", buildWhereCondition(conf, where), orderByClause)
 		if len(nullValueCondition) > 0 {
 			nullValueCondition = ""
 		}
@@ -570,7 +570,6 @@ func (d *Dumper) selectMinAndMaxIntValue(conn *sql.Conn, db, tbl, field string) 
 }
 
 func (d *Dumper) concurrentDumpTiDBTables(tctx *tcontext.Context, conn *sql.Conn, meta TableMeta, taskChan chan<- Task, useTableSample bool) error {
-	conf := d.conf
 	db, tbl := meta.DatabaseName(), meta.TableName()
 
 	var (
@@ -585,14 +584,61 @@ func (d *Dumper) concurrentDumpTiDBTables(tctx *tcontext.Context, conn *sql.Conn
 	} else {
 		tctx.L().Debug("dumping TiDB tables with TABLE REGIONS",
 			zap.String("database", db), zap.String("table", tbl))
-		handleColNames, handleVals, err = selectTiDBTableRegion(tctx, conn, db, tbl)
+		partitions, err := GetPartitionNames(conn, db, tbl)
+		if err == nil {
+			if len(partitions) == 0 {
+				handleColNames, handleVals, err = selectTiDBTableRegion(tctx, conn, db, tbl)
+			} else {
+				return d.concurrentDumpTiDBPartitionTables(tctx, conn, meta, taskChan, partitions)
+			}
+		}
 	}
 	if err != nil {
 		return err
 	}
-	if len(handleVals) == 0 {
-		return d.dumpWholeTableDirectly(tctx, conn, meta, taskChan)
+	return d.sendConcurrentDumpTiDBTasks(tctx, conn, meta, taskChan, handleColNames, handleVals, "", 0, len(handleVals)+1)
+}
+
+func (d *Dumper) concurrentDumpTiDBPartitionTables(tctx *tcontext.Context, conn *sql.Conn, meta TableMeta, taskChan chan<- Task, partitions []string) error {
+	db, tbl := meta.DatabaseName(), meta.TableName()
+	tctx.L().Debug("dumping TiDB tables with TABLE REGIONS for partition table",
+		zap.String("database", db), zap.String("table", tbl), zap.Strings("partitions", partitions))
+
+	startChunkIdx := 0
+	totalChunk := 0
+	cachedHandleVals := make([][][]string, len(partitions))
+
+	handleColNames, _, err := selectTiDBPrimaryKeyFields(conn, db, tbl, checkTiDBTableRegionPkFields)
+	if err != nil {
+		return err
 	}
+	// cache handleVals here to calculate the total chunks
+	for i, partition := range partitions {
+		handleVals, err := selectTiDBPartitionRegion(tctx, conn, db, tbl, partition)
+		if err != nil {
+			return err
+		}
+		totalChunk += len(handleVals) + 1
+		cachedHandleVals[i] = handleVals
+	}
+	for i, partition := range partitions {
+		err := d.sendConcurrentDumpTiDBTasks(tctx, conn, meta, taskChan, handleColNames, cachedHandleVals[i], partition, startChunkIdx, totalChunk)
+		if err != nil {
+			return err
+		}
+		startChunkIdx += len(cachedHandleVals[i]) + 1
+	}
+	return nil
+}
+
+func (d *Dumper) sendConcurrentDumpTiDBTasks(tctx *tcontext.Context,
+	conn *sql.Conn, meta TableMeta, taskChan chan<- Task,
+	handleColNames []string, handleVals [][]string, partition string, startChunkIdx, totalChunk int) error {
+	if len(handleVals) == 0 {
+		return d.dumpWholeTableDirectly(tctx, conn, meta, taskChan, partition)
+	}
+	conf := d.conf
+	db, tbl := meta.DatabaseName(), meta.TableName()
 	selectField, selectLen, err := buildSelectField(conn, db, tbl, conf.CompleteInsert)
 	if err != nil {
 		return err
@@ -601,8 +647,8 @@ func (d *Dumper) concurrentDumpTiDBTables(tctx *tcontext.Context, conn *sql.Conn
 	orderByClause := buildOrderByClauseString(handleColNames)
 
 	for i, w := range where {
-		query := buildSelectQuery(db, tbl, selectField, buildWhereCondition(conf, w), orderByClause)
-		task := NewTaskTableData(meta, newTableData(query, selectLen, false), i, len(where))
+		query := buildSelectQuery(db, tbl, selectField, partition, buildWhereCondition(conf, w), orderByClause)
+		task := NewTaskTableData(meta, newTableData(query, selectLen, false), i+startChunkIdx, totalChunk)
 		ctxDone := d.sendTaskToChan(tctx, task, taskChan)
 		if ctxDone {
 			return tctx.Err()
@@ -617,20 +663,11 @@ func (d *Dumper) L() log.Logger {
 }
 
 func selectTiDBTableSample(tctx *tcontext.Context, conn *sql.Conn, dbName, tableName string) (pkFields []string, pkVals [][]string, err error) {
-	pkFields, pkColTypes, err := GetPrimaryKeyAndColumnTypes(conn, dbName, tableName)
+	pkFields, pkColTypes, err := selectTiDBPrimaryKeyFields(conn, dbName, tableName, nil)
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}
-	hasImplicitRowID, err := SelectTiDBRowID(conn, dbName, tableName)
-	if err != nil {
-		return nil, nil, errors.Trace(err)
-	}
-	if hasImplicitRowID {
-		pkFields, pkColTypes = []string{"_tidb_rowid"}, []string{"BIGINT"}
-	}
-	if len(pkFields) == 0 {
-		return pkFields, pkVals, nil
-	}
+
 	query := buildTiDBTableSampleQuery(pkFields, dbName, tableName)
 	rows, err := conn.QueryContext(tctx, query)
 	if err != nil {
@@ -656,7 +693,8 @@ func selectTiDBTableSample(tctx *tcontext.Context, conn *sql.Conn, dbName, table
 		pkVals = append(pkVals, pkValRow)
 		iter.Next()
 	}
-	return pkFields, pkVals, nil
+	iter.Close()
+	return pkFields, pkVals, iter.Error()
 }
 
 func buildTiDBTableSampleQuery(pkFields []string, dbName, tblName string) string {
@@ -669,78 +707,121 @@ func buildTiDBTableSampleQuery(pkFields []string, dbName, tblName string) string
 	return fmt.Sprintf(template, pks, escapeString(dbName), escapeString(tblName), pks)
 }
 
-func selectTiDBTableRegion(tctx *tcontext.Context, conn *sql.Conn, dbName, tableName string) (pkFields []string, pkVals [][]string, err error) {
-	var pkColTypes []string
+func selectTiDBPrimaryKeyFields(conn *sql.Conn, dbName, tableName string, checkPkFields func([]string, []string) error) (pkFields, pkColTypes []string, err error) {
 	hasImplicitRowID, err := SelectTiDBRowID(conn, dbName, tableName)
 	if err != nil {
-		return nil, nil, errors.Trace(err)
+		return
 	}
 	if hasImplicitRowID {
 		pkFields, pkColTypes = []string{"_tidb_rowid"}, []string{"BIGINT"}
 	} else {
 		pkFields, pkColTypes, err = GetPrimaryKeyAndColumnTypes(conn, dbName, tableName)
-		if err != nil {
-			return nil, nil, errors.Trace(err)
-		}
-		if len(pkFields) != 1 || len(pkColTypes) != 1 {
-			return nil, nil, errors.Errorf("unsupported primary key for selectTableRegion. pkFields: [%s], pkColTypes: [%s]", strings.Join(pkFields, ", "), strings.Join(pkColTypes, ", "))
-		}
-		if _, ok := dataTypeNum[pkColTypes[0]]; !ok {
-			return nil, nil, errors.Errorf("unsupported primary key type for selectTableRegion. pkFields: [%s], pkColTypes: [%s]", strings.Join(pkFields, ", "), strings.Join(pkColTypes, ", "))
-		}
-	}
-	if len(pkFields) == 0 {
-		return pkFields, pkVals, nil
-	}
-
-	rows, err := conn.QueryContext(tctx, "SELECT START_KEY,tidb_decode_key(START_KEY) from INFORMATION_SCHEMA.TIKV_REGION_STATUS s WHERE s.DB_NAME = ? AND s.TABLE_NAME = ? AND IS_INDEX = 0 ORDER BY START_KEY;", dbName, tableName)
-	if err != nil {
-		return
-	}
-	defer rows.Close()
-	var (
-		startKey, decodedKey sql.NullString
-		rowID                int
-	)
-	logger := tctx.L().With(zap.String("database", dbName), zap.String("table", tableName))
-	for rows.Next() {
-		rowID++
-		err = rows.Scan(&startKey, &decodedKey)
-		if err != nil {
-			return
-		}
-		// first region's start key has no use. It may come from another table or might be invalid
-		if rowID == 1 {
-			continue
-		}
-		if !startKey.Valid {
-			logger.Debug("meet invalid start key", zap.Int("rowID", rowID))
-			continue
-		}
-		if !decodedKey.Valid {
-			logger.Debug("meet invalid decoded start key", zap.Int("rowID", rowID), zap.String("startKey", startKey.String))
-			continue
-		}
-		pkVal, err := getTiDBRowIDFromDecodedKey(decodedKey.String)
-		if err != nil {
-			logger.Debug("fail to extract pkVal from decoded start key",
-				zap.Int("rowID", rowID), zap.String("startKey", startKey.String), zap.String("decodedKey", decodedKey.String))
-		} else {
-			pkVals = append(pkVals, pkVal)
+		if err == nil {
+			if checkPkFields != nil {
+				err = checkPkFields(pkFields, pkColTypes)
+			}
 		}
 	}
 	return
 }
 
-func getTiDBRowIDFromDecodedKey(key string) ([]string, error) {
-	const (
-		tidbRowID = "_tidb_rowid="
-	)
-	if p := strings.Index(key, tidbRowID); p != -1 {
-		p += len(tidbRowID)
-		return []string{key[p:]}, nil
+func checkTiDBTableRegionPkFields(pkFields, pkColTypes []string) (err error) {
+	if len(pkFields) != 1 || len(pkColTypes) != 1 {
+		err = errors.Errorf("unsupported primary key for selectTableRegion. pkFields: [%s], pkColTypes: [%s]", strings.Join(pkFields, ", "), strings.Join(pkColTypes, ", "))
+		return
 	}
-	return nil, errors.Errorf("decoded key %s doesn't have _tidb_rowid= field", key)
+	if _, ok := dataTypeNum[pkColTypes[0]]; !ok {
+		err = errors.Errorf("unsupported primary key type for selectTableRegion. pkFields: [%s], pkColTypes: [%s]", strings.Join(pkFields, ", "), strings.Join(pkColTypes, ", "))
+	}
+	return
+}
+
+func selectTiDBTableRegion(tctx *tcontext.Context, conn *sql.Conn, dbName, tableName string) (pkFields []string, pkVals [][]string, err error) {
+	pkFields, _, err = selectTiDBPrimaryKeyFields(conn, dbName, tableName, checkTiDBTableRegionPkFields)
+	if err != nil {
+		return
+	}
+
+	var (
+		startKey, decodedKey sql.NullString
+		rowID                = -1
+	)
+	const (
+		tableRegionSql = "SELECT START_KEY,tidb_decode_key(START_KEY) from INFORMATION_SCHEMA.TIKV_REGION_STATUS s WHERE s.DB_NAME = ? AND s.TABLE_NAME = ? AND IS_INDEX = 0 ORDER BY START_KEY;"
+		tidbRowID      = "_tidb_rowid="
+	)
+	logger := tctx.L().With(zap.String("database", dbName), zap.String("table", tableName))
+	err = simpleQueryWithArgs(conn, func(rows *sql.Rows) error {
+		rowID++
+		err = rows.Scan(&startKey, &decodedKey)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		// first region's start key has no use. It may come from another table or might be invalid
+		if rowID == 0 {
+			return nil
+		}
+		if !startKey.Valid {
+			logger.Debug("meet invalid start key", zap.Int("rowID", rowID))
+			return nil
+		}
+		if !decodedKey.Valid {
+			logger.Debug("meet invalid decoded start key", zap.Int("rowID", rowID), zap.String("startKey", startKey.String))
+			return nil
+		}
+		pkVal, err := extractTiDBRowIDFromDecodedKey(tidbRowID, decodedKey.String)
+		if err != nil {
+			logger.Debug("fail to extract pkVal from decoded start key",
+				zap.Int("rowID", rowID), zap.String("startKey", startKey.String), zap.String("decodedKey", decodedKey.String), zap.Error(err))
+		} else {
+			pkVals = append(pkVals, []string{pkVal})
+		}
+		return nil
+	}, tableRegionSql, dbName, tableName)
+	return
+}
+
+func selectTiDBPartitionRegion(tctx *tcontext.Context, conn *sql.Conn, dbName, tableName, partition string) (pkVals [][]string, err error) {
+	var (
+		rows      *sql.Rows
+		startKeys []string
+	)
+	const (
+		partitionRegionSql = "SHOW TABLE `%s`.`%s` PARTITION (`%s`) REGIONS"
+		regionRowKey       = "r_"
+	)
+	logger := tctx.L().With(zap.String("database", dbName), zap.String("table", tableName), zap.String("partition", partition))
+	rows, err = conn.QueryContext(tctx, fmt.Sprintf(partitionRegionSql, dbName, tableName, partition))
+	if err != nil {
+		err = errors.Trace(err)
+		return
+	}
+	startKeys, err = GetSpecifiedColumnValue(rows, "START_KEY")
+	if err != nil {
+		return
+	}
+	for rowID, startKey := range startKeys {
+		if rowID == 0 {
+			continue
+		}
+		pkVal, err := extractTiDBRowIDFromDecodedKey(regionRowKey, startKey)
+		if err != nil {
+			logger.Debug("show table region start key doesn't have rowID",
+				zap.Int("rowID", rowID), zap.String("startKey", startKey), zap.Error(err))
+		} else {
+			pkVals = append(pkVals, []string{pkVal})
+		}
+	}
+
+	return
+}
+
+func extractTiDBRowIDFromDecodedKey(indexField, key string) (string, error) {
+	if p := strings.Index(key, indexField); p != -1 {
+		p += len(indexField)
+		return key[p:], nil
+	}
+	return "", errors.Errorf("decoded key %s doesn't have %s field", key, indexField)
 }
 
 func prepareTableListToDump(tctx *tcontext.Context, conf *Config, db *sql.Conn) error {

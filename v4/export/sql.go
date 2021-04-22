@@ -186,7 +186,7 @@ func SelectVersion(db *sql.DB) (string, error) {
 }
 
 // SelectAllFromTable dumps data serialized from a specified table
-func SelectAllFromTable(conf *Config, db *sql.Conn, meta TableMeta) (TableDataIR, error) {
+func SelectAllFromTable(conf *Config, db *sql.Conn, meta TableMeta, partition string) (TableDataIR, error) {
 	database, table := meta.DatabaseName(), meta.TableName()
 	selectedField, selectLen, err := buildSelectField(db, database, table, conf.CompleteInsert)
 	if err != nil {
@@ -197,7 +197,7 @@ func SelectAllFromTable(conf *Config, db *sql.Conn, meta TableMeta) (TableDataIR
 	if err != nil {
 		return nil, err
 	}
-	query := buildSelectQuery(database, table, selectedField, buildWhereCondition(conf, ""), orderByClause)
+	query := buildSelectQuery(database, table, selectedField, partition, buildWhereCondition(conf, ""), orderByClause)
 
 	return &tableData{
 		query:  query,
@@ -205,7 +205,7 @@ func SelectAllFromTable(conf *Config, db *sql.Conn, meta TableMeta) (TableDataIR
 	}, nil
 }
 
-func buildSelectQuery(database, table string, fields string, where string, orderByClause string) string {
+func buildSelectQuery(database, table, fields, partition, where, orderByClause string) string {
 	var query strings.Builder
 	query.WriteString("SELECT ")
 	if fields == "" {
@@ -218,7 +218,12 @@ func buildSelectQuery(database, table string, fields string, where string, order
 	query.WriteString(escapeString(database))
 	query.WriteString("`.`")
 	query.WriteString(escapeString(table))
-	query.WriteString("`")
+	query.WriteByte('`')
+	if partition != "" {
+		query.WriteString(" PARTITION(`")
+		query.WriteString(escapeString(partition))
+		query.WriteString("`)")
+	}
 
 	if where != "" {
 		query.WriteString(" ")
@@ -435,6 +440,7 @@ func ShowMasterStatus(db *sql.Conn) ([]string, error) {
 
 // GetSpecifiedColumnValue get columns' values whose name is equal to columnName
 func GetSpecifiedColumnValue(rows *sql.Rows, columnName string) ([]string, error) {
+	defer rows.Close()
 	var strs []string
 	columns, _ := rows.Columns()
 	addr := make([]interface{}, len(columns))
@@ -458,7 +464,8 @@ func GetSpecifiedColumnValue(rows *sql.Rows, columnName string) ([]string, error
 			strs = append(strs, oneRow[fieldIndex].String)
 		}
 	}
-	return strs, nil
+	rows.Close()
+	return strs, errors.Trace(rows.Err())
 }
 
 // GetPdAddrs gets PD address from TiDB
@@ -470,7 +477,6 @@ func GetPdAddrs(tctx *tcontext.Context, db *sql.DB) ([]string, error) {
 			zap.String("query", query), zap.Error(err))
 		return []string{}, errors.Annotatef(err, "sql: %s", query)
 	}
-	defer rows.Close()
 	return GetSpecifiedColumnValue(rows, "STATUS_ADDRESS")
 }
 
@@ -483,7 +489,6 @@ func GetTiDBDDLIDs(tctx *tcontext.Context, db *sql.DB) ([]string, error) {
 			zap.String("query", query), zap.Error(err))
 		return []string{}, errors.Annotatef(err, "sql: %s", query)
 	}
-	defer rows.Close()
 	return GetSpecifiedColumnValue(rows, "DDL_ID")
 }
 
@@ -817,7 +822,7 @@ func simpleQueryWithArgs(conn *sql.Conn, handleOneRow func(*sql.Rows) error, sql
 		}
 	}
 	rows.Close()
-	return rows.Err()
+	return errors.Annotatef(rows.Err(), "sql: %s", sql)
 }
 
 func pickupPossibleField(dbName, tableName string, db *sql.Conn, conf *Config) (string, error) {
@@ -964,14 +969,14 @@ func buildWhereCondition(conf *Config, where string) string {
 	var query strings.Builder
 	separator := "WHERE"
 	if conf.Where != "" {
-		query.WriteString(" ")
 		query.WriteString(separator)
-		query.WriteString(" ")
+		query.WriteByte(' ')
 		query.WriteString(conf.Where)
+		query.WriteByte(' ')
 		separator = "AND"
+		query.WriteByte(' ')
 	}
 	if where != "" {
-		query.WriteString(" ")
 		query.WriteString(separator)
 		query.WriteString(" ")
 		query.WriteString(where)
@@ -981,4 +986,21 @@ func buildWhereCondition(conf *Config, where string) string {
 
 func escapeString(s string) string {
 	return strings.ReplaceAll(s, "`", "``")
+}
+
+// GetPartitionNames get partition names from a specified table
+func GetPartitionNames(db *sql.Conn, schema, table string) (partitions []string, err error) {
+	partitions = make([]string, 0)
+	var partitionName sql.NullString
+	err = simpleQueryWithArgs(db, func(rows *sql.Rows) error {
+		err := rows.Scan(&partitionName)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if partitionName.Valid {
+			partitions = append(partitions, partitionName.String)
+		}
+		return nil
+	}, "SELECT PARTITION_NAME from INFORMATION_SCHEMA.PARTITIONS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?", schema, table)
+	return
 }
