@@ -653,7 +653,7 @@ func (s *testSQLSuite) TestBuildWhereClauses(c *C) {
 			orderByClause := buildOrderByClauseString(handleColNames)
 
 			for i, w := range testCase.expectedWhereClauses {
-				query := buildSelectQuery(database, table, "*", buildWhereCondition(d.conf, w), orderByClause)
+				query := buildSelectQuery(database, table, "*", "", buildWhereCondition(d.conf, w), orderByClause)
 				task := <-taskChan
 				taskTableData, ok := task.(*TaskTableData)
 				c.Assert(ok, IsTrue)
