@@ -400,13 +400,13 @@ func (d *Dumper) buildConcatTask(tctx *tcontext.Context, conn *sql.Conn, meta Ta
 	}
 }
 
-func (d *Dumper) dumpWholeTableDirectly(tctx *tcontext.Context, conn *sql.Conn, meta TableMeta, taskChan chan<- Task, partition string) error {
+func (d *Dumper) dumpWholeTableDirectly(tctx *tcontext.Context, conn *sql.Conn, meta TableMeta, taskChan chan<- Task, partition string, currentChunk, totalChunks int) error {
 	conf := d.conf
 	tableIR, err := SelectAllFromTable(conf, conn, meta, partition)
 	if err != nil {
 		return err
 	}
-	task := NewTaskTableData(meta, tableIR, 0, 1)
+	task := NewTaskTableData(meta, tableIR, currentChunk, totalChunks)
 	ctxDone := d.sendTaskToChan(tctx, task, taskChan)
 	if ctxDone {
 		return tctx.Err()
@@ -432,7 +432,7 @@ func (d *Dumper) sequentialDumpTable(tctx *tcontext.Context, conn *sql.Conn, met
 			zap.String("database", meta.DatabaseName()),
 			zap.String("table", meta.TableName()))
 	}
-	return d.dumpWholeTableDirectly(tctx, conn, meta, taskChan, "")
+	return d.dumpWholeTableDirectly(tctx, conn, meta, taskChan, "", 0, 1)
 }
 
 // concurrentDumpTable tries to split table into several chunks to dump
@@ -452,7 +452,7 @@ func (d *Dumper) concurrentDumpTable(tctx *tcontext.Context, conn *sql.Conn, met
 		// skip split chunk logic if not found proper field
 		tctx.L().Warn("fallback to sequential dump due to no proper field",
 			zap.String("database", db), zap.String("table", tbl))
-		return d.dumpWholeTableDirectly(tctx, conn, meta, taskChan, "")
+		return d.dumpWholeTableDirectly(tctx, conn, meta, taskChan, "", 0, 1)
 	}
 
 	min, max, err := d.selectMinAndMaxIntValue(conn, db, tbl, field)
@@ -475,7 +475,7 @@ func (d *Dumper) concurrentDumpTable(tctx *tcontext.Context, conn *sql.Conn, met
 			zap.Uint64("conf.rows", conf.Rows),
 			zap.String("database", db),
 			zap.String("table", tbl))
-		return d.dumpWholeTableDirectly(tctx, conn, meta, taskChan, "")
+		return d.dumpWholeTableDirectly(tctx, conn, meta, taskChan, "", 0, 1)
 	}
 
 	// every chunk would have eventual adjustments
@@ -635,7 +635,7 @@ func (d *Dumper) sendConcurrentDumpTiDBTasks(tctx *tcontext.Context,
 	conn *sql.Conn, meta TableMeta, taskChan chan<- Task,
 	handleColNames []string, handleVals [][]string, partition string, startChunkIdx, totalChunk int) error {
 	if len(handleVals) == 0 {
-		return d.dumpWholeTableDirectly(tctx, conn, meta, taskChan, partition)
+		return d.dumpWholeTableDirectly(tctx, conn, meta, taskChan, partition, startChunkIdx, totalChunk)
 	}
 	conf := d.conf
 	db, tbl := meta.DatabaseName(), meta.TableName()
@@ -787,7 +787,7 @@ func selectTiDBPartitionRegion(tctx *tcontext.Context, conn *sql.Conn, dbName, t
 		startKeys []string
 	)
 	const (
-		partitionRegionSql = "SHOW TABLE `%s`.`%s` PARTITION (`%s`) REGIONS"
+		partitionRegionSql = "SHOW TABLE `%s`.`%s` PARTITION(`%s`) REGIONS"
 		regionRowKey       = "r_"
 	)
 	logger := tctx.L().With(zap.String("database", dbName), zap.String("table", tableName), zap.String("partition", partition))
