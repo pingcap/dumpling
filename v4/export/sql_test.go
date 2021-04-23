@@ -198,7 +198,7 @@ func (s *testSQLSuite) TestBuildOrderByClause(c *C) {
 
 	orderByClause, err := buildOrderByClause(mockConf, conn, "test", "t")
 	c.Assert(err, IsNil)
-	c.Assert(orderByClause, Equals, "ORDER BY `_tidb_rowid`")
+	c.Assert(orderByClause, Equals, orderByTiDBRowID)
 
 	// _tidb_rowid is unavailable, or PKIsHandle.
 	mock.ExpectExec("SELECT _tidb_rowid from `test`.`t`").
@@ -358,11 +358,13 @@ func (s *testSQLSuite) TestGetSuitableRows(c *C) {
 	defer db.Close()
 	conn, err := db.Conn(context.Background())
 	c.Assert(err, IsNil)
-	const query = "select AVG_ROW_LENGTH from INFORMATION_SCHEMA.TABLES where table_schema=\\? and table_name=\\?;"
 	tctx, cancel := tcontext.Background().WithCancel()
 	defer cancel()
-	database := "foo"
-	table := "bar"
+	const (
+		query    = "select AVG_ROW_LENGTH from INFORMATION_SCHEMA.TABLES where table_schema=\\? and table_name=\\?;"
+		database = "foo"
+		table    = "bar"
+	)
 
 	testCases := []struct {
 		avgRowLength uint64
@@ -426,8 +428,11 @@ func (s *testSQLSuite) TestBuildTableSampleQueries(c *C) {
 		ServerType:    ServerTypeTiDB,
 		ServerVersion: tableSampleVersion,
 	}
-	database := "foo"
-	table := "bar"
+
+	const (
+		database = "foo"
+		table    = "bar"
+	)
 
 	testCases := []struct {
 		handleColNames       []string
@@ -710,7 +715,7 @@ func (s *testSQLSuite) TestBuildTableSampleQueries(c *C) {
 
 			// special case, no value found
 			if len(handleVals) == 0 {
-				orderByClause = "ORDER BY `_tidb_rowid`"
+				orderByClause = orderByTiDBRowID
 				query := buildSelectQuery(database, table, "*", "", "", orderByClause)
 				checkQuery(0, query)
 				continue
@@ -930,7 +935,7 @@ func (s *testSQLSuite) TestBuildRegionQueriesWithoutPartition(c *C) {
 		if len(regionResults) <= 1 {
 			mock.ExpectExec(fmt.Sprintf("SELECT _tidb_rowid from `%s`.`%s` LIMIT 0", database, table)).
 				WillReturnResult(sqlmock.NewResult(0, 0))
-			orderByClause = "ORDER BY `_tidb_rowid`"
+			orderByClause = orderByTiDBRowID
 		}
 		c.Assert(d.concurrentDumpTable(tctx, conn, meta, taskChan), IsNil)
 		c.Assert(mock.ExpectationsWereMet(), IsNil)
@@ -1119,7 +1124,7 @@ func (s *testSQLSuite) TestBuildRegionQueriesWithPartitions(c *C) {
 					State:   "42S22",
 					Message: "Unknown column '_tidb_rowid' in 'field list'",
 				})
-			rows := sqlmock.NewRows([]string{"COLUMN_NAME", "DATA_TYPE"})
+			rows = sqlmock.NewRows([]string{"COLUMN_NAME", "DATA_TYPE"})
 			for i := range handleColNames {
 				rows.AddRow(handleColNames[i], handleColTypes[i])
 			}
@@ -1127,7 +1132,7 @@ func (s *testSQLSuite) TestBuildRegionQueriesWithPartitions(c *C) {
 		}
 
 		for i, partition := range partitions {
-			rows := sqlmock.NewRows([]string{"REGION_ID", "START_KEY", "END_KEY", "LEADER_ID", "LEADER_STORE_ID", "PEERS", "SCATTERING", "WRITTEN_BYTES", "READ_BYTES", "APPROXIMATE_SIZE(MB)", "APPROXIMATE_KEYS"})
+			rows = sqlmock.NewRows([]string{"REGION_ID", "START_KEY", "END_KEY", "LEADER_ID", "LEADER_STORE_ID", "PEERS", "SCATTERING", "WRITTEN_BYTES", "READ_BYTES", "APPROXIMATE_SIZE(MB)", "APPROXIMATE_KEYS"})
 			for _, regionResult := range regionResults[i] {
 				rows.AddRow(regionResult...)
 			}
