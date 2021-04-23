@@ -18,6 +18,8 @@ import (
 	"go.uber.org/zap"
 )
 
+const orderByTiDBRowID = "ORDER BY `_tidb_rowid`"
+
 // ShowDatabases shows the databases of a database server.
 func ShowDatabases(db *sql.Conn) ([]string, error) {
 	var res oneStrColumnTable
@@ -248,7 +250,7 @@ func buildOrderByClause(conf *Config, db *sql.Conn, database, table string) (str
 			return "", errors.Trace(err)
 		}
 		if ok {
-			return "ORDER BY `_tidb_rowid`", nil
+			return orderByTiDBRowID, nil
 		}
 	}
 	cols, err := GetPrimaryKeyColumns(db, database, table)
