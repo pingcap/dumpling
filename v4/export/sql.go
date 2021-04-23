@@ -620,7 +620,7 @@ func buildSelectField(db *sql.Conn, dbName, tableName string, completeInsert boo
 }
 
 func buildWhereClauses(handleColNames []string, handleVals [][]string) []string {
-	if len(handleColNames) == 0 {
+	if len(handleColNames) == 0 || len(handleVals) == 0 {
 		return nil
 	}
 	quotaCols := make([]string, len(handleColNames))
