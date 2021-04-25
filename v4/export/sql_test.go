@@ -425,6 +425,7 @@ func (s *testSQLSuite) TestBuildTableSampleQueries(c *C) {
 		cancelCtx: cancel,
 	}
 	d.conf.ServerInfo = ServerInfo{
+		HasTiKV:       true,
 		ServerType:    ServerTypeTiDB,
 		ServerVersion: tableSampleVersion,
 	}
@@ -801,6 +802,7 @@ func (s *testSQLSuite) TestBuildRegionQueriesWithoutPartition(c *C) {
 		cancelCtx: cancel,
 	}
 	d.conf.ServerInfo = ServerInfo{
+		HasTiKV:       true,
 		ServerType:    ServerTypeTiDB,
 		ServerVersion: gcSafePointVersion,
 	}
@@ -967,6 +969,7 @@ func (s *testSQLSuite) TestBuildRegionQueriesWithPartitions(c *C) {
 		cancelCtx: cancel,
 	}
 	d.conf.ServerInfo = ServerInfo{
+		HasTiKV:       true,
 		ServerType:    ServerTypeTiDB,
 		ServerVersion: gcSafePointVersion,
 	}
