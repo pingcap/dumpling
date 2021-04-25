@@ -799,7 +799,7 @@ func selectTiDBPartitionRegion(tctx *tcontext.Context, conn *sql.Conn, dbName, t
 		err = errors.Trace(err)
 		return
 	}
-	startKeys, err = GetSpecifiedColumnValue(rows, "START_KEY")
+	startKeys, err = GetSpecifiedColumnValueAndClose(rows, "START_KEY")
 	if err != nil {
 		return
 	}

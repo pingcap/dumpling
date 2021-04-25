@@ -440,8 +440,11 @@ func ShowMasterStatus(db *sql.Conn) ([]string, error) {
 	return oneRow, nil
 }
 
-// GetSpecifiedColumnValue get columns' values whose name is equal to columnName
-func GetSpecifiedColumnValue(rows *sql.Rows, columnName string) ([]string, error) {
+// GetSpecifiedColumnValueAndClose get columns' values whose name is equal to columnName and close the given rows
+func GetSpecifiedColumnValueAndClose(rows *sql.Rows, columnName string) ([]string, error) {
+	if rows == nil {
+		return []string{}, nil
+	}
 	defer rows.Close()
 	var strs []string
 	columns, _ := rows.Columns()
@@ -479,7 +482,7 @@ func GetPdAddrs(tctx *tcontext.Context, db *sql.DB) ([]string, error) {
 			zap.String("query", query), zap.Error(err))
 		return []string{}, errors.Annotatef(err, "sql: %s", query)
 	}
-	return GetSpecifiedColumnValue(rows, "STATUS_ADDRESS")
+	return GetSpecifiedColumnValueAndClose(rows, "STATUS_ADDRESS")
 }
 
 // GetTiDBDDLIDs gets DDL IDs from TiDB
@@ -491,7 +494,7 @@ func GetTiDBDDLIDs(tctx *tcontext.Context, db *sql.DB) ([]string, error) {
 			zap.String("query", query), zap.Error(err))
 		return []string{}, errors.Annotatef(err, "sql: %s", query)
 	}
-	return GetSpecifiedColumnValue(rows, "DDL_ID")
+	return GetSpecifiedColumnValueAndClose(rows, "DDL_ID")
 }
 
 // CheckTiDBWithTiKV use sql to check whether current TiDB has TiKV

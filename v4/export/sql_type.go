@@ -17,6 +17,7 @@ var (
 	doubleQuotationMark = []byte{'"'}
 )
 
+// data type reference: https://dev.mysql.com/doc/refman/8.0/en/data-types.html
 func initColTypeRowReceiverMap() {
 	dataTypeStringArr := []string{
 		"CHAR", "NCHAR", "VARCHAR", "NVARCHAR", "CHARACTER", "VARCHARACTER",
