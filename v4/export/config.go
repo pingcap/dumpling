@@ -567,6 +567,7 @@ var (
 type ServerInfo struct {
 	ServerType    ServerType
 	ServerVersion *semver.Version
+	HasTiKV       bool
 }
 
 // ServerInfoUnknown is the unknown database type to dumpling

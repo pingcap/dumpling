@@ -440,7 +440,7 @@ func (d *Dumper) concurrentDumpTable(tctx *tcontext.Context, conn *sql.Conn, met
 	conf := d.conf
 	db, tbl := meta.DatabaseName(), meta.TableName()
 	if conf.ServerInfo.ServerType == ServerTypeTiDB &&
-		conf.ServerInfo.ServerVersion != nil &&
+		conf.ServerInfo.ServerVersion != nil && conf.ServerInfo.HasTiKV &&
 		conf.ServerInfo.ServerVersion.Compare(*gcSafePointVersion) >= 0 {
 		return d.concurrentDumpTiDBTables(tctx, conn, meta, taskChan)
 	}
@@ -1136,21 +1136,21 @@ func setSessionParam(d *Dumper) error {
 	if si.ServerType == ServerTypeTiDB && conf.TiDBMemQuotaQuery != UnspecifiedSize {
 		sessionParam[TiDBMemQuotaQueryName] = conf.TiDBMemQuotaQuery
 	}
+	var err error
 	if snapshot != "" {
 		if si.ServerType != ServerTypeTiDB {
 			return errors.New("snapshot consistency is not supported for this server")
 		}
 		if consistency == consistencyTypeSnapshot {
-			hasTiKV, err := CheckTiDBWithTiKV(pool)
+			conf.ServerInfo.HasTiKV, err = CheckTiDBWithTiKV(pool)
 			if err != nil {
 				return err
 			}
-			if hasTiKV {
+			if conf.ServerInfo.HasTiKV {
 				sessionParam["tidb_snapshot"] = snapshot
 			}
 		}
 	}
-	var err error
 	if d.dbHandle, err = resetDBWithSessionParams(d.tctx, pool, conf.GetDSN(""), conf.SessionParams); err != nil {
 		return errors.Trace(err)
 	}
