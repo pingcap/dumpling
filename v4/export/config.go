@@ -565,9 +565,9 @@ var (
 
 // ServerInfo is the combination of ServerType and ServerInfo
 type ServerInfo struct {
+	HasTiKV       bool
 	ServerType    ServerType
 	ServerVersion *semver.Version
-	HasTiKV       bool
 }
 
 // ServerInfoUnknown is the unknown database type to dumpling
