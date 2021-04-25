@@ -440,8 +440,9 @@ func (d *Dumper) concurrentDumpTable(tctx *tcontext.Context, conn *sql.Conn, met
 	conf := d.conf
 	db, tbl := meta.DatabaseName(), meta.TableName()
 	if conf.ServerInfo.ServerType == ServerTypeTiDB &&
-		conf.ServerInfo.ServerVersion != nil && conf.ServerInfo.HasTiKV &&
-		conf.ServerInfo.ServerVersion.Compare(*gcSafePointVersion) >= 0 {
+		conf.ServerInfo.ServerVersion != nil &&
+		(conf.ServerInfo.ServerVersion.Compare(*tableSampleVersion) >= 0 ||
+			(conf.ServerInfo.HasTiKV && conf.ServerInfo.ServerVersion.Compare(*gcSafePointVersion) >= 0)) {
 		return d.concurrentDumpTiDBTables(tctx, conn, meta, taskChan)
 	}
 	field, err := pickupPossibleField(db, tbl, conn, conf)
