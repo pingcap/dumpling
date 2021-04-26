@@ -42,9 +42,11 @@ type writerPipe struct {
 	statementSizeLimit uint64
 
 	w storage.ExternalFileWriter
+
+	limiter *SpeedLimiter
 }
 
-func newWriterPipe(w storage.ExternalFileWriter, fileSizeLimit, statementSizeLimit uint64, labels prometheus.Labels) *writerPipe {
+func newWriterPipe(w storage.ExternalFileWriter, fileSizeLimit, statementSizeLimit uint64, labels prometheus.Labels, limiter *SpeedLimiter) *writerPipe {
 	return &writerPipe{
 		input:  make(chan *bytes.Buffer, 8),
 		closed: make(chan struct{}),
@@ -56,6 +58,7 @@ func newWriterPipe(w storage.ExternalFileWriter, fileSizeLimit, statementSizeLim
 		currentStatementSize: 0,
 		fileSizeLimit:        fileSizeLimit,
 		statementSizeLimit:   statementSizeLimit,
+		limiter:              limiter,
 	}
 }
 
@@ -94,6 +97,9 @@ func (b *writerPipe) Run(tctx *tcontext.Context) {
 func (b *writerPipe) AddFileSize(fileSize uint64) {
 	b.currentFileSize += fileSize
 	b.currentStatementSize += fileSize
+
+	// Lock statistics here, the amount of data per unit time, using Time.ticker for timing operation.
+	b.limiter.CheckSpeed(fileSize)
 }
 
 func (b *writerPipe) Error() error {
@@ -112,6 +118,62 @@ func (b *writerPipe) ShouldSwitchFile() bool {
 func (b *writerPipe) ShouldSwitchStatement() bool {
 	return (b.fileSizeLimit != UnspecifiedSize && b.currentFileSize >= b.fileSizeLimit) ||
 		(b.statementSizeLimit != UnspecifiedSize && b.currentStatementSize >= b.statementSizeLimit)
+}
+
+// SpeedLimiter used for control speed of dump data
+type SpeedLimiter struct {
+	count  int
+	limit  uint64
+	ticker *time.Ticker
+	size   uint64
+	lock   sync.RWMutex
+}
+
+// CheckSpeed check current speed of dump, if already over, sleep the rest time
+func (sl *SpeedLimiter) CheckSpeed(newSize uint64) uint64 {
+	sl.lock.Lock()
+	sl.size += newSize
+	sl.lock.Unlock()
+
+	if sl.size >= sl.limit {
+		sleepTime := 100 - sl.count
+		t := time.NewTicker(time.Millisecond * 10)
+		//log.Info("we got speed thread ", zap.Uint64("thread", sl.limit), zap.Uint64("used", sl.size), zap.Int("only used time in ms", sl.count*10))
+		for i := 0; i < sleepTime; i++ {
+			<-t.C
+		}
+		t.Stop()
+	}
+	return sl.limit - sl.size
+}
+
+// IntervalCheck check interval auto
+func (sl *SpeedLimiter) IntervalCheck() {
+	go func() {
+		for {
+			<-sl.ticker.C
+			if sl.count >= 100 {
+				sl.lock.Lock()
+				sl.count = 0
+				sl.size = 0
+				sl.lock.Unlock()
+
+				//tctx.L().Debug("we resize speed thread")
+			} else {
+				sl.count++
+			}
+		}
+	}()
+}
+
+// SpeedLimiter constructor methods
+func NewSpeedLimiter(limit uint64) *SpeedLimiter {
+	return &SpeedLimiter{
+		count:  0,
+		limit:  limit,
+		ticker: time.NewTicker(time.Millisecond * 10),
+		size:   0,
+	}
 }
 
 // WriteMeta writes MetaIR to a storage.ExternalFileWriter
@@ -134,7 +196,7 @@ func WriteMeta(tctx *tcontext.Context, meta MetaIR, w storage.ExternalFileWriter
 }
 
 // WriteInsert writes TableDataIR to a storage.ExternalFileWriter in sql type
-func WriteInsert(pCtx *tcontext.Context, cfg *Config, meta TableMeta, tblIR TableDataIR, w storage.ExternalFileWriter) (n uint64, err error) {
+func WriteInsert(pCtx *tcontext.Context, cfg *Config, meta TableMeta, tblIR TableDataIR, w storage.ExternalFileWriter, limiter *SpeedLimiter) (n uint64, err error) {
 	fileRowIter := tblIR.Rows()
 	if !fileRowIter.HasNext() {
 		return 0, fileRowIter.Error()
@@ -145,7 +207,7 @@ func WriteInsert(pCtx *tcontext.Context, cfg *Config, meta TableMeta, tblIR Tabl
 		bf.Grow(lengthLimit - bfCap)
 	}
 
-	wp := newWriterPipe(w, cfg.FileSize, cfg.StatementSize, cfg.Labels)
+	wp := newWriterPipe(w, cfg.FileSize, cfg.StatementSize, cfg.Labels, limiter)
 
 	// use context.Background here to make sure writerPipe can deplete all the chunks in pipeline
 	ctx, cancel := tcontext.Background().WithLogger(pCtx.L()).WithCancel()
@@ -263,7 +325,7 @@ func WriteInsert(pCtx *tcontext.Context, cfg *Config, meta TableMeta, tblIR Tabl
 }
 
 // WriteInsertInCsv writes TableDataIR to a storage.ExternalFileWriter in csv type
-func WriteInsertInCsv(pCtx *tcontext.Context, cfg *Config, meta TableMeta, tblIR TableDataIR, w storage.ExternalFileWriter) (n uint64, err error) {
+func WriteInsertInCsv(pCtx *tcontext.Context, cfg *Config, meta TableMeta, tblIR TableDataIR, w storage.ExternalFileWriter, limiter *SpeedLimiter) (n uint64, err error) {
 	fileRowIter := tblIR.Rows()
 	if !fileRowIter.HasNext() {
 		return 0, fileRowIter.Error()
@@ -274,7 +336,7 @@ func WriteInsertInCsv(pCtx *tcontext.Context, cfg *Config, meta TableMeta, tblIR
 		bf.Grow(lengthLimit - bfCap)
 	}
 
-	wp := newWriterPipe(w, cfg.FileSize, UnspecifiedSize, cfg.Labels)
+	wp := newWriterPipe(w, cfg.FileSize, UnspecifiedSize, cfg.Labels, limiter)
 	opt := &csvOption{
 		nullValue: cfg.CsvNullValue,
 		separator: []byte(cfg.CsvSeparator),
@@ -594,12 +656,12 @@ func (f FileFormat) Extension() string {
 }
 
 // WriteInsert writes TableDataIR to a storage.ExternalFileWriter in sql/csv type
-func (f FileFormat) WriteInsert(pCtx *tcontext.Context, cfg *Config, meta TableMeta, tblIR TableDataIR, w storage.ExternalFileWriter) (uint64, error) {
+func (f FileFormat) WriteInsert(pCtx *tcontext.Context, cfg *Config, meta TableMeta, tblIR TableDataIR, w storage.ExternalFileWriter, limiter *SpeedLimiter) (uint64, error) {
 	switch f {
 	case FileFormatSQLText:
-		return WriteInsert(pCtx, cfg, meta, tblIR, w)
+		return WriteInsert(pCtx, cfg, meta, tblIR, w, limiter)
 	case FileFormatCSV:
-		return WriteInsertInCsv(pCtx, cfg, meta, tblIR, w)
+		return WriteInsertInCsv(pCtx, cfg, meta, tblIR, w, limiter)
 	default:
 		return 0, errors.Errorf("unknown file format")
 	}

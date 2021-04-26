@@ -70,6 +70,7 @@ const (
 	flagReadTimeout              = "read-timeout"
 	flagTransactionalConsistency = "transactional-consistency"
 	flagCompress                 = "compress"
+	flagSpeedLimit               = "speed-limit"
 
 	// FlagHelp represents the help flag
 	FlagHelp = "help"
@@ -130,6 +131,8 @@ type Config struct {
 	SessionParams      map[string]interface{}
 	Labels             prometheus.Labels `json:"-"`
 	Tables             DatabaseTables
+
+	SpeedLimit 				 uint64
 }
 
 // DefaultConfig returns the default export Config for dumpling
@@ -166,6 +169,7 @@ func DefaultConfig() *Config {
 		SessionParams:      make(map[string]interface{}),
 		OutputFileTemplate: DefaultOutputFileTemplate,
 		PosAfterConnect:    false,
+		SpeedLimit:         1024 * 1024,
 	}
 }
 
@@ -246,6 +250,7 @@ func (conf *Config) DefineFlags(flags *pflag.FlagSet) {
 	flags.Bool(flagTransactionalConsistency, true, "Only support transactional consistency")
 	_ = flags.MarkHidden(flagTransactionalConsistency)
 	flags.StringP(flagCompress, "c", "", "Compress output file type, support 'gzip', 'no-compression' now")
+	flags.String(flagSpeedLimit, "1MiB", "Dump phase network speed limit, default 1MB.")
 }
 
 // ParseFromFlags parses dumpling's export.Config from flags
@@ -470,6 +475,15 @@ func (conf *Config) ParseFromFlags(flags *pflag.FlagSet) error {
 		return errors.Trace(err)
 	}
 
+	speedLimitStr, err := flags.GetString(flagSpeedLimit)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	conf.SpeedLimit, err = ParseSpeedLimit(speedLimitStr)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
 	return nil
 }
 
@@ -521,6 +535,20 @@ func ParseCompressType(compressType string) (storage.CompressType, error) {
 	}
 }
 
+// ParseSpeedLimit parse speed limit from speed-limit
+func ParseSpeedLimit(limit string) (uint64, error) {
+	if len(limit) == 0 {
+		return defaultSpeedLimit, nil
+	} else if sizeMB, err := strconv.ParseUint(limit, 10, 64); err == nil {
+		fmt.Printf("Warning: --speed-limit without unit is not recommended, try using `--speed-limit '%dMiB'` in the future\n", sizeMB)
+		return sizeMB * units.MiB, nil
+	} else if size, err := units.RAMInBytes(limit); err == nil {
+		return uint64(size), nil
+	}
+
+	return defaultSpeedLimit, errors.Errorf("failed to parse speed limit (--speed-limit '%s')", limit)
+}
+
 func (conf *Config) createExternalStorage(ctx context.Context) (storage.ExternalStorage, error) {
 	b, err := storage.ParseBackend(conf.OutputDirPath, &conf.BackendOptions)
 	if err != nil {
@@ -556,6 +584,8 @@ const (
 	defaultEtcdDialTimeOut    = 3 * time.Second
 
 	dumplingServiceSafePointPrefix = "dumpling"
+
+	defaultSpeedLimit = 1024 * 1024
 )
 
 var (

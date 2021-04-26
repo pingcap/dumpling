@@ -91,7 +91,8 @@ func (s *testIRImplSuite) TestChunkRowIter(c *C) {
 	sqlRowIter := newRowIter(rows, 2)
 
 	res := newSimpleRowReceiver(2)
-	wp := newWriterPipe(nil, testFileSize, testStatementSize, nil)
+	limiter := NewSpeedLimiter(1024 * 1024)
+	wp := newWriterPipe(nil, testFileSize, testStatementSize, nil, limiter)
 
 	var resSize [][]uint64
 	for sqlRowIter.HasNext() {

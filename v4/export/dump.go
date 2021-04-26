@@ -37,6 +37,8 @@ type Dumper struct {
 	dbHandle *sql.DB
 
 	tidbPDClientForGC pd.Client
+
+	speedLimiter *SpeedLimiter
 }
 
 // NewDumper returns a new Dumper
@@ -46,6 +48,7 @@ func NewDumper(ctx context.Context, conf *Config) (*Dumper, error) {
 		tctx:      tctx,
 		conf:      conf,
 		cancelCtx: cancelFn,
+		speedLimiter: NewSpeedLimiter(conf.SpeedLimit),
 	}
 	err := adjustConfig(conf,
 		registerTLSConfig,
@@ -241,13 +244,14 @@ func (d *Dumper) Dump() (dumpErr error) {
 func (d *Dumper) startWriters(tctx *tcontext.Context, wg *errgroup.Group, taskChan <-chan Task,
 	rebuildConnFn func(*sql.Conn) (*sql.Conn, error)) ([]*Writer, func(), error) {
 	conf, pool := d.conf, d.dbHandle
+	d.speedLimiter.IntervalCheck()
 	writers := make([]*Writer, conf.Threads)
 	for i := 0; i < conf.Threads; i++ {
 		conn, err := createConnWithConsistency(tctx, pool)
 		if err != nil {
 			return nil, func() {}, err
 		}
-		writer := NewWriter(tctx, int64(i), conf, conn, d.extStore)
+		writer := NewWriter(tctx, int64(i), conf, conn, d.extStore, d.speedLimiter)
 		writer.rebuildConnFn = rebuildConnFn
 		writer.setFinishTableCallBack(func(task Task) {
 			if _, ok := task.(*TaskTableData); ok {
