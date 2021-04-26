@@ -127,6 +127,7 @@ type SpeedLimiter struct {
 	ticker *time.Ticker
 	size   uint64
 	lock   sync.RWMutex
+	tctx   *tcontext.Context
 }
 
 // CheckSpeed check current speed of dump, if already over, sleep the rest time
@@ -138,7 +139,7 @@ func (sl *SpeedLimiter) CheckSpeed(newSize uint64) uint64 {
 	if sl.size >= sl.limit {
 		sleepTime := 100 - sl.count
 		t := time.NewTicker(time.Millisecond * 10)
-		//log.Info("we got speed thread ", zap.Uint64("thread", sl.limit), zap.Uint64("used", sl.size), zap.Int("only used time in ms", sl.count*10))
+		sl.tctx.L().Debug("We got speed thread ", zap.Uint64("thread", sl.limit), zap.Uint64("used", sl.size), zap.Int("only used time in ms", sl.count*10))
 		for i := 0; i < sleepTime; i++ {
 			<-t.C
 		}
@@ -158,7 +159,7 @@ func (sl *SpeedLimiter) IntervalCheck() {
 				sl.size = 0
 				sl.lock.Unlock()
 
-				//tctx.L().Debug("we resize speed thread")
+				sl.tctx.L().Debug("We resize speed thread.")
 			} else {
 				sl.count++
 			}
@@ -167,12 +168,13 @@ func (sl *SpeedLimiter) IntervalCheck() {
 }
 
 // SpeedLimiter constructor methods
-func NewSpeedLimiter(limit uint64) *SpeedLimiter {
+func NewSpeedLimiter(tctx *tcontext.Context, limit uint64) *SpeedLimiter {
 	return &SpeedLimiter{
 		count:  0,
 		limit:  limit,
 		ticker: time.NewTicker(time.Millisecond * 10),
 		size:   0,
+		tctx:   tctx,
 	}
 }
 

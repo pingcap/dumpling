@@ -48,7 +48,7 @@ func NewDumper(ctx context.Context, conf *Config) (*Dumper, error) {
 		tctx:      tctx,
 		conf:      conf,
 		cancelCtx: cancelFn,
-		speedLimiter: NewSpeedLimiter(conf.SpeedLimit),
+		speedLimiter: NewSpeedLimiter(tctx, conf.SpeedLimit),
 	}
 	err := adjustConfig(conf,
 		registerTLSConfig,
