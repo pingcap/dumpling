@@ -53,6 +53,14 @@ func (s *testWriterSuite) TestWriteDatabaseMeta(c *C) {
 	bytes, err := ioutil.ReadFile(p)
 	c.Assert(err, IsNil)
 	c.Assert(string(bytes), Equals, "/*!40101 SET NAMES binary*/;\nCREATE DATABASE `test`;\n")
+
+	config.TimeZone = "+00:00"
+	err = writer.WriteDatabaseMeta("test", "CREATE DATABASE `test`")
+	c.Assert(err, IsNil)
+	bytes, err = ioutil.ReadFile(p)
+	c.Assert(err, IsNil)
+	c.Assert(string(bytes), Equals, "/*!40101 SET NAMES binary*/;\n/*!40103 SET TIME_ZONE='+00:00' */;\nCREATE DATABASE `test`;\n")
+
 }
 
 func (s *testWriterSuite) TestWriteTableMeta(c *C) {

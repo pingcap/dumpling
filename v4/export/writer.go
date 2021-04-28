@@ -121,7 +121,7 @@ func (w *Writer) WriteDatabaseMeta(db, createSQL string) error {
 	if err != nil {
 		return err
 	}
-	return writeMetaToFile(tctx, db, createSQL, w.extStorage, fileName+".sql", conf.CompressType)
+	return writeMetaToFile(tctx, db, createSQL, w.extStorage, fileName+".sql", conf.CompressType, conf.TimeZone)
 }
 
 // WriteTableMeta writes table meta to a file
@@ -131,7 +131,7 @@ func (w *Writer) WriteTableMeta(db, table, createSQL string) error {
 	if err != nil {
 		return err
 	}
-	return writeMetaToFile(tctx, db, createSQL, w.extStorage, fileName+".sql", conf.CompressType)
+	return writeMetaToFile(tctx, db, createSQL, w.extStorage, fileName+".sql", conf.CompressType, conf.TimeZone)
 }
 
 // WriteViewMeta writes view meta to a file
@@ -145,11 +145,11 @@ func (w *Writer) WriteViewMeta(db, view, createTableSQL, createViewSQL string) e
 	if err != nil {
 		return err
 	}
-	err = writeMetaToFile(tctx, db, createTableSQL, w.extStorage, fileNameTable+".sql", conf.CompressType)
+	err = writeMetaToFile(tctx, db, createTableSQL, w.extStorage, fileNameTable+".sql", conf.CompressType, conf.TimeZone)
 	if err != nil {
 		return err
 	}
-	return writeMetaToFile(tctx, db, createViewSQL, w.extStorage, fileNameView+".sql", conf.CompressType)
+	return writeMetaToFile(tctx, db, createViewSQL, w.extStorage, fileNameView+".sql", conf.CompressType, conf.TimeZone)
 }
 
 // WriteTableData writes table data to a file with retry
@@ -235,19 +235,22 @@ func (w *Writer) tryToWriteTableData(tctx *tcontext.Context, meta TableMeta, ir 
 	return nil
 }
 
-func writeMetaToFile(tctx *tcontext.Context, target, metaSQL string, s storage.ExternalStorage, path string, compressType storage.CompressType) error {
+func writeMetaToFile(tctx *tcontext.Context, target, metaSQL string, s storage.ExternalStorage, path string, compressType storage.CompressType, timezone string) error {
 	fileWriter, tearDown, err := buildFileWriter(tctx, s, path, compressType)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	defer tearDown(tctx)
 
+	specCmts := []string{"/*!40101 SET NAMES binary*/;"}
+	if timezone != "" {
+		specCmts = append(specCmts, fmt.Sprintf("/*!40103 SET TIME_ZONE='%s' */;", timezone))
+	}
+
 	return WriteMeta(tctx, &metaData{
 		target:  target,
 		metaSQL: metaSQL,
-		specCmts: []string{
-			"/*!40101 SET NAMES binary*/;",
-		},
+		specCmts: specCmts,
 	}, fileWriter)
 }
 

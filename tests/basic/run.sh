@@ -26,6 +26,24 @@ cnt=$(grep -w "Welcome to dumpling.*Release Version.*Git Commit Hash.*Go Version
 echo "version info count is ${cnt}"
 [ "$cnt" = 1 ]
 
+# Test tz-utc
+run_sql "drop database if exists \`$DB_NAME\`;"
+run_sql "create database \`$DB_NAME\`;"
+run_sql "create table \`$DB_NAME\`.\`$TABLE_NAME\` (id int, d datetime, t timestamp);"
+run_sql "SET @@global.time_zone = '+08:00';"
+run_sql "insert into \`$DB_NAME\`.\`$TABLE_NAME\` values (1, '2021-04-28 19:30:00', '2021-04-28 19:30:00')";
+
+SQL_FILE=${DUMPLING_OUTPUT_DIR}/${DB_NAME}.${TABLE_NAME}.000000000.sql
+run_dumpling -f "$DB_NAME.$TABLE_NAME" -f "$DB_NAME.$TABLE_NAME"
+! grep -Fq "/*!40103 SET TIME_ZONE=" $SQL_FILE
+grep -Fq '(1,"2021-04-28 19:30:00","2021-04-28 19:30:00");' $SQL_FILE
+rm -rf $DUMPLING_OUTPUT_DIR
+
+run_dumpling -f "$DB_NAME.$TABLE_NAME" -f "$DB_NAME.$TABLE_NAME" --tz-utc
+grep -Fq "/*!40103 SET TIME_ZONE='+00:00' */;" $SQL_FILE
+grep -Fq '(1,"2021-04-28 19:30:00","2021-04-28 11:30:00");' $SQL_FILE
+rm -rf $DUMPLING_OUTPUT_DIR
+
 # Test for simple WHERE case.
 run_sql "drop database if exists \`$DB_NAME\`;"
 run_sql "create database \`$DB_NAME\`;"
