@@ -446,6 +446,7 @@ func GetSpecifiedColumnValueAndClose(rows *sql.Rows, columnName string) ([]strin
 		return []string{}, nil
 	}
 	defer rows.Close()
+	columnName = strings.ToUpper(columnName)
 	var strs []string
 	columns, _ := rows.Columns()
 	addr := make([]interface{}, len(columns))

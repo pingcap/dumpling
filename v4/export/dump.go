@@ -794,7 +794,7 @@ func selectTiDBPartitionRegion(tctx *tcontext.Context, conn *sql.Conn, dbName, t
 		regionRowKey       = "r_"
 	)
 	logger := tctx.L().With(zap.String("database", dbName), zap.String("table", tableName), zap.String("partition", partition))
-	rows, err = conn.QueryContext(tctx, fmt.Sprintf(partitionRegionSQL, dbName, tableName, partition))
+	rows, err = conn.QueryContext(tctx, fmt.Sprintf(partitionRegionSQL, escapeString(dbName), escapeString(tableName), escapeString(partition)))
 	if err != nil {
 		err = errors.Trace(err)
 		return
