@@ -1139,7 +1139,7 @@ func (s *testSQLSuite) TestBuildRegionQueriesWithPartitions(c *C) {
 			for _, regionResult := range regionResults[i] {
 				rows.AddRow(regionResult...)
 			}
-			mock.ExpectQuery(fmt.Sprintf("SHOW TABLE `%s`.`%s` PARTITION\\(`%s`\\) REGIONS", database, table, partition)).
+			mock.ExpectQuery(fmt.Sprintf("SHOW TABLE `%s`.`%s` PARTITION\\(`%s`\\) REGIONS", escapeString(database), escapeString(table), escapeString(partition))).
 				WillReturnRows(rows)
 		}
 
