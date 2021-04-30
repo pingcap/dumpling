@@ -29,7 +29,6 @@ func initColTypeRowReceiverMap() {
 		"TIMESTAMP", "DATETIME", "DATE", "TIME", "YEAR", "SQL_TSI_YEAR",
 		"TEXT", "TINYTEXT", "MEDIUMTEXT", "LONGTEXT",
 		"ENUM", "SET", "JSON", "NULL", "VAR_STRING",
-		"GEOMETRY", // TODO: support GEOMETRY later
 	}
 
 	dataTypeNumArr := []string{
@@ -43,7 +42,7 @@ func initColTypeRowReceiverMap() {
 	dataTypeBinArr := []string{
 		"BLOB", "TINYBLOB", "MEDIUMBLOB", "LONGBLOB", "LONG",
 		"BINARY", "VARBINARY",
-		"BIT",
+		"BIT", "GEOMETRY",
 	}
 
 	for _, s := range dataTypeStringArr {
