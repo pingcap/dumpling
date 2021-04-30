@@ -610,7 +610,7 @@ func (d *Dumper) concurrentDumpTiDBPartitionTables(tctx *tcontext.Context, conn 
 	totalChunk := 0
 	cachedHandleVals := make([][][]string, len(partitions))
 
-	handleColNames, _, err := selectTiDBPrimaryKeyFields(conn, db, tbl, checkTiDBTableRegionPkFields)
+	handleColNames, _, err := selectTiDBRowKeyFields(conn, db, tbl, checkTiDBTableRegionPkFields)
 	if err != nil {
 		return err
 	}
@@ -665,7 +665,7 @@ func (d *Dumper) L() log.Logger {
 }
 
 func selectTiDBTableSample(tctx *tcontext.Context, conn *sql.Conn, dbName, tableName string) (pkFields []string, pkVals [][]string, err error) {
-	pkFields, pkColTypes, err := selectTiDBPrimaryKeyFields(conn, dbName, tableName, nil)
+	pkFields, pkColTypes, err := selectTiDBRowKeyFields(conn, dbName, tableName, nil)
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}
@@ -709,7 +709,7 @@ func buildTiDBTableSampleQuery(pkFields []string, dbName, tblName string) string
 	return fmt.Sprintf(template, pks, escapeString(dbName), escapeString(tblName), pks)
 }
 
-func selectTiDBPrimaryKeyFields(conn *sql.Conn, dbName, tableName string, checkPkFields func([]string, []string) error) (pkFields, pkColTypes []string, err error) {
+func selectTiDBRowKeyFields(conn *sql.Conn, dbName, tableName string, checkPkFields func([]string, []string) error) (pkFields, pkColTypes []string, err error) {
 	hasImplicitRowID, err := SelectTiDBRowID(conn, dbName, tableName)
 	if err != nil {
 		return
@@ -739,7 +739,7 @@ func checkTiDBTableRegionPkFields(pkFields, pkColTypes []string) (err error) {
 }
 
 func selectTiDBTableRegion(tctx *tcontext.Context, conn *sql.Conn, dbName, tableName string) (pkFields []string, pkVals [][]string, err error) {
-	pkFields, _, err = selectTiDBPrimaryKeyFields(conn, dbName, tableName, checkTiDBTableRegionPkFields)
+	pkFields, _, err = selectTiDBRowKeyFields(conn, dbName, tableName, checkTiDBTableRegionPkFields)
 	if err != nil {
 		return
 	}

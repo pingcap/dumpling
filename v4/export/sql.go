@@ -470,7 +470,6 @@ func GetSpecifiedColumnValueAndClose(rows *sql.Rows, columnName string) ([]strin
 			strs = append(strs, oneRow[fieldIndex].String)
 		}
 	}
-	rows.Close()
 	return strs, errors.Trace(rows.Err())
 }
 
