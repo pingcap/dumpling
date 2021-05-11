@@ -6,7 +6,6 @@ import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -15,7 +14,7 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/coreos/go-semver/semver"
 	. "github.com/pingcap/check"
-	"github.com/siddontang/go-mysql/mysql"
+	"github.com/pingcap/errors"
 )
 
 var _ = Suite(&testSQLSuite{})
@@ -670,11 +669,7 @@ func (s *testSQLSuite) TestBuildTableSampleQueries(c *C) {
 					WillReturnResult(sqlmock.NewResult(0, 0))
 			} else {
 				mock.ExpectExec(fmt.Sprintf("SELECT _tidb_rowid from `%s`.`%s` LIMIT 0", database, table)).
-					WillReturnError(&mysql.MyError{
-						Code:    mysql.ER_BAD_FIELD_ERROR,
-						State:   "42S22",
-						Message: "Unknown column '_tidb_rowid' in 'field list'",
-					})
+					WillReturnError(errors.Errorf("ERROR %d (%s): %s", 1054, "42S22", "Unknown column '_tidb_rowid' in 'field list'"))
 				rows := sqlmock.NewRows([]string{"COLUMN_NAME", "DATA_TYPE"})
 				for i := range handleColNames {
 					rows.AddRow(handleColNames[i], handleColTypes[i])
@@ -906,11 +901,7 @@ func (s *testSQLSuite) TestBuildRegionQueriesWithoutPartition(c *C) {
 				WillReturnResult(sqlmock.NewResult(0, 0))
 		} else {
 			mock.ExpectExec(fmt.Sprintf("SELECT _tidb_rowid from `%s`.`%s` LIMIT 0", database, table)).
-				WillReturnError(&mysql.MyError{
-					Code:    mysql.ER_BAD_FIELD_ERROR,
-					State:   "42S22",
-					Message: "Unknown column '_tidb_rowid' in 'field list'",
-				})
+				WillReturnError(errors.Errorf("ERROR %d (%s): %s", 1054, "42S22", "Unknown column '_tidb_rowid' in 'field list'"))
 			rows := sqlmock.NewRows([]string{"COLUMN_NAME", "DATA_TYPE"})
 			for i := range handleColNames {
 				rows.AddRow(handleColNames[i], handleColTypes[i])
@@ -1122,11 +1113,7 @@ func (s *testSQLSuite) TestBuildRegionQueriesWithPartitions(c *C) {
 				WillReturnResult(sqlmock.NewResult(0, 0))
 		} else {
 			mock.ExpectExec(fmt.Sprintf("SELECT _tidb_rowid from `%s`.`%s` LIMIT 0", database, table)).
-				WillReturnError(&mysql.MyError{
-					Code:    mysql.ER_BAD_FIELD_ERROR,
-					State:   "42S22",
-					Message: "Unknown column '_tidb_rowid' in 'field list'",
-				})
+				WillReturnError(errors.Errorf("ERROR %d (%s): %s", 1054, "42S22", "Unknown column '_tidb_rowid' in 'field list'"))
 			rows = sqlmock.NewRows([]string{"COLUMN_NAME", "DATA_TYPE"})
 			for i := range handleColNames {
 				rows.AddRow(handleColNames[i], handleColTypes[i])
