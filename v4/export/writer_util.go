@@ -124,7 +124,7 @@ func (b *writerPipe) ShouldSwitchStatement() bool {
 type SpeedLimiter struct {
 	count  int
 	limit  uint64
-	ticker *time.Ticker
+	ticker int
 	size   uint64
 	lock   sync.RWMutex
 	tctx   *tcontext.Context
@@ -132,27 +132,30 @@ type SpeedLimiter struct {
 
 // CheckSpeed check current speed of dump, if already over, sleep the rest time
 func (sl *SpeedLimiter) CheckSpeed(newSize uint64) uint64 {
+	localSize := sl.size
+
 	sl.lock.Lock()
-	sl.size += newSize
+	localSize += newSize
 	sl.lock.Unlock()
 
-	if sl.size >= sl.limit {
+	if localSize >= sl.limit {
+		sl.tctx.L().Debug("We got speed thread ", zap.Uint64("thread", sl.limit),
+			zap.Uint64("used", sl.size), zap.Int("only used time in ms", sl.count*10))
+
+		// Divide one second into 100 pieces, count it's used.
+		// sleepTime Is the amount of time left to pause.
 		sleepTime := 100 - sl.count
-		t := time.NewTicker(time.Millisecond * 10)
-		sl.tctx.L().Debug("We got speed thread ", zap.Uint64("thread", sl.limit), zap.Uint64("used", sl.size), zap.Int("only used time in ms", sl.count*10))
-		for i := 0; i < sleepTime; i++ {
-			<-t.C
-		}
-		t.Stop()
+		time.Sleep(time.Duration(sl.ticker * sleepTime) * time.Millisecond)
 	}
-	return sl.limit - sl.size
+	return sl.limit - localSize
 }
 
 // IntervalCheck check interval auto
-func (sl *SpeedLimiter) IntervalCheck() {
+func (sl *SpeedLimiter) IntervalCheck(tctx *tcontext.Context) {
+	defer tctx.Done()
 	go func() {
 		for {
-			<-sl.ticker.C
+			time.Sleep(time.Duration(sl.ticker) * time.Millisecond)
 			if sl.count >= 100 {
 				sl.lock.Lock()
 				sl.count = 0
@@ -172,7 +175,7 @@ func NewSpeedLimiter(tctx *tcontext.Context, limit uint64) *SpeedLimiter {
 	return &SpeedLimiter{
 		count:  0,
 		limit:  limit,
-		ticker: time.NewTicker(time.Millisecond * 10),
+		ticker: 10,
 		size:   0,
 		tctx:   tctx,
 	}

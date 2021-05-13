@@ -250,7 +250,7 @@ func (conf *Config) DefineFlags(flags *pflag.FlagSet) {
 	flags.Bool(flagTransactionalConsistency, true, "Only support transactional consistency")
 	_ = flags.MarkHidden(flagTransactionalConsistency)
 	flags.StringP(flagCompress, "c", "", "Compress output file type, support 'gzip', 'no-compression' now")
-	flags.String(flagSpeedLimit, "1MiB", "Dump phase network speed limit, default 1MB.")
+	flags.String(flagSpeedLimit, "1MB/s", "Dump phase network speed limit, default 1MB/s (No configuration and no speed limit).") //TODO default limit
 }
 
 // ParseFromFlags parses dumpling's export.Config from flags
@@ -443,7 +443,7 @@ func (conf *Config) ParseFromFlags(flags *pflag.FlagSet) error {
 		conf.TableFilter = filter.CaseInsensitive(conf.TableFilter)
 	}
 
-	conf.FileSize, err = ParseFileSize(fileSizeStr)
+	conf.FileSize, err = ParseFileSize(fileSizeStr, 0)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -479,7 +479,7 @@ func (conf *Config) ParseFromFlags(flags *pflag.FlagSet) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	conf.SpeedLimit, err = ParseSpeedLimit(speedLimitStr)
+	conf.SpeedLimit, err = ParseFileSize(speedLimitStr, defaultSpeedLimit)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -488,7 +488,7 @@ func (conf *Config) ParseFromFlags(flags *pflag.FlagSet) error {
 }
 
 // ParseFileSize parses file size from tables-list and filter arguments
-func ParseFileSize(fileSizeStr string) (uint64, error) {
+func ParseFileSize(fileSizeStr string, defaultSize uint64) (uint64, error) {
 	if len(fileSizeStr) == 0 {
 		return UnspecifiedSize, nil
 	} else if fileSizeMB, err := strconv.ParseUint(fileSizeStr, 10, 64); err == nil {
@@ -497,7 +497,7 @@ func ParseFileSize(fileSizeStr string) (uint64, error) {
 	} else if size, err := units.RAMInBytes(fileSizeStr); err == nil {
 		return uint64(size), nil
 	}
-	return 0, errors.Errorf("failed to parse filesize (-F '%s')", fileSizeStr)
+	return defaultSize, errors.Errorf("failed to parse filesize (-F '%s')", fileSizeStr)
 }
 
 // ParseTableFilter parses table filter from tables-list and filter arguments
@@ -533,20 +533,6 @@ func ParseCompressType(compressType string) (storage.CompressType, error) {
 	default:
 		return storage.NoCompression, errors.Errorf("unknown compress type %s", compressType)
 	}
-}
-
-// ParseSpeedLimit parse speed limit from speed-limit
-func ParseSpeedLimit(limit string) (uint64, error) {
-	if len(limit) == 0 {
-		return defaultSpeedLimit, nil
-	} else if sizeMB, err := strconv.ParseUint(limit, 10, 64); err == nil {
-		fmt.Printf("Warning: --speed-limit without unit is not recommended, try using `--speed-limit '%dMiB'` in the future\n", sizeMB)
-		return sizeMB * units.MiB, nil
-	} else if size, err := units.RAMInBytes(limit); err == nil {
-		return uint64(size), nil
-	}
-
-	return defaultSpeedLimit, errors.Errorf("failed to parse speed limit (--speed-limit '%s')", limit)
 }
 
 func (conf *Config) createExternalStorage(ctx context.Context) (storage.ExternalStorage, error) {
