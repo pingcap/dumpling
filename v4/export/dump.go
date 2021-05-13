@@ -244,7 +244,7 @@ func (d *Dumper) Dump() (dumpErr error) {
 func (d *Dumper) startWriters(tctx *tcontext.Context, wg *errgroup.Group, taskChan <-chan Task,
 	rebuildConnFn func(*sql.Conn) (*sql.Conn, error)) ([]*Writer, func(), error) {
 	conf, pool := d.conf, d.dbHandle
-	d.speedLimiter.IntervalCheck(tctx)
+	d.speedLimiter.IntervalCheck()
 	writers := make([]*Writer, conf.Threads)
 	for i := 0; i < conf.Threads; i++ {
 		conn, err := createConnWithConsistency(tctx, pool)
