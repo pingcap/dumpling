@@ -151,9 +151,7 @@ func (sl *SpeedLimiter) CheckSpeed(newSize uint64) uint64 {
 }
 
 // IntervalCheck check interval auto
-func (sl *SpeedLimiter) IntervalCheck() {
-	var wg sync.WaitGroup
-	wg.Add(1)
+func (sl *SpeedLimiter) IntervalCheck(tctx *tcontext.Context) {
 	go func() {
 		for {
 			time.Sleep(time.Duration(sl.ticker) * time.Millisecond)
@@ -162,16 +160,12 @@ func (sl *SpeedLimiter) IntervalCheck() {
 				sl.count = 0
 				sl.size = 0
 				sl.lock.Unlock()
-
-				sl.tctx.L().Debug("We resize speed thread.")
 			} else {
 				sl.count++
 			}
 		}
-		wg.Done()
-	}()
-	defer func() {
-		wg.Wait()
+
+		tctx.Done()
 	}()
 }
 
