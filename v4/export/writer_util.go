@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"golang.org/x/time/rate"
 	"io"
 	"path"
 	"strings"
@@ -94,12 +95,12 @@ func (b *writerPipe) Run(tctx *tcontext.Context) {
 	}
 }
 
-func (b *writerPipe) AddFileSize(fileSize uint64) {
+func (b *writerPipe) AddFileSize(pCtx *tcontext.Context, fileSize uint64) {
 	b.currentFileSize += fileSize
 	b.currentStatementSize += fileSize
 
-	// Lock statistics here, the amount of data per unit time, using Time.ticker for timing operation.
-	b.limiter.CheckSpeed(fileSize)
+	// Use golang.org/x/time/rate for speed limits.
+	b.limiter.CheckSpeed(pCtx, fileSize)
 }
 
 func (b *writerPipe) Error() error {
@@ -122,61 +123,32 @@ func (b *writerPipe) ShouldSwitchStatement() bool {
 
 // SpeedLimiter used for control speed of dump data
 type SpeedLimiter struct {
-	count  int
+	limiter *rate.Limiter
 	limit  uint64
-	ticker int
-	size   uint64
-	lock   sync.RWMutex
-	tctx   *tcontext.Context
 }
 
-// CheckSpeed check current speed of dump, if already over, sleep the rest time
-func (sl *SpeedLimiter) CheckSpeed(newSize uint64) uint64 {
-	localSize := sl.size
-
-	sl.lock.Lock()
-	localSize += newSize
-	sl.lock.Unlock()
-
-	if localSize >= sl.limit {
-		sl.tctx.L().Debug("We got speed thread ", zap.Uint64("thread", sl.limit),
-			zap.Uint64("used", sl.size), zap.Int("only used time in ms", sl.count*10))
-
-		// Divide one second into 100 pieces, count it's used.
-		// sleepTime Is the amount of time left to pause.
-		sleepTime := 100 - sl.count
-		time.Sleep(time.Duration(sl.ticker * sleepTime) * time.Millisecond)
+// CheckSpeed check current speed of dump, if already over, automatically suspended.
+func (sl *SpeedLimiter) CheckSpeed(pCtx *tcontext.Context, newSize uint64) {
+	// 0 no speed limit.
+	if sl.limit == 0 {
+		return
 	}
-	return sl.limit - localSize
-}
 
-// IntervalCheck check interval auto
-func (sl *SpeedLimiter) IntervalCheck(tctx *tcontext.Context) {
-	go func() {
-		for {
-			time.Sleep(time.Duration(sl.ticker) * time.Millisecond)
-			if sl.count >= 100 {
-				sl.lock.Lock()
-				sl.count = 0
-				sl.size = 0
-				sl.lock.Unlock()
-			} else {
-				sl.count++
-			}
-		}
-
-		tctx.Done()
-	}()
+	// The number of bytes currently downloaded has exceeded the speed limit value and needs to be paused.
+	err := sl.limiter.WaitN(pCtx, int(newSize))
+	if err != nil {
+		pCtx.L().Error("fail to speed limit.", zap.Error(err))
+	}
 }
 
 // SpeedLimiter constructor methods
-func NewSpeedLimiter(tctx *tcontext.Context, limit uint64) *SpeedLimiter {
+func NewSpeedLimiter(limit int) *SpeedLimiter {
+	limitMB := uint64(limit * 1024 * 1024)
+	limiter := rate.NewLimiter(rate.Limit(limitMB), int(limitMB))
+
 	return &SpeedLimiter{
-		count:  0,
-		limit:  limit,
-		ticker: 10,
-		size:   0,
-		tctx:   tctx,
+		limiter: limiter,
+		limit:  limitMB,
 	}
 }
 
@@ -256,7 +228,7 @@ func WriteInsert(pCtx *tcontext.Context, cfg *Config, meta TableMeta, tblIR Tabl
 	for fileRowIter.HasNext() {
 		wp.currentStatementSize = 0
 		bf.WriteString(insertStatementPrefix)
-		wp.AddFileSize(insertStatementPrefixLen)
+		wp.AddFileSize(pCtx, insertStatementPrefixLen)
 
 		for fileRowIter.HasNext() {
 			lastBfSize := bf.Len()
@@ -270,7 +242,7 @@ func WriteInsert(pCtx *tcontext.Context, cfg *Config, meta TableMeta, tblIR Tabl
 				bf.WriteString("()")
 			}
 			counter++
-			wp.AddFileSize(uint64(bf.Len()-lastBfSize) + 2) // 2 is for ",\n" and ";\n"
+			wp.AddFileSize(pCtx, uint64(bf.Len()-lastBfSize) + 2) // 2 is for ",\n" and ";\n"
 			failpoint.Inject("ChaosBrokenMySQLConn", func(_ failpoint.Value) {
 				failpoint.Return(0, errors.New("connection is closed"))
 			})

@@ -48,7 +48,7 @@ func NewDumper(ctx context.Context, conf *Config) (*Dumper, error) {
 		tctx:      tctx,
 		conf:      conf,
 		cancelCtx: cancelFn,
-		speedLimiter: NewSpeedLimiter(tctx, conf.SpeedLimit),
+		speedLimiter: NewSpeedLimiter(conf.SpeedLimit),
 	}
 	err := adjustConfig(conf,
 		registerTLSConfig,
@@ -244,7 +244,6 @@ func (d *Dumper) Dump() (dumpErr error) {
 func (d *Dumper) startWriters(tctx *tcontext.Context, wg *errgroup.Group, taskChan <-chan Task,
 	rebuildConnFn func(*sql.Conn) (*sql.Conn, error)) ([]*Writer, func(), error) {
 	conf, pool := d.conf, d.dbHandle
-	d.speedLimiter.IntervalCheck(tctx)
 	writers := make([]*Writer, conf.Threads)
 	for i := 0; i < conf.Threads; i++ {
 		conn, err := createConnWithConsistency(tctx, pool)

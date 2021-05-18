@@ -132,7 +132,7 @@ type Config struct {
 	Labels             prometheus.Labels `json:"-"`
 	Tables             DatabaseTables
 
-	SpeedLimit 				 uint64
+	SpeedLimit 				 int
 }
 
 // DefaultConfig returns the default export Config for dumpling
@@ -169,7 +169,7 @@ func DefaultConfig() *Config {
 		SessionParams:      make(map[string]interface{}),
 		OutputFileTemplate: DefaultOutputFileTemplate,
 		PosAfterConnect:    false,
-		SpeedLimit:         1024 * 1024,
+		SpeedLimit:         0,
 	}
 }
 
@@ -250,7 +250,7 @@ func (conf *Config) DefineFlags(flags *pflag.FlagSet) {
 	flags.Bool(flagTransactionalConsistency, true, "Only support transactional consistency")
 	_ = flags.MarkHidden(flagTransactionalConsistency)
 	flags.StringP(flagCompress, "c", "", "Compress output file type, support 'gzip', 'no-compression' now")
-	flags.String(flagSpeedLimit, "1MB/s", "Dump phase network speed limit, default 1MB/s (No configuration and no speed limit).") //TODO default limit
+	flags.Int(flagSpeedLimit, 0, "Dump phase network speed limit, no configuration no limit and 0 no limit, unit MB/s. Such as 1=1MB/s or 100=100MB/s")
 }
 
 // ParseFromFlags parses dumpling's export.Config from flags
@@ -475,12 +475,9 @@ func (conf *Config) ParseFromFlags(flags *pflag.FlagSet) error {
 		return errors.Trace(err)
 	}
 
-	speedLimitStr, err := flags.GetString(flagSpeedLimit)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	conf.SpeedLimit, err = ParseFileSize(speedLimitStr, defaultSpeedLimit)
-	if err != nil {
+	if speedLimitStr, err := flags.GetInt(flagSpeedLimit); err == nil {
+		conf.SpeedLimit = speedLimitStr
+	} else {
 		return errors.Trace(err)
 	}
 
