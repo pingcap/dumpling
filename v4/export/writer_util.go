@@ -129,8 +129,8 @@ type SpeedLimiter struct {
 
 // CheckSpeed check current speed of dump, if already over, automatically suspended.
 func (sl *SpeedLimiter) CheckSpeed(pCtx *tcontext.Context, newSize uint64) {
-	// 0 no speed limit.
-	if sl.limit == 0 {
+	// Less than or equal to 0 no speed limit.
+	if sl.limit <= 0 {
 		return
 	}
 

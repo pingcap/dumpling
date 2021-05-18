@@ -250,7 +250,7 @@ func (conf *Config) DefineFlags(flags *pflag.FlagSet) {
 	flags.Bool(flagTransactionalConsistency, true, "Only support transactional consistency")
 	_ = flags.MarkHidden(flagTransactionalConsistency)
 	flags.StringP(flagCompress, "c", "", "Compress output file type, support 'gzip', 'no-compression' now")
-	flags.Int(flagSpeedLimit, 0, "Dump phase network speed limit, no configuration no limit and 0 no limit, unit MB/s. Such as 1=1MB/s or 100=100MB/s")
+	flags.Int(flagSpeedLimit, 0, "Dump phase network speed limit, no configuration no limit and less than or equal to 0 no limit, unit MB/s. Such as 1=1MB/s or 100=100MB/s")
 }
 
 // ParseFromFlags parses dumpling's export.Config from flags
