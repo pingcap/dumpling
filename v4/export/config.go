@@ -250,7 +250,7 @@ func (conf *Config) DefineFlags(flags *pflag.FlagSet) {
 	flags.Bool(flagTransactionalConsistency, true, "Only support transactional consistency")
 	_ = flags.MarkHidden(flagTransactionalConsistency)
 	flags.StringP(flagCompress, "c", "", "Compress output file type, support 'gzip', 'no-compression' now")
-	flags.Int(flagSpeedLimit, 0, "Dump phase network speed limit, no configuration no limit and less than or equal to 0 no limit, unit MB/s. Such as 1=1MB/s or 100=100MB/s")
+	flags.Int(flagSpeedLimit, 0, "Dump phase network speed limit. Default is 0 which means no limit. The unit is MB/s.")
 }
 
 // ParseFromFlags parses dumpling's export.Config from flags
@@ -443,7 +443,7 @@ func (conf *Config) ParseFromFlags(flags *pflag.FlagSet) error {
 		conf.TableFilter = filter.CaseInsensitive(conf.TableFilter)
 	}
 
-	conf.FileSize, err = ParseFileSize(fileSizeStr, 0)
+	conf.FileSize, err = ParseFileSize(fileSizeStr)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -475,9 +475,8 @@ func (conf *Config) ParseFromFlags(flags *pflag.FlagSet) error {
 		return errors.Trace(err)
 	}
 
-	if speedLimitStr, err := flags.GetInt(flagSpeedLimit); err == nil {
-		conf.SpeedLimit = speedLimitStr
-	} else {
+	conf.SpeedLimit, err = flags.GetInt(flagSpeedLimit)
+	if err != nil {
 		return errors.Trace(err)
 	}
 
@@ -485,7 +484,7 @@ func (conf *Config) ParseFromFlags(flags *pflag.FlagSet) error {
 }
 
 // ParseFileSize parses file size from tables-list and filter arguments
-func ParseFileSize(fileSizeStr string, defaultSize uint64) (uint64, error) {
+func ParseFileSize(fileSizeStr string) (uint64, error) {
 	if len(fileSizeStr) == 0 {
 		return UnspecifiedSize, nil
 	} else if fileSizeMB, err := strconv.ParseUint(fileSizeStr, 10, 64); err == nil {
@@ -494,7 +493,7 @@ func ParseFileSize(fileSizeStr string, defaultSize uint64) (uint64, error) {
 	} else if size, err := units.RAMInBytes(fileSizeStr); err == nil {
 		return uint64(size), nil
 	}
-	return defaultSize, errors.Errorf("failed to parse filesize (-F '%s')", fileSizeStr)
+	return 0, errors.Errorf("failed to parse filesize (-F '%s')", fileSizeStr)
 }
 
 // ParseTableFilter parses table filter from tables-list and filter arguments
@@ -567,8 +566,6 @@ const (
 	defaultEtcdDialTimeOut    = 3 * time.Second
 
 	dumplingServiceSafePointPrefix = "dumpling"
-
-	defaultSpeedLimit = 1024 * 1024
 )
 
 var (

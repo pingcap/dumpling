@@ -33,11 +33,11 @@ type Writer struct {
 	finishTaskCallBack  func(Task)
 	finishTableCallBack func(Task)
 
-	limiter *SpeedLimiter
+	limiter SpeedLimiter
 }
 
 // NewWriter returns a new Writer with given configurations
-func NewWriter(tctx *tcontext.Context, id int64, config *Config, conn *sql.Conn, externalStore storage.ExternalStorage, limiter *SpeedLimiter) *Writer {
+func NewWriter(tctx *tcontext.Context, id int64, config *Config, conn *sql.Conn, externalStore storage.ExternalStorage, limiter SpeedLimiter) *Writer {
 	sw := &Writer{
 		id:                  id,
 		tctx:                tctx,

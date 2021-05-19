@@ -38,7 +38,7 @@ type Dumper struct {
 
 	tidbPDClientForGC pd.Client
 
-	speedLimiter *SpeedLimiter
+	speedLimiter SpeedLimiter
 }
 
 // NewDumper returns a new Dumper
