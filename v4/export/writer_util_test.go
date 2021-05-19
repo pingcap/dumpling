@@ -76,10 +76,10 @@ func (s *testUtilSuite) TestWriteInsert(c *C) {
 	}
 	tableIR := newMockTableIR("test", "employee", data, specCmts, colTypes)
 	bf := storage.NewBufferWriter()
-	limiter := NewSpeedLimiter(1)
+	writeSpeedLimiter := NewWriteSpeedLimiter(1)
 
 	conf := configForWriteSQL(UnspecifiedSize, UnspecifiedSize)
-	n, err := WriteInsert(tcontext.Background(), conf, tableIR, tableIR, bf, limiter)
+	n, err := WriteInsert(tcontext.Background(), conf, tableIR, tableIR, bf, writeSpeedLimiter)
 	c.Assert(n, Equals, uint64(4))
 	c.Assert(err, IsNil)
 	expected := "/*!40101 SET NAMES binary*/;\n" +
@@ -109,10 +109,10 @@ func (s *testUtilSuite) TestWriteInsertReturnsError(c *C) {
 	tableIR := newMockTableIR("test", "employee", data, specCmts, colTypes)
 	tableIR.rowErr = rowErr
 	bf := storage.NewBufferWriter()
-	limiter := NewSpeedLimiter(1)
+	writeSpeedLimiter := NewWriteSpeedLimiter(1)
 
 	conf := configForWriteSQL(UnspecifiedSize, UnspecifiedSize)
-	n, err := WriteInsert(tcontext.Background(), conf, tableIR, tableIR, bf, limiter)
+	n, err := WriteInsert(tcontext.Background(), conf, tableIR, tableIR, bf, writeSpeedLimiter)
 	c.Assert(n, Equals, uint64(3))
 	c.Assert(err, Equals, rowErr)
 	expected := "/*!40101 SET NAMES binary*/;\n" +
@@ -134,12 +134,12 @@ func (s *testUtilSuite) TestWriteInsertInCsv(c *C) {
 	colTypes := []string{"INT", "SET", "VARCHAR", "VARCHAR", "TEXT"}
 	tableIR := newMockTableIR("test", "employee", data, nil, colTypes)
 	bf := storage.NewBufferWriter()
-	limiter := NewSpeedLimiter(1)
+	writeSpeedLimiter := NewWriteSpeedLimiter(1)
 
 	// test nullValue
 	opt := &csvOption{separator: []byte(","), delimiter: doubleQuotationMark, nullValue: "\\N"}
 	conf := configForWriteCSV(true, opt)
-	n, err := WriteInsertInCsv(tcontext.Background(), conf, tableIR, tableIR, bf, limiter)
+	n, err := WriteInsertInCsv(tcontext.Background(), conf, tableIR, tableIR, bf, writeSpeedLimiter)
 	c.Assert(n, Equals, uint64(4))
 	c.Assert(err, IsNil)
 	expected := "1,\"male\",\"bob@mail.com\",\"020-1234\",\\N\n" +
@@ -153,7 +153,7 @@ func (s *testUtilSuite) TestWriteInsertInCsv(c *C) {
 	opt.delimiter = quotationMark
 	tableIR = newMockTableIR("test", "employee", data, nil, colTypes)
 	conf = configForWriteCSV(true, opt)
-	n, err = WriteInsertInCsv(tcontext.Background(), conf, tableIR, tableIR, bf, limiter)
+	n, err = WriteInsertInCsv(tcontext.Background(), conf, tableIR, tableIR, bf, writeSpeedLimiter)
 	c.Assert(n, Equals, uint64(4))
 	c.Assert(err, IsNil)
 	expected = "1,'male','bob@mail.com','020-1234',\\N\n" +
@@ -167,7 +167,7 @@ func (s *testUtilSuite) TestWriteInsertInCsv(c *C) {
 	opt.separator = []byte(";")
 	tableIR = newMockTableIR("test", "employee", data, nil, colTypes)
 	conf = configForWriteCSV(true, opt)
-	n, err = WriteInsertInCsv(tcontext.Background(), conf, tableIR, tableIR, bf, limiter)
+	n, err = WriteInsertInCsv(tcontext.Background(), conf, tableIR, tableIR, bf, writeSpeedLimiter)
 	c.Assert(n, Equals, uint64(4))
 	c.Assert(err, IsNil)
 	expected = "1;'male';'bob@mail.com';'020-1234';\\N\n" +
@@ -183,7 +183,7 @@ func (s *testUtilSuite) TestWriteInsertInCsv(c *C) {
 	tableIR = newMockTableIR("test", "employee", data, nil, colTypes)
 	tableIR.colNames = []string{"id", "gender", "email", "phone_number", "status"}
 	conf = configForWriteCSV(false, opt)
-	n, err = WriteInsertInCsv(tcontext.Background(), conf, tableIR, tableIR, bf, limiter)
+	n, err = WriteInsertInCsv(tcontext.Background(), conf, tableIR, tableIR, bf, writeSpeedLimiter)
 	c.Assert(n, Equals, uint64(4))
 	c.Assert(err, IsNil)
 	expected = "maidma&;,?magenderma&;,?maemamailma&;,?maphone_numberma&;,?mastatusma\n" +
@@ -208,10 +208,10 @@ func (s *testUtilSuite) TestSQLDataTypes(c *C) {
 		colType := []string{sqlType}
 		tableIR := newMockTableIR("test", "t", tableData, nil, colType)
 		bf := storage.NewBufferWriter()
-		limiter := NewSpeedLimiter(1)
+		writeSpeedLimiter := NewWriteSpeedLimiter(1)
 
 		conf := configForWriteSQL(UnspecifiedSize, UnspecifiedSize)
-		n, err := WriteInsert(tcontext.Background(), conf, tableIR, tableIR, bf, limiter)
+		n, err := WriteInsert(tcontext.Background(), conf, tableIR, tableIR, bf, writeSpeedLimiter)
 		c.Assert(n, Equals, uint64(1))
 		c.Assert(err, IsNil)
 		lines := strings.Split(bf.String(), "\n")

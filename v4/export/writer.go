@@ -33,11 +33,11 @@ type Writer struct {
 	finishTaskCallBack  func(Task)
 	finishTableCallBack func(Task)
 
-	limiter SpeedLimiter
+	writeSpeedLimiter WriteSpeedLimiter
 }
 
 // NewWriter returns a new Writer with given configurations
-func NewWriter(tctx *tcontext.Context, id int64, config *Config, conn *sql.Conn, externalStore storage.ExternalStorage, limiter SpeedLimiter) *Writer {
+func NewWriter(tctx *tcontext.Context, id int64, config *Config, conn *sql.Conn, externalStore storage.ExternalStorage, writeSpeedLimiter WriteSpeedLimiter) *Writer {
 	sw := &Writer{
 		id:                  id,
 		tctx:                tctx,
@@ -46,7 +46,7 @@ func NewWriter(tctx *tcontext.Context, id int64, config *Config, conn *sql.Conn,
 		extStorage:          externalStore,
 		finishTaskCallBack:  func(Task) {},
 		finishTableCallBack: func(Task) {},
-		limiter:             limiter,
+		writeSpeedLimiter:   writeSpeedLimiter,
 	}
 	switch strings.ToLower(config.FileType) {
 	case FileFormatSQLTextString:
@@ -204,7 +204,7 @@ func (w *Writer) tryToWriteTableData(tctx *tcontext.Context, meta TableMeta, ir 
 	somethingIsWritten := false
 	for {
 		fileWriter, tearDown := buildInterceptFileWriter(tctx, w.extStorage, fileName, conf.CompressType)
-		n, err := format.WriteInsert(tctx, conf, meta, ir, fileWriter, w.limiter)
+		n, err := format.WriteInsert(tctx, conf, meta, ir, fileWriter, w.writeSpeedLimiter)
 		tearDown(tctx)
 		if err != nil {
 			return err

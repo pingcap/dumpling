@@ -35,8 +35,8 @@ func (s *testWriterSuite) newWriter(conf *Config, c *C) *Writer {
 	c.Assert(err, IsNil)
 	conn, err := db.Conn(context.Background())
 	c.Assert(err, IsNil)
-	limiter := NewSpeedLimiter(1)
-	return NewWriter(tcontext.Background(), 0, conf, conn, extStore, limiter)
+	writeSpeedLimiter := NewWriteSpeedLimiter(1)
+	return NewWriter(tcontext.Background(), 0, conf, conn, extStore, writeSpeedLimiter)
 }
 
 func (s *testWriterSuite) TestWriteDatabaseMeta(c *C) {

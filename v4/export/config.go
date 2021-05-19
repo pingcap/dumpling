@@ -132,7 +132,7 @@ type Config struct {
 	Labels             prometheus.Labels `json:"-"`
 	Tables             DatabaseTables
 
-	SpeedLimit int
+	WriteSpeedLimit int
 }
 
 // DefaultConfig returns the default export Config for dumpling
@@ -169,7 +169,7 @@ func DefaultConfig() *Config {
 		SessionParams:      make(map[string]interface{}),
 		OutputFileTemplate: DefaultOutputFileTemplate,
 		PosAfterConnect:    false,
-		SpeedLimit:         0,
+		WriteSpeedLimit:    0,
 	}
 }
 
@@ -475,7 +475,7 @@ func (conf *Config) ParseFromFlags(flags *pflag.FlagSet) error {
 		return errors.Trace(err)
 	}
 
-	conf.SpeedLimit, err = flags.GetInt(flagWriteSpeedLimit)
+	conf.WriteSpeedLimit, err = flags.GetInt(flagWriteSpeedLimit)
 	if err != nil {
 		return errors.Trace(err)
 	}
