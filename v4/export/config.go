@@ -70,7 +70,7 @@ const (
 	flagReadTimeout              = "read-timeout"
 	flagTransactionalConsistency = "transactional-consistency"
 	flagCompress                 = "compress"
-	flagSpeedLimit               = "speed-limit"
+	flagWriteSpeedLimit          = "write-speed-limit"
 
 	// FlagHelp represents the help flag
 	FlagHelp = "help"
@@ -132,7 +132,7 @@ type Config struct {
 	Labels             prometheus.Labels `json:"-"`
 	Tables             DatabaseTables
 
-	SpeedLimit 				 int
+	SpeedLimit int
 }
 
 // DefaultConfig returns the default export Config for dumpling
@@ -250,7 +250,7 @@ func (conf *Config) DefineFlags(flags *pflag.FlagSet) {
 	flags.Bool(flagTransactionalConsistency, true, "Only support transactional consistency")
 	_ = flags.MarkHidden(flagTransactionalConsistency)
 	flags.StringP(flagCompress, "c", "", "Compress output file type, support 'gzip', 'no-compression' now")
-	flags.Int(flagSpeedLimit, 0, "Dump phase network speed limit. Default is 0 which means no limit. The unit is MB/s.")
+	flags.Int(flagWriteSpeedLimit, 0, "Dump phase network speed limit. Default is 0 which means no limit. The unit is MB/s.")
 }
 
 // ParseFromFlags parses dumpling's export.Config from flags
@@ -475,7 +475,7 @@ func (conf *Config) ParseFromFlags(flags *pflag.FlagSet) error {
 		return errors.Trace(err)
 	}
 
-	conf.SpeedLimit, err = flags.GetInt(flagSpeedLimit)
+	conf.SpeedLimit, err = flags.GetInt(flagWriteSpeedLimit)
 	if err != nil {
 		return errors.Trace(err)
 	}

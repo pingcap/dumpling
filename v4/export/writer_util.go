@@ -6,12 +6,13 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"golang.org/x/time/rate"
 	"io"
 	"path"
 	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/time/rate"
 
 	tcontext "github.com/pingcap/dumpling/v4/context"
 
@@ -134,7 +135,7 @@ func (sl *noSpeedLimit) CheckSpeed(_ *tcontext.Context, _ uint64) {}
 // For limit.
 type rateSpeedLimit struct {
 	limiter *rate.Limiter
-	limit  uint64
+	limit   uint64
 }
 
 // The number of bytes currently downloaded has exceeded the speed limit value and needs to be paused.
@@ -147,16 +148,15 @@ func (sl *rateSpeedLimit) CheckSpeed(pCtx *tcontext.Context, newSize uint64) {
 				pCtx.L().Error("fail to speed limit.", zap.Error(err))
 			}
 			break
-		} else {
-			if err := sl.limiter.WaitN(pCtx, int(sl.limit)); err != nil {
-				pCtx.L().Error("fail to speed limit.", zap.Error(err))
-			}
-			temp = temp - sl.limit
 		}
+		if err := sl.limiter.WaitN(pCtx, int(sl.limit)); err != nil {
+			pCtx.L().Error("fail to speed limit.", zap.Error(err))
+		}
+		temp -= sl.limit
 	}
 }
 
-// SpeedLimiter constructor methods
+// NewSpeedLimiter is SpeedLimiter constructors build rateSpeedLimit or noSpeedLimit.
 func NewSpeedLimiter(limit int) SpeedLimiter {
 	if limit > 0 {
 		limitMB := uint64(limit * 1024 * 1024)
@@ -165,9 +165,8 @@ func NewSpeedLimiter(limit int) SpeedLimiter {
 			limiter: limiter,
 			limit:   limitMB,
 		}
-	} else {
-		return &noSpeedLimit{}
 	}
+	return &noSpeedLimit{}
 }
 
 // WriteMeta writes MetaIR to a storage.ExternalFileWriter
@@ -260,7 +259,7 @@ func WriteInsert(pCtx *tcontext.Context, cfg *Config, meta TableMeta, tblIR Tabl
 				bf.WriteString("()")
 			}
 			counter++
-			wp.AddFileSize(pCtx, uint64(bf.Len()-lastBfSize) + 2) // 2 is for ",\n" and ";\n"
+			wp.AddFileSize(pCtx, uint64(bf.Len()-lastBfSize)+2) // 2 is for ",\n" and ";\n"
 			failpoint.Inject("ChaosBrokenMySQLConn", func(_ failpoint.Value) {
 				failpoint.Return(0, errors.New("connection is closed"))
 			})

@@ -45,9 +45,9 @@ type Dumper struct {
 func NewDumper(ctx context.Context, conf *Config) (*Dumper, error) {
 	tctx, cancelFn := tcontext.Background().WithContext(ctx).WithCancel()
 	d := &Dumper{
-		tctx:      tctx,
-		conf:      conf,
-		cancelCtx: cancelFn,
+		tctx:         tctx,
+		conf:         conf,
+		cancelCtx:    cancelFn,
 		speedLimiter: NewSpeedLimiter(conf.SpeedLimit),
 	}
 	err := adjustConfig(conf,
