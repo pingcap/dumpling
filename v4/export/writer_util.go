@@ -157,13 +157,12 @@ func (sl *rateWriteSpeedLimit) CheckSpeed(pCtx *tcontext.Context, newSize uint64
 }
 
 // NewWriteSpeedLimiter is SpeedLimiter constructors build rateSpeedLimit or noSpeedLimit.
-func NewWriteSpeedLimiter(limit int) WriteSpeedLimiter {
+func NewWriteSpeedLimiter(limit uint64) WriteSpeedLimiter {
 	if limit > 0 {
-		limitMB := uint64(limit * 1024 * 1024)
-		limiter := rate.NewLimiter(rate.Limit(limitMB), int(limitMB))
+		limiter := rate.NewLimiter(rate.Limit(limit), int(limit))
 		return &rateWriteSpeedLimit{
 			limiter: limiter,
-			limit:   limitMB,
+			limit:   limit,
 		}
 	}
 	return &noWriteSpeedLimit{}

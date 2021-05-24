@@ -76,7 +76,7 @@ func (s *testUtilSuite) TestWriteInsert(c *C) {
 	}
 	tableIR := newMockTableIR("test", "employee", data, specCmts, colTypes)
 	bf := storage.NewBufferWriter()
-	writeSpeedLimiter := NewWriteSpeedLimiter(1)
+	writeSpeedLimiter := NewWriteSpeedLimiter(0)
 
 	conf := configForWriteSQL(UnspecifiedSize, UnspecifiedSize)
 	n, err := WriteInsert(tcontext.Background(), conf, tableIR, tableIR, bf, writeSpeedLimiter)
@@ -109,7 +109,7 @@ func (s *testUtilSuite) TestWriteInsertReturnsError(c *C) {
 	tableIR := newMockTableIR("test", "employee", data, specCmts, colTypes)
 	tableIR.rowErr = rowErr
 	bf := storage.NewBufferWriter()
-	writeSpeedLimiter := NewWriteSpeedLimiter(1)
+	writeSpeedLimiter := NewWriteSpeedLimiter(0)
 
 	conf := configForWriteSQL(UnspecifiedSize, UnspecifiedSize)
 	n, err := WriteInsert(tcontext.Background(), conf, tableIR, tableIR, bf, writeSpeedLimiter)
@@ -134,7 +134,7 @@ func (s *testUtilSuite) TestWriteInsertInCsv(c *C) {
 	colTypes := []string{"INT", "SET", "VARCHAR", "VARCHAR", "TEXT"}
 	tableIR := newMockTableIR("test", "employee", data, nil, colTypes)
 	bf := storage.NewBufferWriter()
-	writeSpeedLimiter := NewWriteSpeedLimiter(1)
+	writeSpeedLimiter := NewWriteSpeedLimiter(0)
 
 	// test nullValue
 	opt := &csvOption{separator: []byte(","), delimiter: doubleQuotationMark, nullValue: "\\N"}
@@ -208,7 +208,7 @@ func (s *testUtilSuite) TestSQLDataTypes(c *C) {
 		colType := []string{sqlType}
 		tableIR := newMockTableIR("test", "t", tableData, nil, colType)
 		bf := storage.NewBufferWriter()
-		writeSpeedLimiter := NewWriteSpeedLimiter(1)
+		writeSpeedLimiter := NewWriteSpeedLimiter(0)
 
 		conf := configForWriteSQL(UnspecifiedSize, UnspecifiedSize)
 		n, err := WriteInsert(tcontext.Background(), conf, tableIR, tableIR, bf, writeSpeedLimiter)
