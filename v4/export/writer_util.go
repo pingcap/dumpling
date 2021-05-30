@@ -6,13 +6,12 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"golang.org/x/time/rate"
 	"io"
 	"path"
 	"strings"
 	"sync"
 	"time"
-
-	"golang.org/x/time/rate"
 
 	tcontext "github.com/pingcap/dumpling/v4/context"
 
@@ -143,6 +142,9 @@ type rateWriteSpeedLimit struct {
 func (sl *rateWriteSpeedLimit) CheckSpeed(pCtx *tcontext.Context, newSize uint64) {
 	temp := newSize
 	for {
+		if pCtx == nil {
+			return
+		}
 		if temp <= sl.limit {
 			if err := sl.limiter.WaitN(pCtx, int(temp)); err != nil {
 				pCtx.L().Error("fail to write speed limit.", zap.Error(err))

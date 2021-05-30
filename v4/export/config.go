@@ -251,6 +251,7 @@ func (conf *Config) DefineFlags(flags *pflag.FlagSet) {
 	_ = flags.MarkHidden(flagTransactionalConsistency)
 	flags.StringP(flagCompress, "c", "", "Compress output file type, support 'gzip', 'no-compression' now")
 	flags.String(flagWriteSpeedLimit, "", "Dump phase network speed limit. No setting no limit.")
+	_ = flags.MarkHidden(flagWriteSpeedLimit)
 }
 
 // ParseFromFlags parses dumpling's export.Config from flags
