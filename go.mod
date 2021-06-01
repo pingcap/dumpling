@@ -8,7 +8,6 @@ require (
 	github.com/coreos/go-systemd v0.0.0-20190719114852-fd7a80b32e1f // indirect
 	github.com/docker/go-units v0.4.0
 	github.com/fsouza/fake-gcs-server v1.19.0 // indirect
-	github.com/go-mysql-org/go-mysql v1.2.1
 	github.com/go-sql-driver/mysql v1.5.0
 	github.com/golang/mock v1.4.4 // indirect
 	github.com/gorilla/websocket v1.4.1 // indirect
@@ -24,7 +23,6 @@ require (
 	github.com/prometheus/client_golang v1.5.1
 	github.com/prometheus/client_model v0.2.0
 	github.com/satori/go.uuid v1.2.1-0.20181028125025-b2ce2384e17b // indirect
-	github.com/shopspring/decimal v0.0.0-20200105231215-408a2507e114 // indirect
 	github.com/siddontang/go-log v0.0.0-20190221022429-1e957dd83bed // indirect
 	github.com/siddontang/go-mysql v0.0.0-20200222075837-12e89848f047
 	github.com/soheilhy/cmux v0.1.4
