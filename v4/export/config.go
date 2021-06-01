@@ -537,8 +537,9 @@ func (conf *Config) createExternalStorage(ctx context.Context) (storage.External
 	httpClient.Transport = transport
 
 	return storage.New(ctx, b, &storage.ExternalStorageOptions{
-		HTTPClient:    httpClient,
-		SkipCheckPath: true,
+		HTTPClient:      httpClient,
+		SkipCheckPath:   true,
+		SendCredentials: false,
 	})
 }
 
