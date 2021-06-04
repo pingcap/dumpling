@@ -70,6 +70,7 @@ const (
 	flagReadTimeout              = "read-timeout"
 	flagTransactionalConsistency = "transactional-consistency"
 	flagCompress                 = "compress"
+	flagEnableOrderBy            = "enable-orderby"
 
 	// FlagHelp represents the help flag
 	FlagHelp = "help"
@@ -148,7 +149,7 @@ func DefaultConfig() *Config {
 		StatementSize:      DefaultStatementSize,
 		OutputDirPath:      ".",
 		ServerInfo:         ServerInfoUnknown,
-		SortByPk:           true,
+		SortByPk:           false,
 		Tables:             nil,
 		Snapshot:           "",
 		Consistency:        consistencyTypeAuto,
@@ -246,6 +247,7 @@ func (conf *Config) DefineFlags(flags *pflag.FlagSet) {
 	flags.Bool(flagTransactionalConsistency, true, "Only support transactional consistency")
 	_ = flags.MarkHidden(flagTransactionalConsistency)
 	flags.StringP(flagCompress, "c", "", "Compress output file type, support 'gzip', 'no-compression' now")
+	flags.Bool(flagEnableOrderBy, false, "whether to select fields with order by primary key ")
 }
 
 // ParseFromFlags parses dumpling's export.Config from flags
@@ -457,6 +459,10 @@ func (conf *Config) ParseFromFlags(flags *pflag.FlagSet) error {
 		return errors.Trace(err)
 	}
 	conf.CompressType, err = ParseCompressType(compressType)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	conf.SortByPk, err = flags.GetBool(flagEnableOrderBy)
 	if err != nil {
 		return errors.Trace(err)
 	}
