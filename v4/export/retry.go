@@ -15,10 +15,10 @@ import (
 )
 
 const (
-	dumpChunkRetryTime       = 3
+	dumpChunkRetryTime       = 30
 	lockTablesRetryTime      = 5
 	dumpChunkWaitInterval    = 50 * time.Millisecond
-	dumpChunkMaxWaitInterval = 200 * time.Millisecond
+	dumpChunkMaxWaitInterval = time.Second
 	// ErrNoSuchTable is the error code no such table in MySQL/TiDB
 	ErrNoSuchTable uint16 = 1146
 )
