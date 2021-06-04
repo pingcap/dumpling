@@ -3,12 +3,14 @@
 package export
 
 import (
-	"context"
 	"database/sql"
 	"fmt"
 	"strings"
 
 	"github.com/pingcap/errors"
+	"go.uber.org/zap"
+
+	tcontext "github.com/pingcap/dumpling/v4/context"
 )
 
 // rowIter implements the SQLRowIter interface.
@@ -38,7 +40,7 @@ func (iter *rowIter) Decode(row RowReceiver) error {
 }
 
 func (iter *rowIter) Error() error {
-	return iter.rows.Err()
+	return errors.Trace(iter.rows.Err())
 }
 
 func (iter *rowIter) Next() {
@@ -46,6 +48,117 @@ func (iter *rowIter) Next() {
 }
 
 func (iter *rowIter) HasNext() bool {
+	return iter.hasNext
+}
+
+// multiQueriesChunkIter implements the SQLRowIter interface.
+// Note: To create a rowIter, please use `newRowIter()` instead of struct literal.
+type multiQueriesChunkIter struct {
+	tctx    *tcontext.Context
+	conn    *sql.Conn
+	rows    *sql.Rows
+	hasNext bool
+	id      int
+	queries []string
+	args    []interface{}
+	err     error
+}
+
+func newMultiQueryChunkIter(tctx *tcontext.Context, conn *sql.Conn, queries []string, argLen int) *multiQueriesChunkIter {
+	r := &multiQueriesChunkIter{
+		tctx:    tctx,
+		conn:    conn,
+		queries: queries,
+		id:      0,
+		args:    make([]interface{}, argLen),
+	}
+	r.nextRows()
+	return r
+}
+
+func (iter *multiQueriesChunkIter) nextRows() {
+	if iter.id >= len(iter.queries) {
+		iter.hasNext = false
+		return
+	}
+	var err error
+	defer func() {
+		if err != nil {
+			iter.hasNext = false
+			iter.err = errors.Trace(err)
+		}
+	}()
+	tctx, conn := iter.tctx, iter.conn
+	// avoid the empty chunk
+	for iter.id < len(iter.queries) {
+		rows := iter.rows
+		if rows != nil {
+			err = rows.Close()
+			if err != nil {
+				return
+			}
+			err = rows.Err()
+			if err != nil {
+				return
+			}
+		}
+		tctx.L().Debug("try to start nextRows", zap.String("query", iter.queries[iter.id]))
+		rows, err = conn.QueryContext(tctx, iter.queries[iter.id])
+		if err != nil {
+			return
+		}
+		if err = rows.Err(); err != nil {
+			return
+		}
+		iter.id++
+		iter.rows = rows
+		iter.hasNext = iter.rows.Next()
+		if iter.hasNext {
+			return
+		}
+	}
+}
+
+func (iter *multiQueriesChunkIter) Close() error {
+	if iter.err != nil {
+		return iter.err
+	}
+	if iter.rows != nil {
+		return iter.rows.Close()
+	}
+	return nil
+}
+
+func (iter *multiQueriesChunkIter) Decode(row RowReceiver) error {
+	if iter.err != nil {
+		return iter.err
+	}
+	if iter.rows == nil {
+		return errors.Errorf("no valid rows found, id: %d", iter.id)
+	}
+	return decodeFromRows(iter.rows, iter.args, row)
+}
+
+func (iter *multiQueriesChunkIter) Error() error {
+	if iter.err != nil {
+		return iter.err
+	}
+	if iter.rows != nil {
+		return errors.Trace(iter.rows.Err())
+	}
+	return nil
+}
+
+func (iter *multiQueriesChunkIter) Next() {
+	if iter.err == nil {
+		iter.hasNext = iter.rows.Next()
+		if !iter.hasNext {
+			iter.nextRows()
+		}
+	}
+}
+
+func (iter *multiQueriesChunkIter) HasNext() bool {
 	return iter.hasNext
 }
 
@@ -91,21 +204,22 @@ func newTableData(query string, colLength int, needColTypes bool) *tableData {
 	}
 }
 
-func (td *tableData) Start(ctx context.Context, conn *sql.Conn) error {
-	rows, err := conn.QueryContext(ctx, td.query)
+func (td *tableData) Start(tctx *tcontext.Context, conn *sql.Conn) error {
+	tctx.L().Debug("try to start tableData", zap.String("query", td.query))
+	rows, err := conn.QueryContext(tctx, td.query)
 	if err != nil {
-		return errors.Trace(err)
+		return errors.Annotatef(err, "sql: %s", td.query)
 	}
 	if err = rows.Err(); err != nil {
-		return errors.Trace(err)
+		return errors.Annotatef(err, "sql: %s", td.query)
 	}
 	td.SQLRowIter = nil
 	td.rows = rows
-	ns, err := rows.Columns()
-	if err != nil {
-		return errors.Trace(err)
-	}
 	if td.needColTypes {
+		ns, err := rows.Columns()
+		if err != nil {
+			return errors.Trace(err)
+		}
 		td.colLen = len(ns)
 		td.colTypes = make([]string, 0, td.colLen)
 		colTps, err := rows.ColumnTypes()
@@ -128,7 +242,7 @@ func (td *tableData) Rows() SQLRowIter {
 }
 
 func (td *tableData) Close() error {
-	return td.rows.Close()
+	return td.SQLRowIter.Close()
 }
 
 func (td *tableData) RawRows() *sql.Rows {
@@ -211,4 +325,40 @@ func (m *metaData) MetaSQL() string {
 		m.metaSQL += ";\n"
 	}
 	return m.metaSQL
+}
+
+type multiQueriesChunk struct {
+	tctx    *tcontext.Context
+	conn    *sql.Conn
+	queries []string
+	colLen  int
+	SQLRowIter
+}
+
+func newMultiQueriesChunk(queries []string, colLength int) *multiQueriesChunk {
+	return &multiQueriesChunk{
+		queries: queries,
+		colLen:  colLength,
+	}
+}
+
+func (td *multiQueriesChunk) Start(tctx *tcontext.Context, conn *sql.Conn) error {
+	td.tctx = tctx
+	td.conn = conn
+	return nil
+}
+
+func (td *multiQueriesChunk) Rows() SQLRowIter {
+	if td.SQLRowIter == nil {
+		td.SQLRowIter = newMultiQueryChunkIter(td.tctx, td.conn, td.queries, td.colLen)
+	}
+	return td.SQLRowIter
+}
+
+func (td *multiQueriesChunk) Close() error {
+	return td.SQLRowIter.Close()
+}
+
+func (td *multiQueriesChunk) RawRows() *sql.Rows {
+	return nil
 }

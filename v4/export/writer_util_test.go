@@ -9,14 +9,27 @@ import (
 	"testing"
 
 	tcontext "github.com/pingcap/dumpling/v4/context"
+	"github.com/pingcap/dumpling/v4/log"
 
 	"github.com/pingcap/br/pkg/storage"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/errors"
 )
 
+var appLogger log.Logger
+
 func TestT(t *testing.T) {
 	initColTypeRowReceiverMap()
+	logger, _, err := log.InitAppLogger(&log.Config{
+		Level:  "info",
+		File:   "",
+		Format: "text",
+	})
+	if err != nil {
+		t.Log("fail to init logger, err: " + err.Error())
+		t.Fail()
+	}
+	appLogger = logger
 	TestingT(t)
 }
 
@@ -65,7 +78,8 @@ func (s *testUtilSuite) TestWriteInsert(c *C) {
 	bf := storage.NewBufferWriter()
 
 	conf := configForWriteSQL(UnspecifiedSize, UnspecifiedSize)
-	err := WriteInsert(tcontext.Background(), conf, tableIR, tableIR, bf)
+	n, err := WriteInsert(tcontext.Background(), conf, tableIR, tableIR, bf)
+	c.Assert(n, Equals, uint64(4))
 	c.Assert(err, IsNil)
 	expected := "/*!40101 SET NAMES binary*/;\n" +
 		"/*!40014 SET FOREIGN_KEY_CHECKS=0*/;\n" +
@@ -96,7 +110,8 @@ func (s *testUtilSuite) TestWriteInsertReturnsError(c *C) {
 	bf := storage.NewBufferWriter()
 
 	conf := configForWriteSQL(UnspecifiedSize, UnspecifiedSize)
-	err := WriteInsert(tcontext.Background(), conf, tableIR, tableIR, bf)
+	n, err := WriteInsert(tcontext.Background(), conf, tableIR, tableIR, bf)
+	c.Assert(n, Equals, uint64(3))
 	c.Assert(err, Equals, rowErr)
 	expected := "/*!40101 SET NAMES binary*/;\n" +
 		"/*!40014 SET FOREIGN_KEY_CHECKS=0*/;\n" +
@@ -121,7 +136,8 @@ func (s *testUtilSuite) TestWriteInsertInCsv(c *C) {
 	// test nullValue
 	opt := &csvOption{separator: []byte(","), delimiter: doubleQuotationMark, nullValue: "\\N"}
 	conf := configForWriteCSV(true, opt)
-	err := WriteInsertInCsv(tcontext.Background(), conf, tableIR, tableIR, bf)
+	n, err := WriteInsertInCsv(tcontext.Background(), conf, tableIR, tableIR, bf)
+	c.Assert(n, Equals, uint64(4))
 	c.Assert(err, IsNil)
 	expected := "1,\"male\",\"bob@mail.com\",\"020-1234\",\\N\n" +
 		"2,\"female\",\"sarah@mail.com\",\"020-1253\",\"healthy\"\n" +
@@ -134,7 +150,8 @@ func (s *testUtilSuite) TestWriteInsertInCsv(c *C) {
 	opt.delimiter = quotationMark
 	tableIR = newMockTableIR("test", "employee", data, nil, colTypes)
 	conf = configForWriteCSV(true, opt)
-	err = WriteInsertInCsv(tcontext.Background(), conf, tableIR, tableIR, bf)
+	n, err = WriteInsertInCsv(tcontext.Background(), conf, tableIR, tableIR, bf)
+	c.Assert(n, Equals, uint64(4))
 	c.Assert(err, IsNil)
 	expected = "1,'male','bob@mail.com','020-1234',\\N\n" +
 		"2,'female','sarah@mail.com','020-1253','healthy'\n" +
@@ -147,7 +164,8 @@ func (s *testUtilSuite) TestWriteInsertInCsv(c *C) {
 	opt.separator = []byte(";")
 	tableIR = newMockTableIR("test", "employee", data, nil, colTypes)
 	conf = configForWriteCSV(true, opt)
-	err = WriteInsertInCsv(tcontext.Background(), conf, tableIR, tableIR, bf)
+	n, err = WriteInsertInCsv(tcontext.Background(), conf, tableIR, tableIR, bf)
+	c.Assert(n, Equals, uint64(4))
 	c.Assert(err, IsNil)
 	expected = "1;'male';'bob@mail.com';'020-1234';\\N\n" +
 		"2;'female';'sarah@mail.com';'020-1253';'healthy'\n" +
@@ -162,7 +180,8 @@ func (s *testUtilSuite) TestWriteInsertInCsv(c *C) {
 	tableIR = newMockTableIR("test", "employee", data, nil, colTypes)
 	tableIR.colNames = []string{"id", "gender", "email", "phone_number", "status"}
 	conf = configForWriteCSV(false, opt)
-	err = WriteInsertInCsv(tcontext.Background(), conf, tableIR, tableIR, bf)
+	n, err = WriteInsertInCsv(tcontext.Background(), conf, tableIR, tableIR, bf)
+	c.Assert(n, Equals, uint64(4))
 	c.Assert(err, IsNil)
 	expected = "maidma&;,?magenderma&;,?maemamailma&;,?maphone_numberma&;,?mastatusma\n" +
 		"1&;,?mamamalema&;,?mabob@mamail.comma&;,?ma020-1234ma&;,?\\N\n" +
@@ -188,7 +207,8 @@ func (s *testUtilSuite) TestSQLDataTypes(c *C) {
 		bf := storage.NewBufferWriter()
 
 		conf := configForWriteSQL(UnspecifiedSize, UnspecifiedSize)
-		err := WriteInsert(tcontext.Background(), conf, tableIR, tableIR, bf)
+		n, err := WriteInsert(tcontext.Background(), conf, tableIR, tableIR, bf)
+		c.Assert(n, Equals, uint64(1))
 		c.Assert(err, IsNil)
 		lines := strings.Split(bf.String(), "\n")
 		c.Assert(len(lines), Equals, 3)

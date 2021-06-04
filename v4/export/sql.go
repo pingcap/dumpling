@@ -18,6 +18,8 @@ import (
 	"go.uber.org/zap"
 )
 
+const orderByTiDBRowID = "ORDER BY `_tidb_rowid`"
+
 // ShowDatabases shows the databases of a database server.
 func ShowDatabases(db *sql.Conn) ([]string, error) {
 	var res oneStrColumnTable
@@ -186,7 +188,8 @@ func SelectVersion(db *sql.DB) (string, error) {
 }
 
 // SelectAllFromTable dumps data serialized from a specified table
-func SelectAllFromTable(conf *Config, db *sql.Conn, database, table string) (TableDataIR, error) {
+func SelectAllFromTable(conf *Config, db *sql.Conn, meta TableMeta, partition string) (TableDataIR, error) {
+	database, table := meta.DatabaseName(), meta.TableName()
 	selectedField, selectLen, err := buildSelectField(db, database, table, conf.CompleteInsert)
 	if err != nil {
 		return nil, err
@@ -196,7 +199,7 @@ func SelectAllFromTable(conf *Config, db *sql.Conn, database, table string) (Tab
 	if err != nil {
 		return nil, err
 	}
-	query := buildSelectQuery(database, table, selectedField, buildWhereCondition(conf, ""), orderByClause)
+	query := buildSelectQuery(database, table, selectedField, partition, buildWhereCondition(conf, ""), orderByClause)
 
 	return &tableData{
 		query:  query,
@@ -204,7 +207,7 @@ func SelectAllFromTable(conf *Config, db *sql.Conn, database, table string) (Tab
 	}, nil
 }
 
-func buildSelectQuery(database, table string, fields string, where string, orderByClause string) string {
+func buildSelectQuery(database, table, fields, partition, where, orderByClause string) string {
 	var query strings.Builder
 	query.WriteString("SELECT ")
 	if fields == "" {
@@ -217,7 +220,12 @@ func buildSelectQuery(database, table string, fields string, where string, order
 	query.WriteString(escapeString(database))
 	query.WriteString("`.`")
 	query.WriteString(escapeString(table))
-	query.WriteString("`")
+	query.WriteByte('`')
+	if partition != "" {
+		query.WriteString(" PARTITION(`")
+		query.WriteString(escapeString(partition))
+		query.WriteString("`)")
+	}
 
 	if where != "" {
 		query.WriteString(" ")
@@ -242,7 +250,7 @@ func buildOrderByClause(conf *Config, db *sql.Conn, database, table string) (str
 			return "", errors.Trace(err)
 		}
 		if ok {
-			return "ORDER BY `_tidb_rowid`", nil
+			return orderByTiDBRowID, nil
 		}
 	}
 	cols, err := GetPrimaryKeyColumns(db, database, table)
@@ -265,6 +273,37 @@ func SelectTiDBRowID(db *sql.Conn, database, table string) (bool, error) {
 		return false, errors.Annotatef(err, "sql: %s", tiDBRowIDQuery)
 	}
 	return true, nil
+}
+
+// GetSuitableRows gets suitable rows for each table
+func GetSuitableRows(tctx *tcontext.Context, db *sql.Conn, database, table string) uint64 {
+	const (
+		defaultRows  = 200000
+		maxRows      = 1000000
+		bytesPerFile = 128 * 1024 * 1024 // 128MB per file by default
+	)
+	avgRowLength, err := GetAVGRowLength(tctx, db, database, table)
+	if err != nil || avgRowLength == 0 {
+		tctx.L().Debug("fail to get average row length", zap.Uint64("averageRowLength", avgRowLength), zap.Error(err))
+		return defaultRows
+	}
+	estimateRows := bytesPerFile / avgRowLength
+	if estimateRows > maxRows {
+		return maxRows
+	}
+	return estimateRows
+}
+
+// GetAVGRowLength gets whether this table's average row length
+func GetAVGRowLength(tctx *tcontext.Context, db *sql.Conn, database, table string) (uint64, error) {
+	const query = "select AVG_ROW_LENGTH from INFORMATION_SCHEMA.TABLES where table_schema=? and table_name=?;"
+	var avgRowLength uint64
+	row := db.QueryRowContext(tctx, query, database, table)
+	err := row.Scan(&avgRowLength)
+	if err != nil {
+		return 0, errors.Annotatef(err, "sql: %s", query)
+	}
+	return avgRowLength, nil
 }
 
 // GetColumnTypes gets *sql.ColumnTypes from a specified table
@@ -401,8 +440,13 @@ func ShowMasterStatus(db *sql.Conn) ([]string, error) {
 	return oneRow, nil
 }
 
-// GetSpecifiedColumnValue get columns' values whose name is equal to columnName
-func GetSpecifiedColumnValue(rows *sql.Rows, columnName string) ([]string, error) {
+// GetSpecifiedColumnValueAndClose get columns' values whose name is equal to columnName and close the given rows
+func GetSpecifiedColumnValueAndClose(rows *sql.Rows, columnName string) ([]string, error) {
+	if rows == nil {
+		return []string{}, nil
+	}
+	defer rows.Close()
+	columnName = strings.ToUpper(columnName)
 	var strs []string
 	columns, _ := rows.Columns()
 	addr := make([]interface{}, len(columns))
@@ -426,7 +470,7 @@ func GetSpecifiedColumnValue(rows *sql.Rows, columnName string) ([]string, error
 			strs = append(strs, oneRow[fieldIndex].String)
 		}
 	}
-	return strs, nil
+	return strs, errors.Trace(rows.Err())
 }
 
 // GetPdAddrs gets PD address from TiDB
@@ -438,8 +482,7 @@ func GetPdAddrs(tctx *tcontext.Context, db *sql.DB) ([]string, error) {
 			zap.String("query", query), zap.Error(err))
 		return []string{}, errors.Annotatef(err, "sql: %s", query)
 	}
-	defer rows.Close()
-	return GetSpecifiedColumnValue(rows, "STATUS_ADDRESS")
+	return GetSpecifiedColumnValueAndClose(rows, "STATUS_ADDRESS")
 }
 
 // GetTiDBDDLIDs gets DDL IDs from TiDB
@@ -451,8 +494,7 @@ func GetTiDBDDLIDs(tctx *tcontext.Context, db *sql.DB) ([]string, error) {
 			zap.String("query", query), zap.Error(err))
 		return []string{}, errors.Annotatef(err, "sql: %s", query)
 	}
-	defer rows.Close()
-	return GetSpecifiedColumnValue(rows, "DDL_ID")
+	return GetSpecifiedColumnValueAndClose(rows, "DDL_ID")
 }
 
 // CheckTiDBWithTiKV use sql to check whether current TiDB has TiKV
@@ -482,8 +524,20 @@ func isUnknownSystemVariableErr(err error) bool {
 func resetDBWithSessionParams(tctx *tcontext.Context, db *sql.DB, dsn string, params map[string]interface{}) (*sql.DB, error) {
 	support := make(map[string]interface{})
 	for k, v := range params {
+		var pv interface{}
+		if str, ok := v.(string); ok {
+			if pvi, err := strconv.ParseInt(str, 10, 64); err == nil {
+				pv = pvi
+			} else if pvf, err := strconv.ParseFloat(str, 64); err == nil {
+				pv = pvf
+			} else {
+				pv = str
+			}
+		} else {
+			pv = v
+		}
 		s := fmt.Sprintf("SET SESSION %s = ?", k)
-		_, err := db.ExecContext(tctx, s, v)
+		_, err := db.ExecContext(tctx, s, pv)
 		if err != nil {
 			if isUnknownSystemVariableErr(err) {
 				tctx.L().Info("session variable is not supported by db", zap.String("variable", k), zap.Reflect("value", v))
@@ -492,7 +546,7 @@ func resetDBWithSessionParams(tctx *tcontext.Context, db *sql.DB, dsn string, pa
 			return nil, errors.Trace(err)
 		}
 
-		support[k] = v
+		support[k] = pv
 	}
 
 	for k, v := range support {
@@ -570,23 +624,135 @@ func buildSelectField(db *sql.Conn, dbName, tableName string, completeInsert boo
 	return "*", len(availableFields), nil
 }
 
-func buildWhereClauses(handleColNames, handleVals []string) []string {
-	if len(handleVals) == 0 {
+func buildWhereClauses(handleColNames []string, handleVals [][]string) []string {
+	if len(handleColNames) == 0 || len(handleVals) == 0 {
 		return nil
 	}
 	quotaCols := make([]string, len(handleColNames))
 	for i, s := range handleColNames {
 		quotaCols[i] = fmt.Sprintf("`%s`", escapeString(s))
 	}
-	handleCols := strings.Join(quotaCols, ",")
 	where := make([]string, 0, len(handleVals)+1)
-	where = append(where, fmt.Sprintf("(%s) < %s", handleCols, handleVals[0]))
+	buf := &bytes.Buffer{}
+	buildCompareClause(buf, quotaCols, handleVals[0], less, false)
+	where = append(where, buf.String())
+	buf.Reset()
 	for i := 1; i < len(handleVals); i++ {
 		low, up := handleVals[i-1], handleVals[i]
-		where = append(where, fmt.Sprintf("(%s) >= (%s) AND (%s) < (%s)", handleCols, low, handleCols, up))
+		buildBetweenClause(buf, quotaCols, low, up)
+		where = append(where, buf.String())
+		buf.Reset()
 	}
-	where = append(where, fmt.Sprintf("(%s) >= (%s)", handleCols, handleVals[len(handleVals)-1]))
+	buildCompareClause(buf, quotaCols, handleVals[len(handleVals)-1], greater, true)
+	where = append(where, buf.String())
+	buf.Reset()
 	return where
+}
+
+// return greater than TableRangeScan where clause
+// the result doesn't contain brackets
+const (
+	greater = '>'
+	less    = '<'
+	equal   = '='
+)
+
+// buildCompareClause build clause with specified bounds. Usually we will use the following two conditions:
+// (compare, writeEqual) == (less, false), return quotaCols < bound clause. In other words, (-inf, bound)
+// (compare, writeEqual) == (greater, true), return quotaCols >= bound clause. In other words, [bound, +inf)
+func buildCompareClause(buf *bytes.Buffer, quotaCols []string, bound []string, compare byte, writeEqual bool) { // revive:disable-line:flag-parameter
+	for i, col := range quotaCols {
+		if i > 0 {
+			buf.WriteString("or(")
+		}
+		for j := 0; j < i; j++ {
+			buf.WriteString(quotaCols[j])
+			buf.WriteByte(equal)
+			buf.WriteString(bound[j])
+			buf.WriteString(" and ")
+		}
+		buf.WriteString(col)
+		buf.WriteByte(compare)
+		if writeEqual && i == len(quotaCols)-1 {
+			buf.WriteByte(equal)
+		}
+		buf.WriteString(bound[i])
+		if i > 0 {
+			buf.WriteByte(')')
+		} else if i != len(quotaCols)-1 {
+			buf.WriteByte(' ')
+		}
+	}
+}
+
+// getCommonLength returns the common length of low and up
+func getCommonLength(low []string, up []string) int {
+	for i := range low {
+		if low[i] != up[i] {
+			return i
+		}
+	}
+	return len(low)
+}
+
+// buildBetweenClause build clause in a specified table range.
+// the result where clause will be low <= quotaCols < up. In other words, [low, up)
+func buildBetweenClause(buf *bytes.Buffer, quotaCols []string, low []string, up []string) {
+	singleBetween := func(writeEqual bool) {
+		buf.WriteString(quotaCols[0])
+		buf.WriteByte(greater)
+		if writeEqual {
+			buf.WriteByte(equal)
+		}
+		buf.WriteString(low[0])
+		buf.WriteString(" and ")
+		buf.WriteString(quotaCols[0])
+		buf.WriteByte(less)
+		buf.WriteString(up[0])
+	}
+	// handle special cases with common prefix
+	commonLen := getCommonLength(low, up)
+	if commonLen > 0 {
+		// unexpected case for low == up, return empty result
+		if commonLen == len(low) {
+			buf.WriteString("false")
+			return
+		}
+		for i := 0; i < commonLen; i++ {
+			if i > 0 {
+				buf.WriteString(" and ")
+			}
+			buf.WriteString(quotaCols[i])
+			buf.WriteByte(equal)
+			buf.WriteString(low[i])
+		}
+		buf.WriteString(" and(")
+		defer buf.WriteByte(')')
+		quotaCols = quotaCols[commonLen:]
+		low = low[commonLen:]
+		up = up[commonLen:]
+	}
+
+	// handle special cases with only one column
+	if len(quotaCols) == 1 {
+		singleBetween(true)
+		return
+	}
+	buf.WriteByte('(')
+	singleBetween(false)
+	buf.WriteString(")or(")
+	buf.WriteString(quotaCols[0])
+	buf.WriteByte(equal)
+	buf.WriteString(low[0])
+	buf.WriteString(" and(")
+	buildCompareClause(buf, quotaCols[1:], low[1:], greater, true)
+	buf.WriteString("))or(")
+	buf.WriteString(quotaCols[0])
+	buf.WriteByte(equal)
+	buf.WriteString(up[0])
+	buf.WriteString(" and(")
+	buildCompareClause(buf, quotaCols[1:], up[1:], less, false)
+	buf.WriteString("))")
 }
 
 func buildOrderByClauseString(handleColNames []string) string {
@@ -661,7 +827,7 @@ func simpleQueryWithArgs(conn *sql.Conn, handleOneRow func(*sql.Rows) error, sql
 		}
 	}
 	rows.Close()
-	return rows.Err()
+	return errors.Annotatef(rows.Err(), "sql: %s", sql)
 }
 
 func pickupPossibleField(dbName, tableName string, db *sql.Conn, conf *Config) (string, error) {
@@ -693,7 +859,12 @@ func pickupPossibleField(dbName, tableName string, db *sql.Conn, conf *Config) (
 }
 
 func estimateCount(tctx *tcontext.Context, dbName, tableName string, db *sql.Conn, field string, conf *Config) uint64 {
-	query := fmt.Sprintf("EXPLAIN SELECT `%s` FROM `%s`.`%s`", escapeString(field), escapeString(dbName), escapeString(tableName))
+	var query string
+	if strings.TrimSpace(field) == "*" || strings.TrimSpace(field) == "" {
+		query = fmt.Sprintf("EXPLAIN SELECT * FROM `%s`.`%s`", escapeString(dbName), escapeString(tableName))
+	} else {
+		query = fmt.Sprintf("EXPLAIN SELECT `%s` FROM `%s`.`%s`", escapeString(field), escapeString(dbName), escapeString(tableName))
+	}
 
 	if conf.Where != "" {
 		query += " WHERE "
@@ -803,14 +974,14 @@ func buildWhereCondition(conf *Config, where string) string {
 	var query strings.Builder
 	separator := "WHERE"
 	if conf.Where != "" {
-		query.WriteString(" ")
 		query.WriteString(separator)
-		query.WriteString(" ")
+		query.WriteByte(' ')
 		query.WriteString(conf.Where)
+		query.WriteByte(' ')
 		separator = "AND"
+		query.WriteByte(' ')
 	}
 	if where != "" {
-		query.WriteString(" ")
 		query.WriteString(separator)
 		query.WriteString(" ")
 		query.WriteString(where)
@@ -820,4 +991,21 @@ func buildWhereCondition(conf *Config, where string) string {
 
 func escapeString(s string) string {
 	return strings.ReplaceAll(s, "`", "``")
+}
+
+// GetPartitionNames get partition names from a specified table
+func GetPartitionNames(db *sql.Conn, schema, table string) (partitions []string, err error) {
+	partitions = make([]string, 0)
+	var partitionName sql.NullString
+	err = simpleQueryWithArgs(db, func(rows *sql.Rows) error {
+		err := rows.Scan(&partitionName)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if partitionName.Valid {
+			partitions = append(partitions, partitionName.String)
+		}
+		return nil
+	}, "SELECT PARTITION_NAME from INFORMATION_SCHEMA.PARTITIONS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?", schema, table)
+	return
 }
