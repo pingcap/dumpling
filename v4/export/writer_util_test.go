@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	tcontext "github.com/pingcap/dumpling/v4/context"
 	"github.com/pingcap/dumpling/v4/log"
@@ -192,6 +193,39 @@ func (s *testUtilSuite) TestWriteInsertInCsv(c *C) {
 		"3&;,?mamamalema&;,?majohn@mamail.comma&;,?ma020-1256ma&;,?mahealthyma\n" +
 		"4&;,?mafemamalema&;,?masarah@mamail.comma&;,?ma020-1235ma&;,?mahealthyma\n"
 	c.Assert(bf.String(), Equals, expected)
+}
+
+func (s *testUtilSuite) TestWriteInsertSpeedLimit(c *C) {
+	data := [][]driver.Value{
+		{"a", "b", "c", "d", "e"},
+		{"a", "bb", "c", "d", "e"},
+		{"a", "b", "cc", "d", "e"},
+		{"a", "b", "c", "ddd", "e"},
+	}
+	colTypes := []string{"INT", "SET", "VARCHAR", "VARCHAR", "TEXT"}
+	tableIR := newMockTableIR("test", "employee", data, nil, colTypes)
+	bf := storage.NewBufferWriter()
+	writeSpeedLimiter := NewWriteSpeedLimiter(10)
+	conf := &Config{FileSize: UnspecifiedSize, StatementSize: UnspecifiedSize}
+
+	start := time.Now()
+	_, err := WriteInsert(tcontext.Background(), conf, tableIR, tableIR, bf, writeSpeedLimiter)
+	end := time.Since(start)
+
+	c.Assert(err, IsNil)
+
+	// The resulting file
+	//
+	// INSERT INTO `employee` VALUES
+	// (a,'b','c','d','e'),
+	// (a,'bb','c','d','e'),
+	// (a,'b','cc','d','e'),
+	// (a,'b','c','ddd','e');
+	//
+	// 5L, 118B
+	//
+	// Because the speed limit is 10, 118B need 10 to 11 seconds to complete.
+	c.Assert(end.Seconds() >= 10 && end.Seconds() <= 11, IsTrue)
 }
 
 func (s *testUtilSuite) TestSQLDataTypes(c *C) {

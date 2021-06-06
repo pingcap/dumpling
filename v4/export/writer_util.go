@@ -142,7 +142,7 @@ type rateWriteSpeedLimit struct {
 func (sl *rateWriteSpeedLimit) CheckSpeed(pCtx *tcontext.Context, newSize uint64) {
 	temp := newSize
 	for {
-		if pCtx == nil {
+		if pCtx == nil || pCtx.Err() != nil {
 			return
 		}
 		if temp <= sl.limit {
