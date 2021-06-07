@@ -6,12 +6,13 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"golang.org/x/time/rate"
 	"io"
 	"path"
 	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/time/rate"
 
 	tcontext "github.com/pingcap/dumpling/v4/context"
 

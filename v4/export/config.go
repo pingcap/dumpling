@@ -219,7 +219,7 @@ func (conf *Config) DefineFlags(flags *pflag.FlagSet) {
 	flags.StringP(flagLogfile, "L", "", "Log file `path`, leave empty to write to console")
 	flags.String(flagLogfmt, "text", "Log `format`: {text|json}")
 	flags.String(flagConsistency, consistencyTypeAuto, "Consistency level during dumping: {auto|none|flush|lock|snapshot}")
-	flags.String(flagSnapshot, "", "Snapshot position (uint64 from pd timestamp for TiDB). Valid only when consistency=snapshot")
+	flags.String(flagSnapshot, "", "Snapshot position (uint64 or MySQL style string timestamp). Valid only when consistency=snapshot")
 	flags.BoolP(flagNoViews, "W", true, "Do not dump views")
 	flags.String(flagStatusAddr, ":8281", "dumpling API server and pprof addr")
 	flags.Uint64P(flagRows, "r", UnspecifiedSize, "Split table into chunks of this many rows, default unlimited")
@@ -552,7 +552,9 @@ func (conf *Config) createExternalStorage(ctx context.Context) (storage.External
 	httpClient.Transport = transport
 
 	return storage.New(ctx, b, &storage.ExternalStorageOptions{
-		HTTPClient: httpClient,
+		HTTPClient:      httpClient,
+		SkipCheckPath:   true,
+		SendCredentials: false,
 	})
 }
 
@@ -580,6 +582,7 @@ var (
 
 // ServerInfo is the combination of ServerType and ServerInfo
 type ServerInfo struct {
+	HasTiKV       bool
 	ServerType    ServerType
 	ServerVersion *semver.Version
 }
