@@ -214,8 +214,10 @@ func (d *Dumper) Dump() (dumpErr error) {
 	})
 
 	// get estimate total count
-	err = d.getEstimateTotalRowsCount(tctx, metaConn)
-	if err != nil {
+	if err := d.getEstimateTotalRowsCount(tctx, metaConn); err != nil {
+		tctx.L().Error("fail to get estimate total count", zap.Error(err))
+	}
+	if err := d.buildTableRegionInfoForLowerTiDB(tctx, metaConn); err != nil {
 		tctx.L().Error("fail to get estimate total count", zap.Error(err))
 	}
 
@@ -442,7 +444,7 @@ func (d *Dumper) concurrentDumpTable(tctx *tcontext.Context, conn *sql.Conn, met
 	if conf.ServerInfo.ServerType == ServerTypeTiDB &&
 		conf.ServerInfo.ServerVersion != nil &&
 		(conf.ServerInfo.ServerVersion.Compare(*tableSampleVersion) >= 0 ||
-			(conf.ServerInfo.HasTiKV && conf.ServerInfo.ServerVersion.Compare(*gcSafePointVersion) >= 0)) {
+			(conf.ServerInfo.HasTiKV && conf.ServerInfo.ServerVersion.Compare(*decodeRegionVersion) >= 0)) {
 		return d.concurrentDumpTiDBTables(tctx, conn, meta, taskChan)
 	}
 	field, err := pickupPossibleField(db, tbl, conn, conf)
@@ -578,11 +580,13 @@ func (d *Dumper) concurrentDumpTiDBTables(tctx *tcontext.Context, conn *sql.Conn
 		handleVals     [][]string
 		err            error
 	)
+	// for TiDB v5.0+, we can use table sample directly
 	if d.conf.ServerInfo.ServerVersion.Compare(*tableSampleVersion) >= 0 {
 		tctx.L().Debug("dumping TiDB tables with TABLESAMPLE",
 			zap.String("database", db), zap.String("table", tbl))
 		handleColNames, handleVals, err = selectTiDBTableSample(tctx, conn, db, tbl)
-	} else {
+	} else if d.conf.ServerInfo.ServerVersion.Compare(*gcSafePointVersion) >= 0 {
+		// for TiDB v4.0+, we can use table region decode in TiDB directly
 		tctx.L().Debug("dumping TiDB tables with TABLE REGIONS",
 			zap.String("database", db), zap.String("table", tbl))
 		var partitions []string
@@ -594,6 +598,11 @@ func (d *Dumper) concurrentDumpTiDBTables(tctx *tcontext.Context, conn *sql.Conn
 				return d.concurrentDumpTiDBPartitionTables(tctx, conn, meta, taskChan, partitions)
 			}
 		}
+	} else {
+		// for TiDB v3.0+, we need to decode TiDB Regions KEY by ourselves
+		tctx.L().Debug("dumping TiDB tables with TABLE REGIONS BY DECODE",
+			zap.String("database", db), zap.String("table", tbl))
+
 	}
 	if err != nil {
 		return err
@@ -1152,4 +1161,48 @@ func setSessionParam(d *Dumper) error {
 		return errors.Trace(err)
 	}
 	return nil
+}
+
+func (d *Dumper) buildTableRegionInfoForLowerTiDB(tctx *tcontext.Context, conn *sql.Conn) error {
+	conf := d.conf
+	if !(conf.ServerInfo.ServerType == ServerTypeTiDB && conf.ServerInfo.ServerVersion != nil && conf.ServerInfo.HasTiKV &&
+		conf.ServerInfo.ServerVersion.Compare(*decodeRegionVersion) >= 0 &&
+		conf.ServerInfo.ServerVersion.Compare(*gcSafePointVersion) < 0) {
+		tctx.L().Debug("no need to build region info because server info mismatch")
+		return nil
+	}
+	const tableRegionSQL = "SELECT START_KEY FROM INFORMATION_SCHEMA.TIKV_REGION_STATUS ORDER BY START_KEY;"
+	var (
+		startKey sql.NullString
+		err      error
+	)
+	schema, err := GetSelectedDBInfo(tctx, conn, DatabaseTablesToMap(conf.Tables))
+	err := simpleQueryWithArgs(conn, func(rows *sql.Rows) error {
+		err = rows.Scan(&startKey)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		// first region's start key has no use. It may come from another table or might be invalid
+		if rowID == 0 {
+			return nil
+		}
+		if !startKey.Valid {
+			logger.Debug("meet invalid start key", zap.Int("rowID", rowID))
+			return nil
+		}
+		if !decodedKey.Valid {
+			logger.Debug("meet invalid decoded start key", zap.Int("rowID", rowID), zap.String("startKey", startKey.String))
+			return nil
+		}
+		pkVal, err2 := extractTiDBRowIDFromDecodedKey(tidbRowID, decodedKey.String)
+		if err2 != nil {
+			logger.Debug("fail to extract pkVal from decoded start key",
+				zap.Int("rowID", rowID), zap.String("startKey", startKey.String), zap.String("decodedKey", decodedKey.String), zap.Error(err2))
+		} else {
+			pkVals = append(pkVals, []string{pkVal})
+		}
+		return nil
+	}, tableRegionSQL, dbName, tableName)
+
+	return err
 }

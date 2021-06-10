@@ -15,6 +15,7 @@ import (
 	tcontext "github.com/pingcap/dumpling/v4/context"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/parser/model"
 	"go.uber.org/zap"
 )
 
@@ -1008,4 +1009,35 @@ func GetPartitionNames(db *sql.Conn, schema, table string) (partitions []string,
 		return nil
 	}, "SELECT PARTITION_NAME from INFORMATION_SCHEMA.PARTITIONS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?", schema, table)
 	return
+}
+
+func GetSelectedDBInfo(tctx *tcontext.Context, db *sql.Conn, tables map[string]map[string]struct{}) ([]*model.DBInfo, error) {
+	const tableIDSQL = "SELECT TABLE_SCHEMA,TABLE_NAME,TIDB_TABLE_ID FROM INFORMATION_SCHEMA.TABLES ORDER BY TABLE_SCHEMA"
+
+	schemas := make([]*model.DBInfo, 0, len(tables))
+	var (
+		tableSchema, tableName string
+		tidbTableID            int64
+	)
+	err := simpleQuery(db, tableIDSQL, func(rows *sql.Rows) error {
+		err := rows.Scan(&tableSchema, &tableName, &tidbTableID)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if tbm, ok := tables[tableSchema]; !ok {
+			return nil
+		} else if _, ok := tbm[tableName]; !ok {
+			return nil
+		}
+		last := len(schemas) - 1
+		if len(schemas) == 0 || schemas[last].Name.O != tableName {
+			schemas = append(schemas, &model.DBInfo{
+				Name:   model.CIStr{O: tableSchema},
+				Tables: make([]*model.TableInfo, 0, len(tables[tableSchema])),
+			})
+			last++
+		}
+		schemas[last].Tables = append(schemas[last].Tables)
+	})
+	return schemas, err
 }
