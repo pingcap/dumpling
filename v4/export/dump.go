@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	pclog "github.com/pingcap/log"
+	"github.com/pingcap/tidb/store/helper"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -1171,14 +1172,16 @@ func (d *Dumper) buildTableRegionInfoForLowerTiDB(tctx *tcontext.Context, conn *
 		tctx.L().Debug("no need to build region info because server info mismatch")
 		return nil
 	}
-	const tableRegionSQL = "SELECT START_KEY FROM INFORMATION_SCHEMA.TIKV_REGION_STATUS ORDER BY START_KEY;"
+	const tableRegionSQL = "SELECT REGION_ID,START_KEY,END_KEY FROM INFORMATION_SCHEMA.TIKV_REGION_STATUS ORDER BY START_KEY;"
 	var (
-		startKey sql.NullString
-		err      error
+		regionID         int64
+		startKey, endKey string
+		err              error
 	)
-	schema, err := GetSelectedDBInfo(tctx, conn, DatabaseTablesToMap(conf.Tables))
+	regionsInfo := &helper.RegionsInfo{}
+	dbInfos, err := GetSelectedDBInfo(tctx, conn, DatabaseTablesToMap(conf.Tables))
 	err := simpleQueryWithArgs(conn, func(rows *sql.Rows) error {
-		err = rows.Scan(&startKey)
+		err = rows.Scan(&regionID, &startKey)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -1203,6 +1206,7 @@ func (d *Dumper) buildTableRegionInfoForLowerTiDB(tctx *tcontext.Context, conn *
 		}
 		return nil
 	}, tableRegionSQL, dbName, tableName)
-
+	tikvHelper := &helper.Helper{}
+	tableInfo := tikvHelper.GetRegionsTableInfo(regionsInfo, dbInfos)
 	return err
 }
