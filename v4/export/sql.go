@@ -1026,18 +1026,22 @@ func GetSelectedDBInfo(tctx *tcontext.Context, db *sql.Conn, tables map[string]m
 		}
 		if tbm, ok := tables[tableSchema]; !ok {
 			return nil
-		} else if _, ok := tbm[tableName]; !ok {
+		} else if _, ok = tbm[tableName]; !ok {
 			return nil
 		}
 		last := len(schemas) - 1
-		if len(schemas) == 0 || schemas[last].Name.O != tableName {
+		if last < 0 || schemas[last].Name.O != tableSchema {
 			schemas = append(schemas, &model.DBInfo{
 				Name:   model.CIStr{O: tableSchema},
 				Tables: make([]*model.TableInfo, 0, len(tables[tableSchema])),
 			})
 			last++
 		}
-		schemas[last].Tables = append(schemas[last].Tables)
+		schemas[last].Tables = append(schemas[last].Tables, &model.TableInfo{
+			ID:   tidbTableID,
+			Name: model.CIStr{O: tableName},
+		})
+		return nil
 	})
 	return schemas, err
 }
