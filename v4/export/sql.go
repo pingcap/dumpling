@@ -138,8 +138,29 @@ func RestoreCharset(w io.StringWriter) {
 	_, _ = w.WriteString("SET collation_connection = @PREV_COLLATION_CONNECTION;\n")
 }
 
+// ListAllTables lists all tables from the database
+func ListAllTables(tctx *tcontext.Context, db *sql.Conn, database, expType string) ([]string, error) {
+	var tables oneStrColumnTable
+	const query = "SHOW FULL TABLES FROM `%s`"
+	var executedQuery = fmt.Sprintf(query, escapeString(database))
+	tctx.L().Debug("trying to get full tables", zap.String("sql", executedQuery))
+	if err := simpleQuery(db, executedQuery, func(rows *sql.Rows) error {
+		var tb, tbType string
+		if err := rows.Scan(&tb, &tbType); err != nil {
+			return errors.Trace(err)
+		}
+		if tbType == expType {
+			tables.data = append(tables.data, tb)
+		}
+		return nil
+	}); err != nil {
+		return nil, errors.WithMessage(err, query)
+	}
+	return tables.data, nil
+}
+
 // ListAllDatabasesTables lists all the databases and tables from the database
-func ListAllDatabasesTables(db *sql.Conn, databaseNames []string, tableType TableType) (DatabaseTables, error) {
+func ListAllDatabasesTables(tctx *tcontext.Context, db *sql.Conn, databaseNames []string, tableType TableType) (DatabaseTables, error) {
 	var tableTypeStr string
 	switch tableType {
 	case TableTypeBase:
@@ -150,26 +171,18 @@ func ListAllDatabasesTables(db *sql.Conn, databaseNames []string, tableType Tabl
 		return nil, errors.Errorf("unknown table type %v", tableType)
 	}
 
-	query := fmt.Sprintf("SELECT table_schema,table_name FROM information_schema.tables WHERE table_type = '%s'", tableTypeStr)
 	dbTables := DatabaseTables{}
 	for _, schema := range databaseNames {
-		dbTables[schema] = make([]*TableInfo, 0)
-	}
-
-	if err := simpleQueryWithArgs(db, func(rows *sql.Rows) error {
-		var schema, table string
-		if err := rows.Scan(&schema, &table); err != nil {
-			return errors.Trace(err)
+		tables, err := ListAllTables(tctx, db, schema, tableTypeStr)
+		dbTables[schema] = make([]*TableInfo, 0, len(tables))
+		if err != nil {
+			return nil, errors.Trace(err)
 		}
-
-		// only append tables to schemas in databaseNames
-		if _, ok := dbTables[schema]; ok {
+		for _, table := range tables {
 			dbTables[schema] = append(dbTables[schema], &TableInfo{table, tableType})
 		}
-		return nil
-	}, query); err != nil {
-		return nil, errors.Annotatef(err, "sql: %s", query)
 	}
+
 	return dbTables, nil
 }
 
@@ -649,6 +662,7 @@ func simpleQuery(conn *sql.Conn, sql string, handleOneRow func(*sql.Rows) error)
 
 func simpleQueryWithArgs(conn *sql.Conn, handleOneRow func(*sql.Rows) error, sql string, args ...interface{}) error {
 	rows, err := conn.QueryContext(context.Background(), sql, args...)
+
 	if err != nil {
 		return errors.Annotatef(err, "sql: %s", sql)
 	}

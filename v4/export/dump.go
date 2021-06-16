@@ -539,13 +539,13 @@ func prepareTableListToDump(tctx *tcontext.Context, conf *Config, db *sql.Conn) 
 		return err
 	}
 
-	conf.Tables, err = listAllTables(db, databases)
+	conf.Tables, err = listAllTables(tctx, db, databases)
 	if err != nil {
 		return err
 	}
 
 	if !conf.NoViews {
-		views, err := listAllViews(db, databases)
+		views, err := listAllViews(tctx, db, databases)
 		if err != nil {
 			return err
 		}

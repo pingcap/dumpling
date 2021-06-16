@@ -9,6 +9,8 @@ import (
 	"strings"
 	"text/template"
 
+	tcontext "github.com/pingcap/dumpling/v4/context"
+
 	"github.com/pingcap/errors"
 )
 
@@ -96,12 +98,12 @@ func prepareDumpingDatabases(conf *Config, db *sql.Conn) ([]string, error) {
 	return conf.Databases, nil
 }
 
-func listAllTables(db *sql.Conn, databaseNames []string) (DatabaseTables, error) {
-	return ListAllDatabasesTables(db, databaseNames, TableTypeBase)
+func listAllTables(tctx *tcontext.Context, db *sql.Conn, databaseNames []string) (DatabaseTables, error) {
+	return ListAllDatabasesTables(tctx, db, databaseNames, TableTypeBase)
 }
 
-func listAllViews(db *sql.Conn, databaseNames []string) (DatabaseTables, error) {
-	return ListAllDatabasesTables(db, databaseNames, TableTypeView)
+func listAllViews(tctx *tcontext.Context, db *sql.Conn, databaseNames []string) (DatabaseTables, error) {
+	return ListAllDatabasesTables(tctx, db, databaseNames, TableTypeView)
 }
 
 type databaseName = string
