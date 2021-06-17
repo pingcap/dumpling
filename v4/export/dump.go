@@ -269,7 +269,9 @@ func (d *Dumper) dumpDatabases(metaConn *sql.Conn, taskChan chan<- Task) error {
 	for dbName, tables := range allTables {
 		createDatabaseSQL, err := ShowCreateDatabase(metaConn, dbName)
 		if err != nil {
-			return err
+			d.L().Error("[hotfix] fail to dump database, skip this table now", zap.String("database", dbName),
+				zap.Error(err))
+			continue
 		}
 		task := NewTaskDatabaseMeta(dbName, createDatabaseSQL)
 		d.sendTaskToChan(task, taskChan)
@@ -279,7 +281,9 @@ func (d *Dumper) dumpDatabases(metaConn *sql.Conn, taskChan chan<- Task) error {
 				zap.String("table", table.Name))
 			meta, err := dumpTableMeta(conf, metaConn, dbName, table)
 			if err != nil {
-				return err
+				d.L().Error("[hotfix] fail to dump table meta, skip this table now", zap.String("database", dbName),
+					zap.String("table", table.Name), zap.Error(err))
+				continue
 			}
 
 			if table.Type == TableTypeView {
@@ -290,7 +294,8 @@ func (d *Dumper) dumpDatabases(metaConn *sql.Conn, taskChan chan<- Task) error {
 				d.sendTaskToChan(task, taskChan)
 				err = d.dumpTableData(metaConn, meta, taskChan)
 				if err != nil {
-					return err
+					d.L().Error("[hotfix] fail to dump table data, skip this table now", zap.String("database", dbName),
+						zap.String("table", table.Name), zap.Error(err))
 				}
 			}
 		}

@@ -84,7 +84,8 @@ func (w *Writer) run(taskStream <-chan Task) error {
 			w.receivedTaskCount++
 			err := w.handleTask(task)
 			if err != nil {
-				return err
+				w.tctx.L().Error("[hotfix] fail to handle task", zap.String("task", task.Brief()), zap.Error(err))
+				continue
 			}
 			w.finishTaskCallBack(task)
 		}
