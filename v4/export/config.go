@@ -148,7 +148,7 @@ func DefaultConfig() *Config {
 		StatementSize:      DefaultStatementSize,
 		OutputDirPath:      ".",
 		ServerInfo:         ServerInfoUnknown,
-		SortByPk:           true,
+		SortByPk:           false,
 		Tables:             nil,
 		Snapshot:           "",
 		Consistency:        consistencyTypeAuto,

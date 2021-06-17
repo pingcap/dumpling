@@ -294,7 +294,7 @@ func GetColumnTypes(db *sql.Conn, fields, database, table string) ([]*sql.Column
 	return rows.ColumnTypes()
 }
 
-// GetPrimaryKeyAndColumnTypes gets all primary columns and their types in ordinal order
+// GetPrimaryKeyAndColumnTypes gets all primary columns and their types in ordinal order, no need
 func GetPrimaryKeyAndColumnTypes(conn *sql.Conn, database, table string) ([]string, []string, error) {
 	query :=
 		`SELECT c.COLUMN_NAME, DATA_TYPE FROM
@@ -321,7 +321,7 @@ ORDER BY k.ORDINAL_POSITION;`
 	return colNames, colTypes, nil
 }
 
-// GetPrimaryKeyColumns gets all primary columns in ordinal order
+// GetPrimaryKeyColumns gets all primary columns in ordinal order, no need
 func GetPrimaryKeyColumns(db *sql.Conn, database, table string) ([]string, error) {
 	priKeyColsQuery := "SELECT column_name FROM information_schema.KEY_COLUMN_USAGE " +
 		"WHERE table_schema = ? AND table_name = ? AND CONSTRAINT_NAME = 'PRIMARY' order by ORDINAL_POSITION;"
@@ -345,28 +345,52 @@ func GetPrimaryKeyColumns(db *sql.Conn, database, table string) ([]string, error
 	return cols, nil
 }
 
-// GetPrimaryKeyName try to get a numeric primary index
-func GetPrimaryKeyName(db *sql.Conn, database, table string) (string, error) {
-	return getNumericIndex(db, database, table, "PRI")
-}
+//// GetPrimaryKeyName try to get a numeric primary index
+//func GetPrimaryKeyName(db *sql.Conn, database, table string) (string, error) {
+//	return getNumericIndex(db, database, table, "PRI")
+//}
+//
+//// GetUniqueIndexName try to get a numeric unique index
+//func GetUniqueIndexName(db *sql.Conn, database, table string) (string, error) {
+//	return getNumericIndex(db, database, table, "UNI")
+//}
 
-// GetUniqueIndexName try to get a numeric unique index
-func GetUniqueIndexName(db *sql.Conn, database, table string) (string, error) {
-	return getNumericIndex(db, database, table, "UNI")
-}
-
-func getNumericIndex(db *sql.Conn, database, table, indexType string) (string, error) {
-	keyQuery := "SELECT column_name FROM information_schema.columns " +
-		"WHERE table_schema = ? AND table_name = ? AND column_key = ? AND data_type IN ('int', 'bigint');"
-	var colName string
-	row := db.QueryRowContext(context.Background(), keyQuery, database, table, indexType)
-	err := row.Scan(&colName)
-	if errors.Cause(err) == sql.ErrNoRows {
-		return "", nil
-	} else if err != nil {
-		return "", errors.Annotatef(err, "sql: %s, indexType: %s", keyQuery, indexType)
+func getNumericIndex(db *sql.Conn, database, table string) (string, error) {
+	colQuery := fmt.Sprintf("SHOW COLUMNS FROM `%s`.`%s`", escapeString(database), escapeString(table))
+	keyQuery := fmt.Sprintf("SHOW KEYS FROM `%s`.`%s`", escapeString(database), escapeString(table))
+	rowsCol, err := db.QueryContext(context.Background(), colQuery)
+	if err != nil {
+		return "", errors.Annotatef(err, "sql: %s", colQuery)
 	}
-	return colName, nil
+	defer rowsCol.Close()
+	colTypes, err := GetSpecifiedColumnValues(rowsCol, "FIELD", "TYPE")
+	if err != nil {
+		return "", errors.Annotatef(err, "sql: %s", colQuery)
+	}
+	colTypeMap := make(map[string]string, len(colTypes))
+	for _, oneRow := range colTypes {
+		colTypeMap[oneRow[0]] = oneRow[1]
+	}
+
+	rowsKey, err := db.QueryContext(context.Background(), keyQuery)
+	if err != nil {
+		return "", errors.Annotatef(err, "sql: %s", keyQuery)
+	}
+	defer rowsKey.Close()
+	keyFields, err := GetSpecifiedColumnValues(rowsKey, "NON_UNIQUE", "COLUMN_NAME")
+	if err != nil {
+		return "", errors.Annotatef(err, "sql: %s", keyQuery)
+	}
+	for _, oneRow := range keyFields {
+		if oneRow[0] != "0" {
+			continue
+		}
+		col := oneRow[1]
+		if strings.Contains(strings.ToUpper(colTypeMap[col]), "INT") {
+			return col, nil
+		}
+	}
+	return "", nil
 }
 
 // FlushTableWithReadLock flush tables with read lock
@@ -437,6 +461,47 @@ func GetSpecifiedColumnValue(rows *sql.Rows, columnName string) ([]string, error
 		}
 		if oneRow[fieldIndex].Valid {
 			strs = append(strs, oneRow[fieldIndex].String)
+		}
+	}
+	return strs, nil
+}
+
+// GetSpecifiedColumnValues get columns' values whose name is equal to columnName
+func GetSpecifiedColumnValues(rows *sql.Rows, columnName ...string) ([][]string, error) {
+	var strs [][]string
+	columns, err := rows.Columns()
+	if err != nil {
+		return strs, errors.Trace(err)
+	}
+	addr := make([]interface{}, len(columns))
+	oneRow := make([]sql.NullString, len(columns))
+	fieldIndexMp := make(map[int]int)
+	for i, col := range columns {
+		addr[i] = &oneRow[i]
+		for j, name := range columnName {
+			if strings.ToUpper(col) == name {
+				fieldIndexMp[i] = j
+			}
+		}
+	}
+	if len(fieldIndexMp) == 0 {
+		return strs, nil
+	}
+	for rows.Next() {
+		err := rows.Scan(addr...)
+		if err != nil {
+			return strs, errors.Trace(err)
+		}
+		written := false
+		tmpStr := make([]string, len(columnName))
+		for colPos, namePos := range fieldIndexMp {
+			if oneRow[colPos].Valid {
+				written = true
+				tmpStr[namePos] = oneRow[colPos].String
+			}
+		}
+		if written {
+			strs = append(strs, tmpStr)
 		}
 	}
 	return strs, nil
@@ -551,22 +616,23 @@ func createConnWithConsistency(ctx context.Context, db *sql.DB) (*sql.Conn, erro
 // buildSelectField returns the selecting fields' string(joined by comma(`,`)),
 // and the number of writable fields.
 func buildSelectField(db *sql.Conn, dbName, tableName string, completeInsert bool) (string, int, error) { // revive:disable-line:flag-parameter
-	query := `SELECT COLUMN_NAME,EXTRA FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=? AND TABLE_NAME=? ORDER BY ORDINAL_POSITION;`
-	rows, err := db.QueryContext(context.Background(), query, dbName, tableName)
+	query := "SHOW COLUMNS FROM `%s`.`%s`"
+	rows, err := db.QueryContext(context.Background(), fmt.Sprintf(query, escapeString(dbName), escapeString(tableName)))
 	if err != nil {
 		return "", 0, errors.Annotatef(err, "sql: %s", query)
 	}
 	defer rows.Close()
+	results, err := GetSpecifiedColumnValues(rows, "FIELD", "EXTRA")
+	if err != nil {
+		return "", 0, errors.Annotatef(err, "sql: %s", query)
+	}
 	availableFields := make([]string, 0)
 
 	hasGenerateColumn := false
 	var fieldName string
 	var extra string
-	for rows.Next() {
-		err = rows.Scan(&fieldName, &extra)
-		if err != nil {
-			return "", 0, errors.Annotatef(err, "sql: %s", query)
-		}
+	for _, oneRow := range results {
+		fieldName, extra = oneRow[0], oneRow[1]
 		switch extra {
 		case "STORED GENERATED", "VIRTUAL GENERATED":
 			hasGenerateColumn = true
@@ -690,16 +756,9 @@ func pickupPossibleField(dbName, tableName string, db *sql.Conn, conf *Config) (
 		}
 	}
 	// try to use pk
-	fieldName, err := GetPrimaryKeyName(db, dbName, tableName)
+	fieldName, err := getNumericIndex(db, dbName, tableName)
 	if err != nil {
 		return "", err
-	}
-	// try to use first uniqueIndex
-	if fieldName == "" {
-		fieldName, err = GetUniqueIndexName(db, dbName, tableName)
-		if err != nil {
-			return "", err
-		}
 	}
 
 	// if fieldName == "", there is no proper index

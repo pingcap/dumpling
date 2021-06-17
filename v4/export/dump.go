@@ -334,13 +334,15 @@ func (d *Dumper) concurrentDumpTable(conn *sql.Conn, meta TableMeta, taskChan ch
 		return d.concurrentDumpTiDBTables(conn, meta, taskChan)
 	}
 	field, err := pickupPossibleField(db, tbl, conn, conf)
-	if err != nil {
-		return nil
-	}
-	if field == "" {
-		// skip split chunk logic if not found proper field
-		d.L().Warn("fallback to sequential dump due to no proper field",
-			zap.String("database", db), zap.String("table", tbl))
+	if field == "" || err != nil {
+		if err != nil {
+			d.L().Warn("fallback to sequential dump due to pick error",
+				zap.String("database", db), zap.String("table", tbl), zap.Error(err))
+		} else {
+			// skip split chunk logic if not found proper field
+			d.L().Warn("fallback to sequential dump due to no proper field",
+				zap.String("database", db), zap.String("table", tbl))
+		}
 		return d.sequentialDumpTable(conn, meta, taskChan)
 	}
 
