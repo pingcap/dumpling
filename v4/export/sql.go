@@ -11,6 +11,11 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
+
+	"github.com/pingcap/parser/mysql"
+	"github.com/pingcap/tidb/store/tikv/oracle"
+	"github.com/pingcap/tidb/types"
 
 	tcontext "github.com/pingcap/dumpling/v4/context"
 
@@ -474,6 +479,51 @@ func GetSpecifiedColumnValueAndClose(rows *sql.Rows, columnName string) ([]strin
 	return strs, errors.Trace(rows.Err())
 }
 
+// GetSpecifiedColumnValuesAndClose get columns' values whose name is equal to columnName
+func GetSpecifiedColumnValuesAndClose(rows *sql.Rows, columnName ...string) ([][]string, error) {
+	if rows == nil {
+		return [][]string{}, nil
+	}
+	defer rows.Close()
+	var strs [][]string
+	columns, err := rows.Columns()
+	if err != nil {
+		return strs, errors.Trace(err)
+	}
+	addr := make([]interface{}, len(columns))
+	oneRow := make([]sql.NullString, len(columns))
+	fieldIndexMp := make(map[int]int)
+	for i, col := range columns {
+		addr[i] = &oneRow[i]
+		for j, name := range columnName {
+			if strings.ToUpper(col) == name {
+				fieldIndexMp[i] = j
+			}
+		}
+	}
+	if len(fieldIndexMp) == 0 {
+		return strs, nil
+	}
+	for rows.Next() {
+		err := rows.Scan(addr...)
+		if err != nil {
+			return strs, errors.Trace(err)
+		}
+		written := false
+		tmpStr := make([]string, len(columnName))
+		for colPos, namePos := range fieldIndexMp {
+			if oneRow[colPos].Valid {
+				written = true
+				tmpStr[namePos] = oneRow[colPos].String
+			}
+		}
+		if written {
+			strs = append(strs, tmpStr)
+		}
+	}
+	return strs, errors.Trace(rows.Err())
+}
+
 // GetPdAddrs gets PD address from TiDB
 func GetPdAddrs(tctx *tcontext.Context, db *sql.DB) ([]string, error) {
 	query := "SELECT * FROM information_schema.cluster_info where type = 'pd';"
@@ -817,18 +867,18 @@ func simpleQuery(conn *sql.Conn, sql string, handleOneRow func(*sql.Rows) error)
 func simpleQueryWithArgs(conn *sql.Conn, handleOneRow func(*sql.Rows) error, sql string, args ...interface{}) error {
 	rows, err := conn.QueryContext(context.Background(), sql, args...)
 	if err != nil {
-		return errors.Annotatef(err, "sql: %s", sql)
+		return errors.Annotatef(err, "sql: %s, args: %s", sql, args)
 	}
 	defer rows.Close()
 
 	for rows.Next() {
 		if err := handleOneRow(rows); err != nil {
 			rows.Close()
-			return errors.Annotatef(err, "sql: %s", sql)
+			return errors.Annotatef(err, "sql: %s, args: %s", sql, args)
 		}
 	}
 	rows.Close()
-	return errors.Annotatef(rows.Err(), "sql: %s", sql)
+	return errors.Annotatef(rows.Err(), "sql: %s, args: %s", sql, args)
 }
 
 func pickupPossibleField(dbName, tableName string, db *sql.Conn, conf *Config) (string, error) {
@@ -1012,24 +1062,70 @@ func GetPartitionNames(db *sql.Conn, schema, table string) (partitions []string,
 }
 
 // GetPartitionTableIDs get partition tableIDs. This method is tricky, but no better way is found.
-func GetPartitionTableIDs(db *sql.Conn, schema, table string) (partitions []string, err error) {
+// return (dbName -> tbName -> partitionName -> partitionID, error)
+func GetPartitionTableIDs(db *sql.Conn, tables map[string]map[string]struct{}) (map[string]map[string]map[string]int64, error) {
 	const (
 		showStatsHistogramsSQL   = "SHOW STATS_HISTOGRAMS"
 		selectStatsHistogramsSQL = "SELECT TABLE_ID,VERSION,DISTINCT_COUNT FROM mysql.stats_histograms;"
 	)
-	partitions = make([]string, 0)
-	var partitionName sql.NullString
-	err = simpleQuery(db, showStatsHistogramsSQL, func(rows *sql.Rows) error {
-		err := rows.Scan(&partitionName)
+	partitionIDs := make(map[string]map[string]map[string]int64, len(tables))
+	rows, err := db.QueryContext(context.Background(), showStatsHistogramsSQL)
+	if err != nil {
+		return nil, errors.Annotatef(err, "sql: %s", showStatsHistogramsSQL)
+	}
+	results, err := GetSpecifiedColumnValuesAndClose(rows, "DB_NAME", "TABLE_NAME", "PARTITION_NAME", "UPDATE_TIME", "DISTINCT_COUNT")
+	type partitionInfo struct {
+		dbName, tbName, partitionName string
+	}
+	saveMap := make(map[string]map[string]partitionInfo)
+	for _, oneRow := range results {
+		dbName, tbName, partitionName, updateTime, distinctCount := oneRow[0], oneRow[1], oneRow[2], oneRow[3], oneRow[4]
+		if len(partitionName) == 0 {
+			continue
+		}
+		if tbm, ok := tables[dbName]; ok {
+			if _, ok = tbm[tbName]; !ok {
+				continue
+			}
+		} else {
+			continue
+		}
+		if _, ok := saveMap[updateTime]; !ok {
+			saveMap[updateTime] = make(map[string]partitionInfo)
+		}
+		saveMap[updateTime][distinctCount] = partitionInfo{
+			dbName:        dbName,
+			tbName:        tbName,
+			partitionName: partitionName,
+		}
+	}
+	err = simpleQuery(db, selectStatsHistogramsSQL, func(rows *sql.Rows) error {
+		var (
+			tableID       int64
+			version       uint64
+			distinctCount string
+		)
+		err := rows.Scan(&tableID, &version, &distinctCount)
 		if err != nil {
 			return errors.Trace(err)
 		}
-		if partitionName.Valid {
-			partitions = append(partitions, partitionName.String)
+		t := time.Unix(0, oracle.ExtractPhysical(version)*int64(time.Millisecond))
+		tStr := types.NewTime(types.FromGoTime(t), mysql.TypeDatetime, 0).String()
+		if mpt, ok := saveMap[tStr]; ok {
+			if partition, ok := mpt[distinctCount]; ok {
+				dbName, tbName, partitionName := partition.dbName, partition.tbName, partition.partitionName
+				if _, ok := partitionIDs[dbName]; !ok {
+					partitionIDs[dbName] = make(map[string]map[string]int64)
+				}
+				if _, ok := partitionIDs[dbName][tbName]; !ok {
+					partitionIDs[dbName][tbName] = make(map[string]int64)
+				}
+				partitionIDs[dbName][tbName][partitionName] = tableID
+			}
 		}
 		return nil
 	})
-	return
+	return partitionIDs, err
 }
 
 func GetSelectedDBInfo(tctx *tcontext.Context, db *sql.Conn, tables map[string]map[string]struct{}) ([]*model.DBInfo, error) {
@@ -1040,7 +1136,11 @@ func GetSelectedDBInfo(tctx *tcontext.Context, db *sql.Conn, tables map[string]m
 		tableSchema, tableName string
 		tidbTableID            int64
 	)
-	err := simpleQuery(db, tableIDSQL, func(rows *sql.Rows) error {
+	partitionIDs, err := GetPartitionTableIDs(db, tables)
+	if err != nil {
+		return nil, err
+	}
+	err = simpleQuery(db, tableIDSQL, func(rows *sql.Rows) error {
 		err := rows.Scan(&tableSchema, &tableName, &tidbTableID)
 		if err != nil {
 			return errors.Trace(err)
@@ -1058,9 +1158,22 @@ func GetSelectedDBInfo(tctx *tcontext.Context, db *sql.Conn, tables map[string]m
 			})
 			last++
 		}
+		var partition *model.PartitionInfo
+		if tbm, ok := partitionIDs[tableSchema]; ok {
+			if ptm, ok := tbm[tableName]; ok {
+				partition = &model.PartitionInfo{Definitions: make([]model.PartitionDefinition, 0, len(ptm))}
+				for partitionName, partitionID := range ptm {
+					partition.Definitions = append(partition.Definitions, model.PartitionDefinition{
+						ID:   partitionID,
+						Name: model.CIStr{O: partitionName},
+					})
+				}
+			}
+		}
 		schemas[last].Tables = append(schemas[last].Tables, &model.TableInfo{
-			ID:   tidbTableID,
-			Name: model.CIStr{O: tableName},
+			ID:        tidbTableID,
+			Name:      model.CIStr{O: tableName},
+			Partition: partition,
 		})
 		return nil
 	})
