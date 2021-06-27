@@ -241,11 +241,7 @@ func (d *Dumper) Dump() (dumpErr error) {
 		summary.CollectFailureUnit("dump table data", err)
 		return errors.Trace(err)
 	}
-	fmt.Println("sleep for 1st time")
-	time.Sleep(10 * time.Second)
-	fmt.Println("sleep for 2nd time")
 	finishedRowsCounter.DeleteLabelValues("")
-	time.Sleep(time.Minute)
 	summary.CollectSuccessUnit("dump cost", countTotalTask(writers), time.Since(tableDataStartTime))
 
 	summary.SetSuccessStatus(true)
@@ -1220,7 +1216,7 @@ func (d *Dumper) renewSelectTableRegionFuncForLowerTiDB(tctx *tcontext.Context, 
 
 			key, err := hex.DecodeString(region.StartKey)
 			if err != nil {
-				d.L().Warn("invalid region start key", zap.Error(err), zap.String("key", region.StartKey))
+				d.L().Debug("invalid region start key", zap.Error(err), zap.String("key", region.StartKey))
 				continue
 			}
 			// Auto decode byte if needed.
@@ -1231,18 +1227,13 @@ func (d *Dumper) renewSelectTableRegionFuncForLowerTiDB(tctx *tcontext.Context, 
 			// Try to decode it as a record key.
 			tableID, handle, err := tablecodec.DecodeRecordKey(key)
 			if err != nil {
-				d.L().Warn("fail to decode region start key", zap.Error(err), zap.String("key", region.StartKey), zap.Int64("tableID", tableID))
+				d.L().Debug("fail to decode region start key", zap.Error(err), zap.String("key", region.StartKey), zap.Int64("tableID", tableID))
 				continue
 			}
-			//if tableID != table.Table.ID {
-			//	d.L().Warn("table id not consistent", zap.Error(err), zap.Int64("decoded tableID", tableID),
-			//		zap.Int64("recorded tableID", tableID))
-			//	continue
-			//}
 			if handle.IsInt() {
 				tableInfoMap[db][tbl] = append(tableInfoMap[db][tbl], handle.IntValue())
 			} else {
-				d.L().Warn("not an int handle", zap.Error(err), zap.Stringer("handle", handle))
+				d.L().Debug("not an int handle", zap.Error(err), zap.Stringer("handle", handle))
 			}
 		}
 	}
