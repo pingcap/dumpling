@@ -1011,6 +1011,27 @@ func GetPartitionNames(db *sql.Conn, schema, table string) (partitions []string,
 	return
 }
 
+// GetPartitionTableIDs get partition tableIDs. This method is tricky, but no better way is found.
+func GetPartitionTableIDs(db *sql.Conn, schema, table string) (partitions []string, err error) {
+	const (
+		showStatsHistogramsSQL   = "SHOW STATS_HISTOGRAMS"
+		selectStatsHistogramsSQL = "SELECT TABLE_ID,VERSION,DISTINCT_COUNT FROM mysql.stats_histograms;"
+	)
+	partitions = make([]string, 0)
+	var partitionName sql.NullString
+	err = simpleQuery(db, showStatsHistogramsSQL, func(rows *sql.Rows) error {
+		err := rows.Scan(&partitionName)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if partitionName.Valid {
+			partitions = append(partitions, partitionName.String)
+		}
+		return nil
+	})
+	return
+}
+
 func GetSelectedDBInfo(tctx *tcontext.Context, db *sql.Conn, tables map[string]map[string]struct{}) ([]*model.DBInfo, error) {
 	const tableIDSQL = "SELECT TABLE_SCHEMA,TABLE_NAME,TIDB_TABLE_ID FROM INFORMATION_SCHEMA.TABLES ORDER BY TABLE_SCHEMA"
 

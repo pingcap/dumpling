@@ -42,20 +42,18 @@ type Dumper struct {
 	extStore storage.ExternalStorage
 	dbHandle *sql.DB
 
-	tidbPDClientForGC             pd.Client
-	selectTiDBTableRegionFunc     func(tctx *tcontext.Context, conn *sql.Conn, dbName, tableName string) (pkFields []string, pkVals [][]string, err error)
-	selectTiDBPartitionRegionFunc func(tctx *tcontext.Context, conn *sql.Conn, dbName, tableName, partition string) (pkVals [][]string, err error)
+	tidbPDClientForGC         pd.Client
+	selectTiDBTableRegionFunc func(tctx *tcontext.Context, conn *sql.Conn, dbName, tableName string) (pkFields []string, pkVals [][]string, err error)
 }
 
 // NewDumper returns a new Dumper
 func NewDumper(ctx context.Context, conf *Config) (*Dumper, error) {
 	tctx, cancelFn := tcontext.Background().WithContext(ctx).WithCancel()
 	d := &Dumper{
-		tctx:                          tctx,
-		conf:                          conf,
-		cancelCtx:                     cancelFn,
-		selectTiDBTableRegionFunc:     selectTiDBTableRegion,
-		selectTiDBPartitionRegionFunc: selectTiDBPartitionRegion,
+		tctx:                      tctx,
+		conf:                      conf,
+		cancelCtx:                 cancelFn,
+		selectTiDBTableRegionFunc: selectTiDBTableRegion,
 	}
 	err := adjustConfig(conf,
 		registerTLSConfig,
@@ -243,6 +241,11 @@ func (d *Dumper) Dump() (dumpErr error) {
 		summary.CollectFailureUnit("dump table data", err)
 		return errors.Trace(err)
 	}
+	fmt.Println("sleep for 1st time")
+	time.Sleep(10 * time.Second)
+	fmt.Println("sleep for 2nd time")
+	finishedRowsCounter.DeleteLabelValues("")
+	time.Sleep(time.Minute)
 	summary.CollectSuccessUnit("dump cost", countTotalTask(writers), time.Since(tableDataStartTime))
 
 	summary.SetSuccessStatus(true)
@@ -600,7 +603,9 @@ func (d *Dumper) concurrentDumpTiDBTables(tctx *tcontext.Context, conn *sql.Conn
 		tctx.L().Debug("dumping TiDB tables with TABLE REGIONS",
 			zap.String("database", db), zap.String("table", tbl))
 		var partitions []string
-		partitions, err = GetPartitionNames(conn, db, tbl)
+		if d.conf.ServerInfo.ServerVersion.Compare(*gcSafePointVersion) >= 0 {
+			partitions, err = GetPartitionNames(conn, db, tbl)
+		}
 		if err == nil {
 			if len(partitions) == 0 {
 				handleColNames, handleVals, err = d.selectTiDBTableRegionFunc(tctx, conn, db, tbl)
@@ -630,7 +635,7 @@ func (d *Dumper) concurrentDumpTiDBPartitionTables(tctx *tcontext.Context, conn 
 	}
 	// cache handleVals here to calculate the total chunks
 	for i, partition := range partitions {
-		handleVals, err := d.selectTiDBPartitionRegionFunc(tctx, conn, db, tbl, partition)
+		handleVals, err := selectTiDBPartitionRegion(tctx, conn, db, tbl, partition)
 		if err != nil {
 			return err
 		}
@@ -1176,11 +1181,7 @@ func (d *Dumper) renewSelectTableRegionFuncForLowerTiDB(tctx *tcontext.Context, 
 		tctx.L().Debug("no need to build region info because server info mismatch")
 		return nil
 	}
-	const (
-		tableRegionSQL           = "SELECT REGION_ID,START_KEY,END_KEY FROM INFORMATION_SCHEMA.TIKV_REGION_STATUS ORDER BY START_KEY;"
-		showStatsHistogramsSQL   = "SHOW STATS_HISTOGRAMS"
-		selectStatsHistogramsSQL = "SELECT TABLE_ID,VERSION,DISTINCT_COUNT from mysql.stats_histograms;"
-	)
+	const tableRegionSQL = "SELECT REGION_ID,START_KEY,END_KEY FROM INFORMATION_SCHEMA.TIKV_REGION_STATUS ORDER BY START_KEY;"
 	var (
 		regionID         int64
 		startKey, endKey string
@@ -1230,14 +1231,14 @@ func (d *Dumper) renewSelectTableRegionFuncForLowerTiDB(tctx *tcontext.Context, 
 			// Try to decode it as a record key.
 			tableID, handle, err := tablecodec.DecodeRecordKey(key)
 			if err != nil {
-				d.L().Warn("fail to decode region start key", zap.Error(err), zap.String("key", region.StartKey))
+				d.L().Warn("fail to decode region start key", zap.Error(err), zap.String("key", region.StartKey), zap.Int64("tableID", tableID))
 				continue
 			}
-			if tableID != table.Table.ID {
-				d.L().Warn("table id not consistent", zap.Error(err), zap.Int64("decoded tableID", tableID),
-					zap.Int64("recorded tableID", tableID))
-				continue
-			}
+			//if tableID != table.Table.ID {
+			//	d.L().Warn("table id not consistent", zap.Error(err), zap.Int64("decoded tableID", tableID),
+			//		zap.Int64("recorded tableID", tableID))
+			//	continue
+			//}
 			if handle.IsInt() {
 				tableInfoMap[db][tbl] = append(tableInfoMap[db][tbl], handle.IntValue())
 			} else {
@@ -1266,9 +1267,6 @@ func (d *Dumper) renewSelectTableRegionFuncForLowerTiDB(tctx *tcontext.Context, 
 			}
 		}
 		return
-	}
-	d.selectTiDBPartitionRegionFunc = func(tctx *tcontext.Context, conn *sql.Conn, dbName, tableName, partition string) (pkVals [][]string, err error) {
-		return nil, nil
 	}
 
 	return nil
