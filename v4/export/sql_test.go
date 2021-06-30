@@ -9,6 +9,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -1192,7 +1194,8 @@ func buildMockNewRows(mock sqlmock.Sqlmock, columns []string, driverValues [][]d
 }
 
 func readRegionCsvDriverValues(c *C) [][]driver.Value {
-	content, err := os.ReadFile("./region_results.csv")
+	_, filename, _, _ := runtime.Caller(0)
+	content, err := os.ReadFile(path.Join(path.Dir(filename), "region_results.csv"))
 	c.Assert(err, IsNil)
 	lines := strings.Split(string(content), "\n")
 	values := make([][]driver.Value, 0, len(lines))
@@ -1448,11 +1451,9 @@ func (s *testSQLSuite) TestBuildVersion3RegionQueries(c *C) {
 		}
 
 		if testCase.hasTiDBRowID {
-			c.Log("mock succeed to select _tidb_rowid")
 			mock.ExpectExec("SELECT _tidb_rowid").
 				WillReturnResult(sqlmock.NewResult(0, 0))
 		} else {
-			c.Log("mock fail to select _tidb_rowid")
 			mock.ExpectExec("SELECT _tidb_rowid").
 				WillReturnError(&mysql.MyError{
 					Code:    mysql.ER_BAD_FIELD_ERROR,
