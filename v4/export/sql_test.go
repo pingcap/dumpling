@@ -8,6 +8,8 @@ import (
 	"database/sql/driver"
 	"errors"
 	"fmt"
+	"os"
+	"strconv"
 	"strings"
 
 	tcontext "github.com/pingcap/dumpling/v4/context"
@@ -420,9 +422,10 @@ func (s *testSQLSuite) TestBuildTableSampleQueries(c *C) {
 	tctx, cancel := tcontext.Background().WithLogger(appLogger).WithCancel()
 
 	d := &Dumper{
-		tctx:      tctx,
-		conf:      DefaultConfig(),
-		cancelCtx: cancel,
+		tctx:                      tctx,
+		conf:                      DefaultConfig(),
+		cancelCtx:                 cancel,
+		selectTiDBTableRegionFunc: selectTiDBTableRegion,
 	}
 	d.conf.ServerInfo = ServerInfo{
 		HasTiKV:       true,
@@ -797,9 +800,10 @@ func (s *testSQLSuite) TestBuildRegionQueriesWithoutPartition(c *C) {
 	tctx, cancel := tcontext.Background().WithLogger(appLogger).WithCancel()
 
 	d := &Dumper{
-		tctx:      tctx,
-		conf:      DefaultConfig(),
-		cancelCtx: cancel,
+		tctx:                      tctx,
+		conf:                      DefaultConfig(),
+		cancelCtx:                 cancel,
+		selectTiDBTableRegionFunc: selectTiDBTableRegion,
 	}
 	d.conf.ServerInfo = ServerInfo{
 		HasTiKV:       true,
@@ -964,9 +968,10 @@ func (s *testSQLSuite) TestBuildRegionQueriesWithPartitions(c *C) {
 	tctx, cancel := tcontext.Background().WithLogger(appLogger).WithCancel()
 
 	d := &Dumper{
-		tctx:      tctx,
-		conf:      DefaultConfig(),
-		cancelCtx: cancel,
+		tctx:                      tctx,
+		conf:                      DefaultConfig(),
+		cancelCtx:                 cancel,
+		selectTiDBTableRegionFunc: selectTiDBTableRegion,
 	}
 	d.conf.ServerInfo = ServerInfo{
 		HasTiKV:       true,
@@ -1174,6 +1179,322 @@ func (s *testSQLSuite) TestBuildRegionQueriesWithPartitions(c *C) {
 				c.Assert(data.query, Equals, query)
 				chunkIdx++
 			}
+		}
+	}
+}
+
+func buildMockNewRows(mock sqlmock.Sqlmock, columns []string, driverValues [][]driver.Value) *sqlmock.Rows {
+	rows := mock.NewRows(columns)
+	for _, driverValue := range driverValues {
+		rows.AddRow(driverValue...)
+	}
+	return rows
+}
+
+func readRegionCsvDriverValues(c *C) [][]driver.Value {
+	content, err := os.ReadFile("./region_results.csv")
+	c.Assert(err, IsNil)
+	lines := strings.Split(string(content), "\n")
+	values := make([][]driver.Value, 0, len(lines))
+	for _, line := range lines {
+		results := strings.Split(line, ",")
+		if len(results) != 3 {
+			continue
+		}
+		regionID, err := strconv.Atoi(results[0])
+		c.Assert(err, IsNil)
+		startKey := strings.Trim(results[1], `"`)
+		endKey := strings.Trim(results[2], `"`)
+		values = append(values, []driver.Value{regionID, startKey, endKey})
+	}
+	return values
+}
+
+func (s *testSQLSuite) TestBuildVersion3RegionQueries(c *C) {
+	db, mock, err := sqlmock.New()
+	c.Assert(err, IsNil)
+	defer db.Close()
+	conn, err := db.Conn(context.Background())
+	c.Assert(err, IsNil)
+	tctx, cancel := tcontext.Background().WithLogger(appLogger).WithCancel()
+
+	conf := DefaultConfig()
+	conf.ServerInfo = ServerInfo{
+		HasTiKV:       true,
+		ServerType:    ServerTypeTiDB,
+		ServerVersion: decodeRegionVersion,
+	}
+	database := "test"
+	conf.Tables = DatabaseTables{
+		database: []*TableInfo{
+			{"t1", TableTypeBase},
+			{"t2", TableTypeBase},
+			{"t3", TableTypeBase},
+			{"t4", TableTypeBase},
+		},
+	}
+	d := &Dumper{
+		tctx:                      tctx,
+		conf:                      conf,
+		cancelCtx:                 cancel,
+		selectTiDBTableRegionFunc: selectTiDBTableRegion,
+	}
+	showStatsHistograms := buildMockNewRows(mock, []string{"Db_name", "Table_name", "Partition_name", "Column_name", "Is_index", "Update_time", "Distinct_count", "Null_count", "Avg_col_size", "Correlation"},
+		[][]driver.Value{
+			{"test", "t2", "p0", "a", 0, "2021-06-27 17:43:51", 1999999, 0, 8, 0},
+			{"test", "t2", "p1", "a", 0, "2021-06-22 20:30:16", 1260000, 0, 8, 0},
+			{"test", "t2", "p2", "a", 0, "2021-06-22 20:32:16", 1230000, 0, 8, 0},
+			{"test", "t2", "p3", "a", 0, "2021-06-22 20:36:19", 2000000, 0, 8, 0},
+			{"test", "t1", "", "a", 0, "2021-04-22 15:23:58", 7100000, 0, 8, 0},
+			{"test", "t3", "", "PRIMARY", 1, "2021-06-27 22:08:43", 4980000, 0, 0, 0},
+			{"test", "t4", "p0", "PRIMARY", 1, "2021-06-28 10:54:06", 2000000, 0, 0, 0},
+			{"test", "t4", "p1", "PRIMARY", 1, "2021-06-28 10:55:04", 1300000, 0, 0, 0},
+			{"test", "t4", "p2", "PRIMARY", 1, "2021-06-28 10:57:05", 1830000, 0, 0, 0},
+			{"test", "t4", "p3", "PRIMARY", 1, "2021-06-28 10:59:04", 2000000, 0, 0, 0},
+			{"mysql", "global_priv", "", "PRIMARY", 1, "2021-06-04 20:39:44", 0, 0, 0, 0},
+		})
+	selectMySQLStatsHistograms := buildMockNewRows(mock, []string{"TABLE_ID", "VERSION", "DISTINCT_COUNT"},
+		[][]driver.Value{
+			{15, 0, 0},
+			{15, 0, 0},
+			{15, 0, 0},
+			{41, 424431121587240961, 7100000},
+			{41, 424431121600348163, 7100000},
+			{41, 424431121600348166, 7100000},
+			{41, 424431121613455362, 7100000},
+			{27, 0, 0},
+			{27, 0, 0},
+			{25, 0, 0},
+			{25, 0, 0},
+			{2098, 425410004549894148, 0},
+			{2101, 425410005336064004, 0},
+			{2101, 425410005336064004, 0},
+			{2101, 425410005336064004, 0},
+			{2101, 425410005336064004, 0},
+			{2128, 425817527887331330, 1991680},
+			{2128, 425817527912497153, 1991680},
+			{2128, 425817527938973698, 1991680},
+			{2129, 425817542815907841, 1260000},
+			{2129, 425817542829539330, 1237120},
+			{2129, 425817542842646529, 1237120},
+			{2129, 425817542856278018, 1237120},
+			{2130, 425817574444367873, 1230000},
+			{2130, 425817574444367875, 1216128},
+			{2130, 425817574483689474, 1216128},
+			{2130, 425817574550274050, 1216128},
+			{2131, 425817638001442817, 2000000},
+			{2131, 425817638001442819, 1959424},
+			{2131, 425817638027395074, 1959424},
+			{2131, 425817638027395076, 1959424},
+			{2128, 425928171654742033, 1999999},
+			{2136, 425932336181018625, 4860000},
+			{2136, 425932336194650114, 4860000},
+			{2136, 425932336207757314, 4860000},
+			{2136, 425932336220864514, 4860000},
+			{2136, 425932337688608769, 4980000},
+			{2139, 425944375634427905, 1991680},
+			{2139, 425944375648059394, 1991680},
+			{2139, 425944375648059396, 1991680},
+			{2139, 425944375660904450, 1991680},
+			{2139, 425944376067489793, 2000000},
+			{2140, 425944390799720449, 1246336},
+			{2140, 425944390799720451, 1246336},
+			{2140, 425944390812303362, 1246336},
+			{2140, 425944390838255618, 1246336},
+			{2140, 425944391139983361, 1300000},
+			{2141, 425944422492405761, 1780000},
+			{2141, 425944422504988674, 1780000},
+			{2141, 425944422504988676, 1780000},
+			{2141, 425944422504988678, 1780000},
+			{2141, 425944422898991105, 1830000},
+			{2142, 425944453844828161, 1959424},
+			{2142, 425944453857935362, 1959424},
+			{2142, 425944453857935364, 1959424},
+			{2142, 425944453869993986, 1959424},
+			{2142, 425944454224150529, 2000000},
+		})
+	selectRegionStatusHistograms := buildMockNewRows(mock, []string{"REGION_ID", "START_KEY", "END_KEY"}, readRegionCsvDriverValues(c))
+	selectInformationSchemaTables := buildMockNewRows(mock, []string{"TABLE_SCHEMA", "TABLE_NAME", "TIDB_TABLE_ID"},
+		[][]driver.Value{
+			{"mysql", "expr_pushdown_blacklist", 39},
+			{"mysql", "user", 5},
+			{"mysql", "db", 7},
+			{"mysql", "tables_priv", 9},
+			{"mysql", "stats_top_n", 37},
+			{"mysql", "columns_priv", 11},
+			{"mysql", "bind_info", 35},
+			{"mysql", "default_roles", 33},
+			{"mysql", "role_edges", 31},
+			{"mysql", "stats_feedback", 29},
+			{"mysql", "gc_delete_range_done", 27},
+			{"mysql", "gc_delete_range", 25},
+			{"mysql", "help_topic", 17},
+			{"mysql", "global_priv", 2101},
+			{"mysql", "stats_histograms", 21},
+			{"mysql", "opt_rule_blacklist", 2098},
+			{"mysql", "stats_meta", 19},
+			{"mysql", "stats_buckets", 23},
+			{"mysql", "tidb", 15},
+			{"mysql", "GLOBAL_VARIABLES", 13},
+			{"test", "t2", 2127},
+			{"test", "t1", 41},
+			{"test", "t3", 2136},
+			{"test", "t4", 2138},
+		})
+	mock.ExpectQuery("SHOW STATS_HISTOGRAMS").
+		WillReturnRows(showStatsHistograms)
+	mock.ExpectQuery("SELECT TABLE_ID,VERSION,DISTINCT_COUNT FROM mysql.stats_histograms;").
+		WillReturnRows(selectMySQLStatsHistograms)
+	mock.ExpectQuery("SELECT TABLE_SCHEMA,TABLE_NAME,TIDB_TABLE_ID FROM INFORMATION_SCHEMA.TABLES ORDER BY TABLE_SCHEMA").
+		WillReturnRows(selectInformationSchemaTables)
+	mock.ExpectQuery("SELECT REGION_ID,START_KEY,END_KEY FROM INFORMATION_SCHEMA.TIKV_REGION_STATUS ORDER BY START_KEY;").
+		WillReturnRows(selectRegionStatusHistograms)
+
+	c.Assert(d.renewSelectTableRegionFuncForLowerTiDB(tctx, conn), IsNil)
+
+	testCases := []struct {
+		tableName            string
+		handleColNames       []string
+		handleColTypes       []string
+		expectedWhereClauses []string
+		hasTiDBRowID         bool
+		dumpWholeTable       bool
+	}{
+		{
+			"t1",
+			[]string{"a"},
+			[]string{"int"},
+			[]string{
+				"`a`<960001",
+				"`a`>=960001 and `a`<1920001",
+				"`a`>=1920001 and `a`<2880001",
+				"`a`>=2880001 and `a`<3840001",
+				"`a`>=3840001 and `a`<4800001",
+				"`a`>=4800001 and `a`<5760001",
+				"`a`>=5760001 and `a`<6720001",
+				"`a`>=6720001",
+			},
+			false,
+			false,
+		},
+		{
+			"t2",
+			[]string{"a"},
+			[]string{"int"},
+			[]string{
+				"`a`<960001",
+				"`a`>=960001 and `a`<2960001",
+				"`a`>=2960001 and `a`<4960001",
+				"`a`>=4960001 and `a`<6960001",
+				"`a`>=6960001",
+			},
+			false,
+			false,
+		},
+		{
+			"t3",
+			[]string{"_tidb_rowid"},
+			[]string{"int"},
+			[]string{
+				"`_tidb_rowid`<81584",
+				"`_tidb_rowid`>=81584 and `_tidb_rowid`<1041584",
+				"`_tidb_rowid`>=1041584 and `_tidb_rowid`<2001584",
+				"`_tidb_rowid`>=2001584 and `_tidb_rowid`<2961584",
+				"`_tidb_rowid`>=2961584 and `_tidb_rowid`<3921584",
+				"`_tidb_rowid`>=3921584 and `_tidb_rowid`<4881584",
+				"`_tidb_rowid`>=4881584 and `_tidb_rowid`<5841584",
+				"`_tidb_rowid`>=5841584 and `_tidb_rowid`<6801584",
+				"`_tidb_rowid`>=6801584",
+			},
+			true,
+			false,
+		},
+		{
+			"t4",
+			[]string{"_tidb_rowid"},
+			[]string{"int"},
+			[]string{
+				"`_tidb_rowid`<180001",
+				"`_tidb_rowid`>=180001 and `_tidb_rowid`<1140001",
+				"`_tidb_rowid`>=1140001 and `_tidb_rowid`<2200001",
+				"`_tidb_rowid`>=2200001 and `_tidb_rowid`<3160001",
+				"`_tidb_rowid`>=3160001 and `_tidb_rowid`<4160001",
+				"`_tidb_rowid`>=4160001 and `_tidb_rowid`<5120001",
+				"`_tidb_rowid`>=5120001 and `_tidb_rowid`<6170001",
+				"`_tidb_rowid`>=6170001 and `_tidb_rowid`<7130001",
+				"`_tidb_rowid`>=7130001",
+			},
+			true,
+			false,
+		},
+	}
+
+	for i, testCase := range testCases {
+		c.Log(fmt.Sprintf("case #%d", i))
+		table := testCase.tableName
+		handleColNames := testCase.handleColNames
+		handleColTypes := testCase.handleColTypes
+
+		// Test build tasks through table region
+		taskChan := make(chan Task, 128)
+		quotaCols := make([]string, 0, len(handleColNames))
+		for _, col := range quotaCols {
+			quotaCols = append(quotaCols, wrapBackTicks(col))
+		}
+		selectFields := strings.Join(quotaCols, ",")
+		meta := &tableMeta{
+			database:      database,
+			table:         table,
+			selectedField: selectFields,
+			specCmts: []string{
+				"/*!40101 SET NAMES binary*/;",
+			},
+		}
+
+		if testCase.hasTiDBRowID {
+			mock.ExpectExec(fmt.Sprintf("SELECT _tidb_rowid from `%s`.`%s` LIMIT 0", database, table)).
+				WillReturnResult(sqlmock.NewResult(0, 0))
+		} else {
+			mock.ExpectExec(fmt.Sprintf("SELECT _tidb_rowid from `%s`.`%s` LIMIT 0", database, table)).
+				WillReturnError(&mysql.MyError{
+					Code:    mysql.ER_BAD_FIELD_ERROR,
+					State:   "42S22",
+					Message: "Unknown column '_tidb_rowid' in 'field list'",
+				})
+			rows := sqlmock.NewRows([]string{"COLUMN_NAME", "DATA_TYPE"})
+			for i := range handleColNames {
+				rows.AddRow(handleColNames[i], handleColTypes[i])
+			}
+			mock.ExpectQuery("SELECT c.COLUMN_NAME, DATA_TYPE FROM").WithArgs(database, table).WillReturnRows(rows)
+		}
+
+		rows := sqlmock.NewRows([]string{"COLUMN_NAME", "EXTRA"})
+		for _, handleCol := range handleColNames {
+			rows.AddRow(handleCol, "")
+		}
+		mock.ExpectQuery("SELECT COLUMN_NAME,EXTRA FROM INFORMATION_SCHEMA.COLUMNS").WithArgs(database, table).
+			WillReturnRows(rows)
+		// special case, dump whole table
+		if testCase.dumpWholeTable {
+			mock.ExpectExec(fmt.Sprintf("SELECT _tidb_rowid from `%s`.`%s` LIMIT 0", database, table)).
+				WillReturnResult(sqlmock.NewResult(0, 0))
+		}
+
+		orderByClause := buildOrderByClauseString(handleColNames)
+		c.Assert(d.concurrentDumpTable(tctx, conn, meta, taskChan), IsNil)
+		c.Assert(mock.ExpectationsWereMet(), IsNil)
+
+		chunkIdx := 0
+		for _, w := range testCase.expectedWhereClauses {
+			query := buildSelectQuery(database, table, "*", "", buildWhereCondition(d.conf, w), orderByClause)
+			task := <-taskChan
+			taskTableData, ok := task.(*TaskTableData)
+			c.Assert(ok, IsTrue)
+			c.Assert(taskTableData.ChunkIndex, Equals, chunkIdx)
+			data, ok := taskTableData.Data.(*tableData)
+			c.Assert(ok, IsTrue)
+			c.Assert(data.query, Equals, query)
+			chunkIdx++
 		}
 	}
 }

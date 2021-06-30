@@ -222,10 +222,10 @@ func (d *Dumper) Dump() (dumpErr error) {
 	})
 
 	// get estimate total count
-	if err := d.getEstimateTotalRowsCount(tctx, metaConn); err != nil {
+	if err = d.getEstimateTotalRowsCount(tctx, metaConn); err != nil {
 		tctx.L().Error("fail to get estimate total count", zap.Error(err))
 	}
-	if err := d.renewSelectTableRegionFuncForLowerTiDB(tctx, metaConn); err != nil {
+	if err = d.renewSelectTableRegionFuncForLowerTiDB(tctx, metaConn); err != nil {
 		tctx.L().Error("fail to get estimate total count", zap.Error(err))
 	}
 
@@ -1174,31 +1174,14 @@ func (d *Dumper) renewSelectTableRegionFuncForLowerTiDB(tctx *tcontext.Context, 
 	if !(conf.ServerInfo.ServerType == ServerTypeTiDB && conf.ServerInfo.ServerVersion != nil && conf.ServerInfo.HasTiKV &&
 		conf.ServerInfo.ServerVersion.Compare(*decodeRegionVersion) >= 0 &&
 		conf.ServerInfo.ServerVersion.Compare(*gcSafePointVersion) < 0) {
-		tctx.L().Debug("no need to build region info because server info mismatch")
+		tctx.L().Debug("no need to build region info because database is not TiDB 3.x")
 		return nil
 	}
-	const tableRegionSQL = "SELECT REGION_ID,START_KEY,END_KEY FROM INFORMATION_SCHEMA.TIKV_REGION_STATUS ORDER BY START_KEY;"
-	var (
-		regionID         int64
-		startKey, endKey string
-	)
-	regionsInfo := &helper.RegionsInfo{Regions: make([]helper.RegionInfo, 0, len(conf.Tables))}
-	dbInfos, err := GetSelectedDBInfo(tctx, conn, DatabaseTablesToMap(conf.Tables))
+	dbInfos, err := GetDBInfo(conn, DatabaseTablesToMap(conf.Tables))
 	if err != nil {
 		return errors.Trace(err)
 	}
-	err = simpleQuery(conn, tableRegionSQL, func(rows *sql.Rows) error {
-		err = rows.Scan(&regionID, &startKey, &endKey)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		regionsInfo.Regions = append(regionsInfo.Regions, helper.RegionInfo{
-			ID:       regionID,
-			StartKey: startKey,
-			EndKey:   endKey,
-		})
-		return nil
-	})
+	regionsInfo, err := GetRegionInfos(conn)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -1242,8 +1225,7 @@ func (d *Dumper) renewSelectTableRegionFuncForLowerTiDB(tctx *tcontext.Context, 
 			sort.Sort(byIntValue(tbInfo))
 		}
 	}
-	// select table_id,version,distinct_count from mysql.stats_histograms;
-	// show stats_histograms;
+
 	d.selectTiDBTableRegionFunc = func(tctx *tcontext.Context, conn *sql.Conn, dbName, tableName string) (pkFields []string, pkVals [][]string, err error) {
 		pkFields, _, err = selectTiDBRowKeyFields(conn, dbName, tableName, checkTiDBTableRegionPkFields)
 		if err != nil {
