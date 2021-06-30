@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/pingcap/parser/mysql"
+	"github.com/pingcap/tidb/store/helper"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tidb/types"
 
@@ -1061,7 +1062,9 @@ func GetPartitionNames(db *sql.Conn, schema, table string) (partitions []string,
 	return
 }
 
-// GetPartitionTableIDs get partition tableIDs. This method is tricky, but no better way is found.
+// GetPartitionTableIDs get partition tableIDs through histograms.
+// This method is tricky, but no better way is found.
+// TiDB v3.0.0's information_schema.partition table doesn't have partition name or partition id info
 // return (dbName -> tbName -> partitionName -> partitionID, error)
 func GetPartitionTableIDs(db *sql.Conn, tables map[string]map[string]struct{}) (map[string]map[string]map[string]int64, error) {
 	const (
@@ -1074,6 +1077,9 @@ func GetPartitionTableIDs(db *sql.Conn, tables map[string]map[string]struct{}) (
 		return nil, errors.Annotatef(err, "sql: %s", showStatsHistogramsSQL)
 	}
 	results, err := GetSpecifiedColumnValuesAndClose(rows, "DB_NAME", "TABLE_NAME", "PARTITION_NAME", "UPDATE_TIME", "DISTINCT_COUNT")
+	if err != nil {
+		return nil, errors.Annotatef(err, "sql: %s", showStatsHistogramsSQL)
+	}
 	type partitionInfo struct {
 		dbName, tbName, partitionName string
 	}
@@ -1105,9 +1111,9 @@ func GetPartitionTableIDs(db *sql.Conn, tables map[string]map[string]struct{}) (
 			version       uint64
 			distinctCount string
 		)
-		err := rows.Scan(&tableID, &version, &distinctCount)
-		if err != nil {
-			return errors.Trace(err)
+		err2 := rows.Scan(&tableID, &version, &distinctCount)
+		if err2 != nil {
+			return errors.Trace(err2)
 		}
 		t := time.Unix(0, oracle.ExtractPhysical(version)*int64(time.Millisecond))
 		tStr := types.NewTime(types.FromGoTime(t), mysql.TypeDatetime, 0).String()
@@ -1128,7 +1134,9 @@ func GetPartitionTableIDs(db *sql.Conn, tables map[string]map[string]struct{}) (
 	return partitionIDs, err
 }
 
-func GetSelectedDBInfo(tctx *tcontext.Context, db *sql.Conn, tables map[string]map[string]struct{}) ([]*model.DBInfo, error) {
+// GetDBInfo get model.DBInfos from database sql interface.
+// We need table_id to check whether a region belongs to this table
+func GetDBInfo(db *sql.Conn, tables map[string]map[string]struct{}) ([]*model.DBInfo, error) {
 	const tableIDSQL = "SELECT TABLE_SCHEMA,TABLE_NAME,TIDB_TABLE_ID FROM INFORMATION_SCHEMA.TABLES ORDER BY TABLE_SCHEMA"
 
 	schemas := make([]*model.DBInfo, 0, len(tables))
@@ -1141,9 +1149,9 @@ func GetSelectedDBInfo(tctx *tcontext.Context, db *sql.Conn, tables map[string]m
 		return nil, err
 	}
 	err = simpleQuery(db, tableIDSQL, func(rows *sql.Rows) error {
-		err := rows.Scan(&tableSchema, &tableName, &tidbTableID)
-		if err != nil {
-			return errors.Trace(err)
+		err2 := rows.Scan(&tableSchema, &tableName, &tidbTableID)
+		if err2 != nil {
+			return errors.Trace(err2)
 		}
 		if tbm, ok := tables[tableSchema]; !ok {
 			return nil
@@ -1178,4 +1186,28 @@ func GetSelectedDBInfo(tctx *tcontext.Context, db *sql.Conn, tables map[string]m
 		return nil
 	})
 	return schemas, err
+}
+
+// GetRegionInfos get region info including regionID, start key, end key from database sql interface.
+// start key, end key includes information to help split table
+func GetRegionInfos(db *sql.Conn) (*helper.RegionsInfo, error) {
+	const tableRegionSQL = "SELECT REGION_ID,START_KEY,END_KEY FROM INFORMATION_SCHEMA.TIKV_REGION_STATUS ORDER BY START_KEY;"
+	var (
+		regionID         int64
+		startKey, endKey string
+	)
+	regionsInfo := &helper.RegionsInfo{Regions: make([]helper.RegionInfo, 0)}
+	err := simpleQuery(db, tableRegionSQL, func(rows *sql.Rows) error {
+		err := rows.Scan(&regionID, &startKey, &endKey)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		regionsInfo.Regions = append(regionsInfo.Regions, helper.RegionInfo{
+			ID:       regionID,
+			StartKey: startKey,
+			EndKey:   endKey,
+		})
+		return nil
+	})
+	return regionsInfo, err
 }
