@@ -1448,9 +1448,11 @@ func (s *testSQLSuite) TestBuildVersion3RegionQueries(c *C) {
 		}
 
 		if testCase.hasTiDBRowID {
+			c.Log("mock succeed to select _tidb_rowid")
 			mock.ExpectExec("SELECT _tidb_rowid").
 				WillReturnResult(sqlmock.NewResult(0, 0))
 		} else {
+			c.Log("mock fail to select _tidb_rowid")
 			mock.ExpectExec("SELECT _tidb_rowid").
 				WillReturnError(&mysql.MyError{
 					Code:    mysql.ER_BAD_FIELD_ERROR,
@@ -1472,7 +1474,9 @@ func (s *testSQLSuite) TestBuildVersion3RegionQueries(c *C) {
 			WillReturnRows(rows)
 
 		orderByClause := buildOrderByClauseString(handleColNames)
-		c.Assert(d.concurrentDumpTable(tctx, conn, meta, taskChan), IsNil)
+		err = d.concurrentDumpTable(tctx, conn, meta, taskChan)
+		c.Log(err)
+		c.Assert(err, IsNil)
 		c.Assert(mock.ExpectationsWereMet(), IsNil)
 
 		chunkIdx := 0
