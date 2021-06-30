@@ -1226,6 +1226,7 @@ func (d *Dumper) renewSelectTableRegionFuncForLowerTiDB(tctx *tcontext.Context, 
 		}
 	}
 
+	fmt.Printf("tableInfoMap: %+v\n", tableInfoMap)
 	d.selectTiDBTableRegionFunc = func(tctx *tcontext.Context, conn *sql.Conn, dbName, tableName string) (pkFields []string, pkVals [][]string, err error) {
 		pkFields, _, err = selectTiDBRowKeyFields(conn, dbName, tableName, checkTiDBTableRegionPkFields)
 		if err != nil {
