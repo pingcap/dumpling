@@ -1351,6 +1351,7 @@ func (s *testSQLSuite) TestBuildVersion3RegionQueries(c *C) {
 		WillReturnRows(selectRegionStatusHistograms)
 
 	c.Assert(d.renewSelectTableRegionFuncForLowerTiDB(tctx, conn), IsNil)
+	c.Assert(mock.ExpectationsWereMet(), IsNil)
 
 	testCases := []struct {
 		tableName            string
@@ -1447,10 +1448,10 @@ func (s *testSQLSuite) TestBuildVersion3RegionQueries(c *C) {
 		}
 
 		if testCase.hasTiDBRowID {
-			mock.ExpectExec(fmt.Sprintf("SELECT _tidb_rowid from `%s`.`%s` LIMIT 0", database, table)).
+			mock.ExpectExec("SELECT _tidb_rowid").
 				WillReturnResult(sqlmock.NewResult(0, 0))
 		} else {
-			mock.ExpectExec(fmt.Sprintf("SELECT _tidb_rowid from `%s`.`%s` LIMIT 0", database, table)).
+			mock.ExpectExec("SELECT _tidb_rowid").
 				WillReturnError(&mysql.MyError{
 					Code:    mysql.ER_BAD_FIELD_ERROR,
 					State:   "42S22",
