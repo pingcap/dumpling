@@ -1196,10 +1196,13 @@ func buildMockNewRows(mock sqlmock.Sqlmock, columns []string, driverValues [][]d
 func readRegionCsvDriverValues(c *C) [][]driver.Value {
 	// nolint: dogsled
 	_, filename, _, _ := runtime.Caller(0)
-	content, err := os.ReadFile(path.Join(path.Dir(filename), "region_results.csv"))
+	csvFilename := path.Join(path.Dir(filename), "region_results.csv")
+	c.Log("csvFileName:", csvFilename)
+	content, err := os.ReadFile(csvFilename)
 	c.Assert(err, IsNil)
 	lines := strings.Split(string(content), "\n")
 	values := make([][]driver.Value, 0, len(lines))
+	c.Log("lines:", lines)
 	for _, line := range lines {
 		results := strings.Split(line, ",")
 		if len(results) != 3 {
