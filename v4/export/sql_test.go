@@ -1358,7 +1358,6 @@ func (s *testSQLSuite) TestBuildVersion3RegionQueries(c *C) {
 		handleColTypes       []string
 		expectedWhereClauses []string
 		hasTiDBRowID         bool
-		dumpWholeTable       bool
 	}{
 		{
 			"t1",
@@ -1375,7 +1374,6 @@ func (s *testSQLSuite) TestBuildVersion3RegionQueries(c *C) {
 				"`a`>=6720001",
 			},
 			false,
-			false,
 		},
 		{
 			"t2",
@@ -1388,7 +1386,6 @@ func (s *testSQLSuite) TestBuildVersion3RegionQueries(c *C) {
 				"`a`>=4960001 and `a`<6960001",
 				"`a`>=6960001",
 			},
-			false,
 			false,
 		},
 		{
@@ -1407,7 +1404,6 @@ func (s *testSQLSuite) TestBuildVersion3RegionQueries(c *C) {
 				"`_tidb_rowid`>=6801584",
 			},
 			true,
-			false,
 		},
 		{
 			"t4",
@@ -1425,7 +1421,6 @@ func (s *testSQLSuite) TestBuildVersion3RegionQueries(c *C) {
 				"`_tidb_rowid`>=7130001",
 			},
 			true,
-			false,
 		},
 	}
 
@@ -1474,11 +1469,6 @@ func (s *testSQLSuite) TestBuildVersion3RegionQueries(c *C) {
 		}
 		mock.ExpectQuery("SELECT COLUMN_NAME,EXTRA FROM INFORMATION_SCHEMA.COLUMNS").WithArgs(database, table).
 			WillReturnRows(rows)
-		// special case, dump whole table
-		if testCase.dumpWholeTable {
-			mock.ExpectExec(fmt.Sprintf("SELECT _tidb_rowid from `%s`.`%s` LIMIT 0", database, table)).
-				WillReturnResult(sqlmock.NewResult(0, 0))
-		}
 
 		orderByClause := buildOrderByClauseString(handleColNames)
 		c.Assert(d.concurrentDumpTable(tctx, conn, meta, taskChan), IsNil)

@@ -561,7 +561,7 @@ const (
 )
 
 var (
-	decodeRegionVersion = semver.New("3.0.0-dirty")
+	decodeRegionVersion = semver.New("3.0.0")
 	gcSafePointVersion  = semver.New("4.0.0")
 	tableSampleVersion  = semver.New("5.0.0-nightly")
 )
