@@ -446,13 +446,10 @@ func (d *Dumper) concurrentDumpTable(tctx *tcontext.Context, conn *sql.Conn, met
 		return d.concurrentDumpTiDBTables(tctx, conn, meta, taskChan)
 	}
 	field, err := pickupPossibleField(db, tbl, conn, conf)
-	if err != nil {
-		return err
-	}
-	if field == "" {
+	if err != nil || field == "" {
 		// skip split chunk logic if not found proper field
 		tctx.L().Warn("fallback to sequential dump due to no proper field",
-			zap.String("database", db), zap.String("table", tbl))
+			zap.String("database", db), zap.String("table", tbl), zap.Error(err))
 		return d.dumpWholeTableDirectly(tctx, conn, meta, taskChan, "", 0, 1)
 	}
 
