@@ -1475,7 +1475,7 @@ func (s *testSQLSuite) TestBuildVersion3RegionQueries(c *C) {
 
 		orderByClause := buildOrderByClauseString(handleColNames)
 		err = d.concurrentDumpTable(tctx, conn, meta, taskChan)
-		c.Log(err)
+		fmt.Printf("%+v\n", err)
 		c.Assert(err, IsNil)
 		c.Assert(mock.ExpectationsWereMet(), IsNil)
 
