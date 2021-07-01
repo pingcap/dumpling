@@ -1185,8 +1185,14 @@ func (d *Dumper) renewSelectTableRegionFuncForLowerTiDB(tctx *tcontext.Context, 
 	if err != nil {
 		return errors.Trace(err)
 	}
+	fmt.Printf("len(dbInfos): %+v\n", len(dbInfos))
+	fmt.Printf("dbInfos: %+v\n", dbInfos)
+	fmt.Printf("len(regionsInfo): %+v\n", len(regionsInfo.Regions))
+	fmt.Printf("regionsInfo: %+v\n", regionsInfo.Regions)
 	tikvHelper := &helper.Helper{}
 	tableInfos := tikvHelper.GetRegionsTableInfo(regionsInfo, dbInfos)
+	fmt.Printf("len(tableInfos): %+v\n", len(tableInfos))
+	fmt.Printf("tableInfos: %+v\n", tableInfos)
 
 	tableInfoMap := make(map[string]map[string][]int64, len(conf.Tables))
 	for _, region := range regionsInfo.Regions {
