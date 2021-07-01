@@ -1244,6 +1244,7 @@ func (s *testSQLSuite) TestBuildVersion3RegionQueries(c *C) {
 		tctx:                      tctx,
 		conf:                      conf,
 		cancelCtx:                 cancel,
+		oldDBHandle:               db,
 		selectTiDBTableRegionFunc: selectTiDBTableRegion,
 	}
 	showStatsHistograms := buildMockNewRows(mock, []string{"Db_name", "Table_name", "Partition_name", "Column_name", "Is_index", "Update_time", "Distinct_count", "Null_count", "Avg_col_size", "Correlation"},
@@ -1357,7 +1358,7 @@ func (s *testSQLSuite) TestBuildVersion3RegionQueries(c *C) {
 	mock.ExpectQuery("SELECT REGION_ID,START_KEY,END_KEY FROM INFORMATION_SCHEMA.TIKV_REGION_STATUS ORDER BY START_KEY;").
 		WillReturnRows(selectRegionStatusHistograms)
 
-	c.Assert(d.renewSelectTableRegionFuncForLowerTiDB(tctx, conn), IsNil)
+	c.Assert(d.renewSelectTableRegionFuncForLowerTiDB(tctx), IsNil)
 	c.Assert(mock.ExpectationsWereMet(), IsNil)
 
 	testCases := []struct {

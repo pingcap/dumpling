@@ -569,7 +569,7 @@ func isUnknownSystemVariableErr(err error) bool {
 	return strings.Contains(err.Error(), "Unknown system variable")
 }
 
-func resetDBWithSessionParams(tctx *tcontext.Context, db *sql.DB, dsn string, params map[string]interface{}) (*sql.DB, error) {
+func (d *Dumper) resetDBWithSessionParams(tctx *tcontext.Context, db *sql.DB, dsn string, params map[string]interface{}) error {
 	support := make(map[string]interface{})
 	for k, v := range params {
 		var pv interface{}
@@ -591,7 +591,7 @@ func resetDBWithSessionParams(tctx *tcontext.Context, db *sql.DB, dsn string, pa
 				tctx.L().Info("session variable is not supported by db", zap.String("variable", k), zap.Reflect("value", v))
 				continue
 			}
-			return nil, errors.Trace(err)
+			return errors.Trace(err)
 		}
 
 		support[k] = pv
@@ -611,12 +611,11 @@ func resetDBWithSessionParams(tctx *tcontext.Context, db *sql.DB, dsn string, pa
 
 	newDB, err := sql.Open("mysql", dsn)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return errors.Trace(err)
 	}
 
-	db.Close()
-
-	return newDB, nil
+	d.oldDBHandle, d.dbHandle = db, newDB
+	return nil
 }
 
 func createConnWithConsistency(ctx context.Context, db *sql.DB) (*sql.Conn, error) {

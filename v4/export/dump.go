@@ -41,6 +41,10 @@ type Dumper struct {
 
 	extStore storage.ExternalStorage
 	dbHandle *sql.DB
+	// renewSelectTableRegionFuncForLowerTiDB needs dbHandle without snapshot to make sure
+	// the result of SHOW STATS_HISTOGRAMS and SELECT FROM mysql.stats_histograms are similar
+	// this db handle will be closed in this function, too
+	oldDBHandle *sql.DB
 
 	tidbPDClientForGC         pd.Client
 	selectTiDBTableRegionFunc func(tctx *tcontext.Context, conn *sql.Conn, dbName, tableName string) (pkFields []string, pkVals [][]string, err error)
@@ -147,6 +151,9 @@ func (d *Dumper) Dump() (dumpErr error) {
 			return err
 		}
 	}
+	if err = d.renewSelectTableRegionFuncForLowerTiDB(tctx); err != nil {
+		tctx.L().Error("fail to update select table region info for TiDB", zap.Error(err))
+	}
 
 	rebuildConn := func(conn *sql.Conn) (*sql.Conn, error) {
 		// make sure that the lock connection is still alive
@@ -223,9 +230,6 @@ func (d *Dumper) Dump() (dumpErr error) {
 
 	// get estimate total count
 	if err = d.getEstimateTotalRowsCount(tctx, metaConn); err != nil {
-		tctx.L().Error("fail to get estimate total count", zap.Error(err))
-	}
-	if err = d.renewSelectTableRegionFuncForLowerTiDB(tctx, metaConn); err != nil {
 		tctx.L().Error("fail to get estimate total count", zap.Error(err))
 	}
 
@@ -1163,19 +1167,29 @@ func setSessionParam(d *Dumper) error {
 			}
 		}
 	}
-	if d.dbHandle, err = resetDBWithSessionParams(d.tctx, pool, conf.GetDSN(""), conf.SessionParams); err != nil {
+	if err = d.resetDBWithSessionParams(d.tctx, pool, conf.GetDSN(""), conf.SessionParams); err != nil {
 		return errors.Trace(err)
 	}
 	return nil
 }
 
-func (d *Dumper) renewSelectTableRegionFuncForLowerTiDB(tctx *tcontext.Context, conn *sql.Conn) error {
+func (d *Dumper) renewSelectTableRegionFuncForLowerTiDB(tctx *tcontext.Context) error {
+	defer func() {
+		if d.oldDBHandle != nil {
+			d.oldDBHandle.Close()
+			d.oldDBHandle = nil
+		}
+	}()
 	conf := d.conf
 	if !(conf.ServerInfo.ServerType == ServerTypeTiDB && conf.ServerInfo.ServerVersion != nil && conf.ServerInfo.HasTiKV &&
 		conf.ServerInfo.ServerVersion.Compare(*decodeRegionVersion) >= 0 &&
 		conf.ServerInfo.ServerVersion.Compare(*gcSafePointVersion) < 0) {
 		tctx.L().Debug("no need to build region info because database is not TiDB 3.x")
 		return nil
+	}
+	conn, err := d.oldDBHandle.Conn(tctx)
+	if err != nil {
+		return errors.Trace(err)
 	}
 	dbInfos, err := GetDBInfo(conn, DatabaseTablesToMap(conf.Tables))
 	if err != nil {
