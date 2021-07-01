@@ -1195,7 +1195,7 @@ func (d *Dumper) renewSelectTableRegionFuncForLowerTiDB(tctx *tcontext.Context, 
 	fmt.Printf("regionsInfo: %+v\n", regionsInfo.Regions)
 	tikvHelper := &helper.Helper{}
 	tableInfos := tikvHelper.GetRegionsTableInfo(regionsInfo, dbInfos)
-	tbInfoBytes, err := json.Marshal(tableInfos)
+	tbInfoBytes, _ := json.Marshal(tableInfos)
 	fmt.Printf("len(tableInfos): %+v\n", len(tableInfos))
 	fmt.Printf("tableInfos: %+v\n", tableInfos)
 	fmt.Printf("tableInfoBytes: %s\n", tbInfoBytes)
