@@ -11,12 +11,8 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-	"time"
 
-	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/store/helper"
-	"github.com/pingcap/tidb/store/tikv/oracle"
-	"github.com/pingcap/tidb/types"
 
 	tcontext "github.com/pingcap/dumpling/v4/context"
 
@@ -1069,7 +1065,7 @@ func GetPartitionNames(db *sql.Conn, schema, table string) (partitions []string,
 func GetPartitionTableIDs(db *sql.Conn, tables map[string]map[string]struct{}) (map[string]map[string]map[string]int64, error) {
 	const (
 		showStatsHistogramsSQL   = "SHOW STATS_HISTOGRAMS"
-		selectStatsHistogramsSQL = "SELECT TABLE_ID,VERSION,DISTINCT_COUNT FROM mysql.stats_histograms;"
+		selectStatsHistogramsSQL = "SELECT TABLE_ID,FROM_UNIXTIME(VERSION DIV 262144 DIV 1000,'%Y-%m-%d %H:%i:%s') AS UPDATE_TIME,DISTINCT_COUNT FROM mysql.stats_histograms"
 	)
 	partitionIDs := make(map[string]map[string]map[string]int64, len(tables))
 	rows, err := db.QueryContext(context.Background(), showStatsHistogramsSQL)
@@ -1107,17 +1103,14 @@ func GetPartitionTableIDs(db *sql.Conn, tables map[string]map[string]struct{}) (
 	}
 	err = simpleQuery(db, selectStatsHistogramsSQL, func(rows *sql.Rows) error {
 		var (
-			tableID       int64
-			version       uint64
-			distinctCount string
+			tableID                   int64
+			updateTime, distinctCount string
 		)
-		err2 := rows.Scan(&tableID, &version, &distinctCount)
+		err2 := rows.Scan(&tableID, &updateTime, &distinctCount)
 		if err2 != nil {
 			return errors.Trace(err2)
 		}
-		t := time.Unix(0, oracle.ExtractPhysical(version)*int64(time.Millisecond))
-		tStr := types.NewTime(types.FromGoTime(t), mysql.TypeDatetime, 0).String()
-		if mpt, ok := saveMap[tStr]; ok {
+		if mpt, ok := saveMap[updateTime]; ok {
 			if partition, ok := mpt[distinctCount]; ok {
 				dbName, tbName, partitionName := partition.dbName, partition.tbName, partition.partitionName
 				if _, ok := partitionIDs[dbName]; !ok {
