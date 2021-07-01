@@ -7,7 +7,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"math/big"
 	"sort"
@@ -1186,19 +1185,8 @@ func (d *Dumper) renewSelectTableRegionFuncForLowerTiDB(tctx *tcontext.Context, 
 	if err != nil {
 		return errors.Trace(err)
 	}
-	fmt.Printf("len(dbInfos): %+v\n", len(dbInfos))
-	dbInfoBytes, _ := json.Marshal(dbInfos)
-	dbTableInfoBytes, _ := json.Marshal(dbInfos[0].Tables)
-	fmt.Printf("dbInfos: %s\n", dbInfoBytes)
-	fmt.Printf("dbInfoTables: %s\n", dbTableInfoBytes)
-	fmt.Printf("len(regionsInfo): %+v\n", len(regionsInfo.Regions))
-	fmt.Printf("regionsInfo: %+v\n", regionsInfo.Regions)
 	tikvHelper := &helper.Helper{}
 	tableInfos := tikvHelper.GetRegionsTableInfo(regionsInfo, dbInfos)
-	tbInfoBytes, _ := json.Marshal(tableInfos)
-	fmt.Printf("len(tableInfos): %+v\n", len(tableInfos))
-	fmt.Printf("tableInfos: %+v\n", tableInfos)
-	fmt.Printf("tableInfoBytes: %s\n", tbInfoBytes)
 
 	tableInfoMap := make(map[string]map[string][]int64, len(conf.Tables))
 	for _, region := range regionsInfo.Regions {
@@ -1238,7 +1226,6 @@ func (d *Dumper) renewSelectTableRegionFuncForLowerTiDB(tctx *tcontext.Context, 
 		}
 	}
 
-	fmt.Printf("tableInfoMap: %+v\n", tableInfoMap)
 	d.selectTiDBTableRegionFunc = func(tctx *tcontext.Context, conn *sql.Conn, dbName, tableName string) (pkFields []string, pkVals [][]string, err error) {
 		pkFields, _, err = selectTiDBRowKeyFields(conn, dbName, tableName, checkTiDBTableRegionPkFields)
 		if err != nil {
