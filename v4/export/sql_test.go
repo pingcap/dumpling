@@ -652,7 +652,7 @@ func (s *testSQLSuite) TestBuildTableSampleQueries(c *C) {
 		if len(handleColNames) > 0 {
 			taskChan := make(chan Task, 128)
 			quotaCols := make([]string, 0, len(handleColNames))
-			for _, col := range quotaCols {
+			for _, col := range handleColNames {
 				quotaCols = append(quotaCols, wrapBackTicks(col))
 			}
 			selectFields := strings.Join(quotaCols, ",")
@@ -688,16 +688,13 @@ func (s *testSQLSuite) TestBuildTableSampleQueries(c *C) {
 			}
 			mock.ExpectQuery(fmt.Sprintf("SELECT .* FROM `%s`.`%s` TABLESAMPLE REGIONS", database, table)).WillReturnRows(rows)
 
-			rows = sqlmock.NewRows([]string{"COLUMN_NAME", "EXTRA"})
-			for _, handleCol := range handleColNames {
-				rows.AddRow(handleCol, "")
-			}
-			mock.ExpectQuery("SELECT COLUMN_NAME,EXTRA FROM INFORMATION_SCHEMA.COLUMNS").WithArgs(database, table).
-				WillReturnRows(rows)
 			// special case, no value found, will scan whole table and try build order clause
 			if len(handleVals) == 0 {
 				mock.ExpectExec(fmt.Sprintf("SELECT _tidb_rowid from `%s`.`%s` LIMIT 0", database, table)).
 					WillReturnResult(sqlmock.NewResult(0, 0))
+				// mock second connection error
+				mock.ExpectExec(fmt.Sprintf("SELECT _tidb_rowid from `%s`.`%s` LIMIT 0", database, table)).
+					WillReturnError(errors.New("bad connection"))
 			}
 
 			c.Assert(d.concurrentDumpTable(tctx, conn, meta, taskChan), IsNil)
@@ -717,13 +714,13 @@ func (s *testSQLSuite) TestBuildTableSampleQueries(c *C) {
 			// special case, no value found
 			if len(handleVals) == 0 {
 				orderByClause = orderByTiDBRowID
-				query := buildSelectQuery(database, table, "*", "", "", orderByClause)
+				query := buildSelectQuery(database, table, selectFields, "", "", orderByClause)
 				checkQuery(0, query)
 				continue
 			}
 
 			for i, w := range testCase.expectedWhereClauses {
-				query := buildSelectQuery(database, table, "*", "", buildWhereCondition(d.conf, w), orderByClause)
+				query := buildSelectQuery(database, table, selectFields, "", buildWhereCondition(d.conf, w), orderByClause)
 				checkQuery(i, query)
 			}
 		}
@@ -806,6 +803,7 @@ func (s *testSQLSuite) TestBuildRegionQueriesWithoutPartition(c *C) {
 		ServerType:    ServerTypeTiDB,
 		ServerVersion: gcSafePointVersion,
 	}
+	d.conf.Rows = 200000
 	database := "foo"
 	table := "bar"
 
@@ -884,15 +882,11 @@ func (s *testSQLSuite) TestBuildRegionQueriesWithoutPartition(c *C) {
 
 		// Test build tasks through table region
 		taskChan := make(chan Task, 128)
-		quotaCols := make([]string, 0, len(handleColNames))
-		for _, col := range quotaCols {
-			quotaCols = append(quotaCols, wrapBackTicks(col))
-		}
-		selectFields := strings.Join(quotaCols, ",")
 		meta := &tableMeta{
 			database:      database,
 			table:         table,
-			selectedField: selectFields,
+			selectedField: "*",
+			selectedLen:   len(handleColNames),
 			specCmts: []string{
 				"/*!40101 SET NAMES binary*/;",
 			},
@@ -925,18 +919,16 @@ func (s *testSQLSuite) TestBuildRegionQueriesWithoutPartition(c *C) {
 		mock.ExpectQuery("SELECT START_KEY,tidb_decode_key\\(START_KEY\\) from INFORMATION_SCHEMA.TIKV_REGION_STATUS").
 			WithArgs(database, table).WillReturnRows(rows)
 
-		rows = sqlmock.NewRows([]string{"COLUMN_NAME", "EXTRA"})
-		for _, handleCol := range handleColNames {
-			rows.AddRow(handleCol, "")
-		}
-		mock.ExpectQuery("SELECT COLUMN_NAME,EXTRA FROM INFORMATION_SCHEMA.COLUMNS").WithArgs(database, table).
-			WillReturnRows(rows)
-
 		orderByClause := buildOrderByClauseString(handleColNames)
 		// special case, no enough value to split chunks
 		if len(regionResults) <= 1 {
 			mock.ExpectExec(fmt.Sprintf("SELECT _tidb_rowid from `%s`.`%s` LIMIT 0", database, table)).
 				WillReturnResult(sqlmock.NewResult(0, 0))
+			mock.ExpectExec(fmt.Sprintf("SELECT _tidb_rowid from `%s`.`%s` LIMIT 0", database, table)).
+				WillReturnResult(sqlmock.NewResult(0, 0))
+			mock.ExpectQuery("EXPLAIN SELECT `_tidb_rowid`").
+				WillReturnRows(sqlmock.NewRows([]string{"id", "count", "task", "operator info"}).
+					AddRow("IndexReader_5", "0.00", "root", "index:IndexScan_4"))
 			orderByClause = orderByTiDBRowID
 		}
 		c.Assert(d.concurrentDumpTable(tctx, conn, meta, taskChan), IsNil)
@@ -1096,15 +1088,11 @@ func (s *testSQLSuite) TestBuildRegionQueriesWithPartitions(c *C) {
 
 		// Test build tasks through table region
 		taskChan := make(chan Task, 128)
-		quotaCols := make([]string, 0, len(handleColNames))
-		for _, col := range quotaCols {
-			quotaCols = append(quotaCols, wrapBackTicks(col))
-		}
-		selectFields := strings.Join(quotaCols, ",")
 		meta := &tableMeta{
 			database:      database,
 			table:         table,
-			selectedField: selectFields,
+			selectedField: "*",
+			selectedLen:   len(handleColNames),
 			specCmts: []string{
 				"/*!40101 SET NAMES binary*/;",
 			},
@@ -1141,20 +1129,6 @@ func (s *testSQLSuite) TestBuildRegionQueriesWithPartitions(c *C) {
 			}
 			mock.ExpectQuery(fmt.Sprintf("SHOW TABLE `%s`.`%s` PARTITION\\(`%s`\\) REGIONS", escapeString(database), escapeString(table), escapeString(partition))).
 				WillReturnRows(rows)
-		}
-
-		for range partitions {
-			rows = sqlmock.NewRows([]string{"COLUMN_NAME", "EXTRA"})
-			for _, handleCol := range handleColNames {
-				rows.AddRow(handleCol, "")
-			}
-			mock.ExpectQuery("SELECT COLUMN_NAME,EXTRA FROM INFORMATION_SCHEMA.COLUMNS").WithArgs(database, table).
-				WillReturnRows(rows)
-			// special case, dump whole table
-			if testCase.dumpWholeTable {
-				mock.ExpectExec(fmt.Sprintf("SELECT _tidb_rowid from `%s`.`%s` LIMIT 0", database, table)).
-					WillReturnResult(sqlmock.NewResult(0, 0))
-			}
 		}
 
 		orderByClause := buildOrderByClauseString(handleColNames)

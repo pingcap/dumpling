@@ -179,7 +179,7 @@ func WriteInsert(pCtx *tcontext.Context, cfg *Config, meta TableMeta, tblIR Tabl
 
 	// if has generated column
 	if selectedField != "" && selectedField != "*" {
-		insertStatementPrefix = fmt.Sprintf("INSERT INTO %s %s VALUES\n",
+		insertStatementPrefix = fmt.Sprintf("INSERT INTO %s (%s) VALUES\n",
 			wrapBackTicks(escapeString(meta.TableName())), selectedField)
 	} else {
 		insertStatementPrefix = fmt.Sprintf("INSERT INTO %s VALUES\n",

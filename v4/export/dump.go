@@ -400,12 +400,9 @@ func (d *Dumper) buildConcatTask(tctx *tcontext.Context, conn *sql.Conn, meta Ta
 	}
 }
 
-func (d *Dumper) dumpWholeTableDirectly(tctx *tcontext.Context, conn *sql.Conn, meta TableMeta, taskChan chan<- Task, partition string, currentChunk, totalChunks int) error {
+func (d *Dumper) dumpWholeTableDirectly(tctx *tcontext.Context, meta TableMeta, taskChan chan<- Task, partition, orderByClause string, currentChunk, totalChunks int) error {
 	conf := d.conf
-	tableIR, err := SelectAllFromTable(conf, conn, meta, partition)
-	if err != nil {
-		return err
-	}
+	tableIR := SelectAllFromTable(conf, meta, partition, orderByClause)
 	task := NewTaskTableData(meta, tableIR, currentChunk, totalChunks)
 	ctxDone := d.sendTaskToChan(tctx, task, taskChan)
 	if ctxDone {
@@ -432,7 +429,11 @@ func (d *Dumper) sequentialDumpTable(tctx *tcontext.Context, conn *sql.Conn, met
 			zap.String("database", meta.DatabaseName()),
 			zap.String("table", meta.TableName()))
 	}
-	return d.dumpWholeTableDirectly(tctx, conn, meta, taskChan, "", 0, 1)
+	orderByClause, err := buildOrderByClause(conf, conn, meta.DatabaseName(), meta.TableName())
+	if err != nil {
+		return err
+	}
+	return d.dumpWholeTableDirectly(tctx, meta, taskChan, "", orderByClause, 0, 1)
 }
 
 // concurrentDumpTable tries to split table into several chunks to dump
@@ -443,23 +444,30 @@ func (d *Dumper) concurrentDumpTable(tctx *tcontext.Context, conn *sql.Conn, met
 		conf.ServerInfo.ServerVersion != nil &&
 		(conf.ServerInfo.ServerVersion.Compare(*tableSampleVersion) >= 0 ||
 			(conf.ServerInfo.HasTiKV && conf.ServerInfo.ServerVersion.Compare(*gcSafePointVersion) >= 0)) {
-		return d.concurrentDumpTiDBTables(tctx, conn, meta, taskChan)
+		err := d.concurrentDumpTiDBTables(tctx, conn, meta, taskChan)
+		if err == nil {
+			return err
+		}
+		// don't retry on context error
+		if errors.ErrorEqual(err, context.Canceled) || errors.ErrorEqual(err, context.DeadlineExceeded) {
+			return err
+		}
+		tctx.L().Warn("fallback to concurrent dump tables using rows due to tidb error",
+			zap.String("database", db), zap.String("table", tbl), zap.Error(err))
 	}
+
+	orderByClause, err := buildOrderByClause(conf, conn, db, tbl)
+	if err != nil {
+		return err
+	}
+
 	field, err := pickupPossibleField(db, tbl, conn, conf)
 	if err != nil || field == "" {
 		// skip split chunk logic if not found proper field
 		tctx.L().Warn("fallback to sequential dump due to no proper field",
 			zap.String("database", db), zap.String("table", tbl), zap.Error(err))
-		return d.dumpWholeTableDirectly(tctx, conn, meta, taskChan, "", 0, 1)
+		return d.dumpWholeTableDirectly(tctx, meta, taskChan, "", orderByClause, 0, 1)
 	}
-
-	min, max, err := d.selectMinAndMaxIntValue(conn, db, tbl, field)
-	if err != nil {
-		return err
-	}
-	tctx.L().Debug("get int bounding values",
-		zap.String("lower", min.String()),
-		zap.String("upper", max.String()))
 
 	count := estimateCount(d.tctx, db, tbl, conn, field, conf)
 	tctx.L().Info("get estimated rows count",
@@ -473,8 +481,16 @@ func (d *Dumper) concurrentDumpTable(tctx *tcontext.Context, conn *sql.Conn, met
 			zap.Uint64("conf.rows", conf.Rows),
 			zap.String("database", db),
 			zap.String("table", tbl))
-		return d.dumpWholeTableDirectly(tctx, conn, meta, taskChan, "", 0, 1)
+		return d.dumpWholeTableDirectly(tctx, meta, taskChan, "", orderByClause, 0, 1)
 	}
+
+	min, max, err := d.selectMinAndMaxIntValue(conn, db, tbl, field)
+	if err != nil {
+		return err
+	}
+	tctx.L().Debug("get int bounding values",
+		zap.String("lower", min.String()),
+		zap.String("upper", max.String()))
 
 	// every chunk would have eventual adjustments
 	estimatedChunks := count / conf.Rows
@@ -486,15 +502,7 @@ func (d *Dumper) concurrentDumpTable(tctx *tcontext.Context, conn *sql.Conn, met
 		totalChunks = new(big.Int).Sub(max, min).Uint64() + 1
 	}
 
-	selectField, selectLen, err := buildSelectField(conn, db, tbl, conf.CompleteInsert)
-	if err != nil {
-		return err
-	}
-
-	orderByClause, err := buildOrderByClause(conf, conn, db, tbl)
-	if err != nil {
-		return err
-	}
+	selectField, selectLen := meta.SelectedField(), meta.SelectedLen()
 
 	chunkIndex := 0
 	nullValueCondition := ""
@@ -595,7 +603,7 @@ func (d *Dumper) concurrentDumpTiDBTables(tctx *tcontext.Context, conn *sql.Conn
 	if err != nil {
 		return err
 	}
-	return d.sendConcurrentDumpTiDBTasks(tctx, conn, meta, taskChan, handleColNames, handleVals, "", 0, len(handleVals)+1)
+	return d.sendConcurrentDumpTiDBTasks(tctx, meta, taskChan, handleColNames, handleVals, "", 0, len(handleVals)+1)
 }
 
 func (d *Dumper) concurrentDumpTiDBPartitionTables(tctx *tcontext.Context, conn *sql.Conn, meta TableMeta, taskChan chan<- Task, partitions []string) error {
@@ -621,7 +629,7 @@ func (d *Dumper) concurrentDumpTiDBPartitionTables(tctx *tcontext.Context, conn 
 		cachedHandleVals[i] = handleVals
 	}
 	for i, partition := range partitions {
-		err := d.sendConcurrentDumpTiDBTasks(tctx, conn, meta, taskChan, handleColNames, cachedHandleVals[i], partition, startChunkIdx, totalChunk)
+		err := d.sendConcurrentDumpTiDBTasks(tctx, meta, taskChan, handleColNames, cachedHandleVals[i], partition, startChunkIdx, totalChunk)
 		if err != nil {
 			return err
 		}
@@ -631,17 +639,18 @@ func (d *Dumper) concurrentDumpTiDBPartitionTables(tctx *tcontext.Context, conn 
 }
 
 func (d *Dumper) sendConcurrentDumpTiDBTasks(tctx *tcontext.Context,
-	conn *sql.Conn, meta TableMeta, taskChan chan<- Task,
+	meta TableMeta, taskChan chan<- Task,
 	handleColNames []string, handleVals [][]string, partition string, startChunkIdx, totalChunk int) error {
+	db, tbl := meta.DatabaseName(), meta.TableName()
 	if len(handleVals) == 0 {
-		return d.dumpWholeTableDirectly(tctx, conn, meta, taskChan, partition, startChunkIdx, totalChunk)
+		if partition == "" {
+			// return error to make outside function try using rows method to dump data
+			return errors.Errorf("empty handleVals for TiDB table `%s`.`%s`", escapeString(db), escapeString(tbl))
+		}
+		return d.dumpWholeTableDirectly(tctx, meta, taskChan, partition, buildOrderByClauseString(handleColNames), startChunkIdx, totalChunk)
 	}
 	conf := d.conf
-	db, tbl := meta.DatabaseName(), meta.TableName()
-	selectField, selectLen, err := buildSelectField(conn, db, tbl, conf.CompleteInsert)
-	if err != nil {
-		return err
-	}
+	selectField, selectLen := meta.SelectedField(), meta.SelectedLen()
 	where := buildWhereClauses(handleColNames, handleVals)
 	orderByClause := buildOrderByClauseString(handleColNames)
 
@@ -813,7 +822,7 @@ func selectTiDBPartitionRegion(tctx *tcontext.Context, conn *sql.Conn, dbName, t
 		}
 	}
 
-	return pkVals, err
+	return pkVals, nil
 }
 
 func extractTiDBRowIDFromDecodedKey(indexField, key string) (string, error) {
@@ -849,7 +858,7 @@ func prepareTableListToDump(tctx *tcontext.Context, conf *Config, db *sql.Conn) 
 
 func dumpTableMeta(conf *Config, conn *sql.Conn, db string, table *TableInfo) (TableMeta, error) {
 	tbl := table.Name
-	selectField, _, err := buildSelectField(conn, db, tbl, conf.CompleteInsert)
+	selectField, selectLen, err := buildSelectField(conn, db, tbl, conf.CompleteInsert)
 	if err != nil {
 		return nil, err
 	}
@@ -870,6 +879,7 @@ func dumpTableMeta(conf *Config, conn *sql.Conn, db string, table *TableInfo) (T
 		table:         tbl,
 		colTypes:      colTypes,
 		selectedField: selectField,
+		selectedLen:   selectLen,
 		specCmts: []string{
 			"/*!40101 SET NAMES binary*/;",
 		},

@@ -29,6 +29,7 @@ type TableMeta interface {
 	ColumnTypes() []string
 	ColumnNames() []string
 	SelectedField() string
+	SelectedLen() int
 	SpecialComments() StringIter
 	ShowCreateTable() string
 	ShowCreateView() string
@@ -98,6 +99,7 @@ func setTableMetaFromRows(rows *sql.Rows) (TableMeta, error) {
 	return &tableMeta{
 		colTypes:      tps,
 		selectedField: strings.Join(nms, ","),
+		selectedLen:   len(nms),
 		specCmts:      []string{"/*!40101 SET NAMES binary*/;"},
 	}, nil
 }
