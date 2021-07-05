@@ -461,7 +461,7 @@ func (d *Dumper) concurrentDumpTable(tctx *tcontext.Context, conn *sql.Conn, met
 		return err
 	}
 
-	field, err := pickupPossibleField(db, tbl, conn, conf)
+	field, err := pickupPossibleField(meta, conn, conf)
 	if err != nil || field == "" {
 		// skip split chunk logic if not found proper field
 		tctx.L().Warn("fallback to sequential dump due to no proper field",
