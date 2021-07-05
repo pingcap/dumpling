@@ -4,7 +4,6 @@ package export
 
 import (
 	"database/sql"
-	"fmt"
 	"strings"
 
 	"github.com/pingcap/errors"
@@ -254,6 +253,7 @@ type tableMeta struct {
 	table           string
 	colTypes        []*sql.ColumnType
 	selectedField   string
+	selectedLen     int
 	specCmts        []string
 	showCreateTable string
 	showCreateView  string
@@ -288,10 +288,11 @@ func (tm *tableMeta) ColumnCount() uint {
 }
 
 func (tm *tableMeta) SelectedField() string {
-	if tm.selectedField == "*" || tm.selectedField == "" {
-		return tm.selectedField
-	}
-	return fmt.Sprintf("(%s)", tm.selectedField)
+	return tm.selectedField
+}
+
+func (tm *tableMeta) SelectedLen() int {
+	return tm.selectedLen
 }
 
 func (tm *tableMeta) SpecialComments() StringIter {

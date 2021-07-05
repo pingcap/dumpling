@@ -188,23 +188,15 @@ func SelectVersion(db *sql.DB) (string, error) {
 }
 
 // SelectAllFromTable dumps data serialized from a specified table
-func SelectAllFromTable(conf *Config, db *sql.Conn, meta TableMeta, partition string) (TableDataIR, error) {
+func SelectAllFromTable(conf *Config, meta TableMeta, partition, orderByClause string) TableDataIR {
 	database, table := meta.DatabaseName(), meta.TableName()
-	selectedField, selectLen, err := buildSelectField(db, database, table, conf.CompleteInsert)
-	if err != nil {
-		return nil, err
-	}
-
-	orderByClause, err := buildOrderByClause(conf, db, database, table)
-	if err != nil {
-		return nil, err
-	}
+	selectedField, selectLen := meta.SelectedField(), meta.SelectedLen()
 	query := buildSelectQuery(database, table, selectedField, partition, buildWhereCondition(conf, ""), orderByClause)
 
 	return &tableData{
 		query:  query,
 		colLen: selectLen,
-	}, nil
+	}
 }
 
 func buildSelectQuery(database, table, fields, partition, where, orderByClause string) string {
@@ -835,7 +827,7 @@ func pickupPossibleField(dbName, tableName string, db *sql.Conn, conf *Config) (
 	if conf.ServerInfo.ServerType == ServerTypeTiDB {
 		ok, err := SelectTiDBRowID(db, dbName, tableName)
 		if err != nil {
-			return "", nil
+			return "", err
 		}
 		if ok {
 			return "_tidb_rowid", nil
