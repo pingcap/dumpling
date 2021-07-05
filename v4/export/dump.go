@@ -1236,7 +1236,9 @@ func (d *Dumper) renewSelectTableRegionFuncForLowerTiDB(tctx *tcontext.Context) 
 	}
 	for _, tbInfos := range tableInfoMap {
 		for _, tbInfo := range tbInfos {
-			sort.Sort(byIntValue(tbInfo))
+			sort.Slice(tbInfo, func(i, j int) bool {
+				return tbInfo[i] < tbInfo[j]
+			})
 		}
 	}
 
@@ -1257,13 +1259,4 @@ func (d *Dumper) renewSelectTableRegionFuncForLowerTiDB(tctx *tcontext.Context) 
 	}
 
 	return nil
-}
-
-// for sorting
-type byIntValue []int64
-
-func (xs byIntValue) Len() int      { return len(xs) }
-func (xs byIntValue) Swap(i, j int) { xs[i], xs[j] = xs[j], xs[i] }
-func (xs byIntValue) Less(i, j int) bool {
-	return xs[i] < xs[j]
 }
