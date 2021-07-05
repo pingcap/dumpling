@@ -67,12 +67,7 @@ func (d *Dumper) getEstimateTotalRowsCount(tctx *tcontext.Context, conn *sql.Con
 	for db, tables := range conf.Tables {
 		for _, m := range tables {
 			if m.Type == TableTypeBase {
-				// get pk or uk for explain
-				field, err := pickupPossibleField(db, m.Name, conn, conf)
-				if err != nil {
-					return err
-				}
-				c := estimateCount(tctx, db, m.Name, conn, field, conf)
+				c := estimateCount(tctx, db, m.Name, conn, "", conf)
 				totalCount += c
 			}
 		}
