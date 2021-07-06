@@ -31,8 +31,8 @@ func (d *Dumper) runLogProgress(tctx *tcontext.Context) {
 			nanoseconds := float64(time.Since(lastCheckpoint).Nanoseconds())
 
 			completedTables := ReadCounter(finishedTablesCounter, conf.Labels)
-			finishedBytes := ReadCounter(finishedSizeCounter, conf.Labels)
-			finishedRows := ReadCounter(finishedRowsCounter, conf.Labels)
+			finishedBytes := ReadGauge(finishedSizeGauge, conf.Labels)
+			finishedRows := ReadGauge(finishedRowsGauge, conf.Labels)
 			estimateTotalRows := ReadCounter(estimateTotalRowsCounter, conf.Labels)
 
 			tctx.L().Info("progress",
