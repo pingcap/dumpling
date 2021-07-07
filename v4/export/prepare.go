@@ -96,14 +96,6 @@ func prepareDumpingDatabases(conf *Config, db *sql.Conn) ([]string, error) {
 	return conf.Databases, nil
 }
 
-func listAllTables(db *sql.Conn, databaseNames []string) (DatabaseTables, error) {
-	return ListAllDatabasesTables(db, databaseNames, TableTypeBase)
-}
-
-func listAllViews(db *sql.Conn, databaseNames []string) (DatabaseTables, error) {
-	return ListAllDatabasesTables(db, databaseNames, TableTypeView)
-}
-
 type databaseName = string
 
 // TableType represents the type of table
@@ -115,6 +107,35 @@ const (
 	// TableTypeView represents the view table
 	TableTypeView
 )
+
+const (
+	// TableTypeBaseStr represents the basic table string
+	TableTypeBaseStr = "BASE TABLE"
+	// TableTypeViewStr represents the view table string
+	TableTypeViewStr = "VIEW"
+)
+
+func (t TableType) String() string {
+	switch t {
+	case TableTypeBase:
+		return TableTypeBaseStr
+	case TableTypeView:
+		return TableTypeViewStr
+	default:
+		return "UNKNOWN"
+	}
+}
+
+func ParseTableType(s string) (TableType, error) {
+	switch s {
+	case TableTypeBaseStr:
+		return TableTypeBase, nil
+	case TableTypeViewStr:
+		return TableTypeView, nil
+	default:
+		return TableTypeBase, errors.Errorf("unknown table type %s", s)
+	}
+}
 
 // TableInfo is the table info for a table in database
 type TableInfo struct {

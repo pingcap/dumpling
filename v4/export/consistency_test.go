@@ -73,9 +73,7 @@ func (s *testConsistencySuite) TestConsistencyController(c *C) {
 	_, ok = ctrl.(*ConsistencyLockDumpingTables)
 	c.Assert(ok, IsTrue)
 	s.assertLifetimeErrNil(tctx, ctrl, c)
-	if err = mock.ExpectationsWereMet(); err != nil {
-		c.Fatal(err.Error())
-	}
+	c.Assert(mock.ExpectationsWereMet(), IsNil)
 }
 
 func (s *testConsistencySuite) TestConsistencyLockControllerRetry(c *C) {
@@ -100,9 +98,12 @@ func (s *testConsistencySuite) TestConsistencyLockControllerRetry(c *C) {
 	_, ok := ctrl.(*ConsistencyLockDumpingTables)
 	c.Assert(ok, IsTrue)
 	s.assertLifetimeErrNil(tctx, ctrl, c)
-	if err = mock.ExpectationsWereMet(); err != nil {
-		c.Fatal(err.Error())
-	}
+	// should remove table db1.t3 in tables to dump
+	expectedDumpTables := NewDatabaseTables().
+		AppendTables("db1", "t1", "t2").
+		AppendViews("db2", "t4")
+	c.Assert(conf.Tables, DeepEquals, expectedDumpTables)
+	c.Assert(mock.ExpectationsWereMet(), IsNil)
 }
 
 func (s *testConsistencySuite) TestResolveAutoConsistency(c *C) {

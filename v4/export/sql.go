@@ -141,26 +141,24 @@ func RestoreCharset(w io.StringWriter) {
 }
 
 // ListAllDatabasesTables lists all the databases and tables from the database
-func ListAllDatabasesTables(db *sql.Conn, databaseNames []string, tableType TableType) (DatabaseTables, error) {
-	var tableTypeStr string
-	switch tableType {
-	case TableTypeBase:
-		tableTypeStr = "BASE TABLE"
-	case TableTypeView:
-		tableTypeStr = "VIEW"
-	default:
-		return nil, errors.Errorf("unknown table type %v", tableType)
+func ListAllDatabasesTables(db *sql.Conn, databaseNames []string, tableTypes ...TableType) (DatabaseTables, error) {
+	tableTypeConditions := make([]string, len(tableTypes))
+	for i, tableType := range tableTypes {
+		tableTypeConditions[i] = fmt.Sprintf("table_type = '%s'", tableType)
 	}
-
-	query := fmt.Sprintf("SELECT table_schema,table_name FROM information_schema.tables WHERE table_type = '%s'", tableTypeStr)
+	query := fmt.Sprintf("SELECT table_schema,table_name,table_type FROM information_schema.tables WHERE %s", strings.Join(tableTypeConditions, " OR "))
 	dbTables := DatabaseTables{}
 	for _, schema := range databaseNames {
 		dbTables[schema] = make([]*TableInfo, 0)
 	}
 
 	if err := simpleQueryWithArgs(db, func(rows *sql.Rows) error {
-		var schema, table string
-		if err := rows.Scan(&schema, &table); err != nil {
+		var schema, table, tableTypeStr string
+		if err := rows.Scan(&schema, &table, &tableTypeStr); err != nil {
+			return errors.Trace(err)
+		}
+		tableType, err := ParseTableType(tableTypeStr)
+		if err != nil {
 			return errors.Trace(err)
 		}
 
