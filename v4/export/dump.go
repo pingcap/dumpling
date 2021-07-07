@@ -839,17 +839,13 @@ func prepareTableListToDump(tctx *tcontext.Context, conf *Config, db *sql.Conn) 
 		return err
 	}
 
-	conf.Tables, err = listAllTables(db, databases)
+	tableTypes := []TableType{TableTypeBase}
+	if !conf.NoViews {
+		tableTypes = append(tableTypes, TableTypeView)
+	}
+	conf.Tables, err = ListAllDatabasesTables(db, databases, tableTypes...)
 	if err != nil {
 		return err
-	}
-
-	if !conf.NoViews {
-		views, err := listAllViews(db, databases)
-		if err != nil {
-			return err
-		}
-		conf.Tables.Merge(views)
 	}
 
 	filterTables(tctx, conf)
