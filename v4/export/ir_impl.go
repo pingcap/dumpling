@@ -257,6 +257,7 @@ type tableMeta struct {
 	specCmts        []string
 	showCreateTable string
 	showCreateView  string
+	avgRowLength    uint64
 }
 
 func (tm *tableMeta) ColumnTypes() []string {
@@ -305,6 +306,10 @@ func (tm *tableMeta) ShowCreateTable() string {
 
 func (tm *tableMeta) ShowCreateView() string {
 	return tm.showCreateView
+}
+
+func (tm *tableMeta) AvgRowLength() uint64 {
+	return tm.avgRowLength
 }
 
 type metaData struct {

@@ -85,6 +85,10 @@ func (m *mockTableIR) ShowCreateView() string {
 	return ""
 }
 
+func (m *mockTableIR) AvgRowLength() uint64 {
+	return 0
+}
+
 func (m *mockTableIR) Start(_ *tcontext.Context, conn *sql.Conn) error {
 	return nil
 }
