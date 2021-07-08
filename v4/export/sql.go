@@ -141,34 +141,88 @@ func RestoreCharset(w io.StringWriter) {
 }
 
 // ListAllDatabasesTables lists all the databases and tables from the database
-func ListAllDatabasesTables(db *sql.Conn, databaseNames []string, tableTypes ...TableType) (DatabaseTables, error) {
-	tableTypeConditions := make([]string, len(tableTypes))
-	for i, tableType := range tableTypes {
-		tableTypeConditions[i] = fmt.Sprintf("table_type = '%s'", tableType)
-	}
-	query := fmt.Sprintf("SELECT table_schema,table_name,table_type FROM information_schema.tables WHERE %s", strings.Join(tableTypeConditions, " OR "))
+// if asap is true, will use information_schema to get table info in one query
+// if asap is false, will use show table status for each database because it has better performance according to our tests
+func ListAllDatabasesTables(tctx *tcontext.Context, db *sql.Conn, databaseNames []string, asap bool, tableTypes ...TableType) (DatabaseTables, error) {
 	dbTables := DatabaseTables{}
-	for _, schema := range databaseNames {
-		dbTables[schema] = make([]*TableInfo, 0)
-	}
+	var (
+		schema, table, tableTypeStr string
+		tableType                   TableType
+		avgRowLength                uint64
+		err                         error
+	)
+	if asap {
+		tableTypeConditions := make([]string, len(tableTypes))
+		for i, tableType := range tableTypes {
+			tableTypeConditions[i] = fmt.Sprintf("TABLE_TYPE='%s'", tableType)
+		}
+		query := fmt.Sprintf("SELECT TABLE_SCHEMA,TABLE_NAME,TABLE_TYPE,AVG_ROW_LENGTH FROM INFORMATION_SCHEMA.TABLES WHERE %s", strings.Join(tableTypeConditions, " OR "))
+		for _, schema := range databaseNames {
+			dbTables[schema] = make([]*TableInfo, 0)
+		}
+		if err := simpleQueryWithArgs(db, func(rows *sql.Rows) error {
+			var sqlAvgRowLength sql.NullInt64
+			if err := rows.Scan(&schema, &table, &tableTypeStr, &sqlAvgRowLength); err != nil {
+				return errors.Trace(err)
+			}
+			tableType, err = ParseTableType(tableTypeStr)
+			if err != nil {
+				return errors.Trace(err)
+			}
 
-	if err := simpleQueryWithArgs(db, func(rows *sql.Rows) error {
-		var schema, table, tableTypeStr string
-		if err := rows.Scan(&schema, &table, &tableTypeStr); err != nil {
-			return errors.Trace(err)
+			if sqlAvgRowLength.Valid {
+				avgRowLength = uint64(sqlAvgRowLength.Int64)
+			} else {
+				avgRowLength = 0
+			}
+			// only append tables to schemas in databaseNames
+			if _, ok := dbTables[schema]; ok {
+				dbTables[schema] = append(dbTables[schema], &TableInfo{table, avgRowLength, tableType})
+			}
+			return nil
+		}, query); err != nil {
+			return nil, errors.Annotatef(err, "sql: %s", query)
 		}
-		tableType, err := ParseTableType(tableTypeStr)
-		if err != nil {
-			return errors.Trace(err)
+	} else {
+		queryTemplate := "SHOW TABLE STATUS FROM `%s`"
+		selectedTableType := make(map[TableType]struct{}, 0)
+		for _, tableType = range tableTypes {
+			selectedTableType[tableType] = struct{}{}
 		}
-
-		// only append tables to schemas in databaseNames
-		if _, ok := dbTables[schema]; ok {
-			dbTables[schema] = append(dbTables[schema], &TableInfo{table, tableType})
+		for _, schema = range databaseNames {
+			dbTables[schema] = make([]*TableInfo, 0)
+			query := fmt.Sprintf(queryTemplate, escapeString(schema))
+			rows, err := db.QueryContext(tctx, query)
+			if err != nil {
+				return nil, errors.Annotatef(err, "sql: %s", query)
+			}
+			results, err := GetSpecifiedColumnValuesAndClose(rows, "NAME", "ENGINE", "AVG_ROW_LENGTH", "COMMENT")
+			if err != nil {
+				return nil, errors.Annotatef(err, "sql: %s", query)
+			}
+			for _, oneRow := range results {
+				table, engine, avgRowLengthStr, comment := oneRow[0], oneRow[1], oneRow[2], oneRow[3]
+				if avgRowLengthStr != "" {
+					avgRowLength, err = strconv.ParseUint(avgRowLengthStr, 10, 64)
+					if err != nil {
+						return nil, errors.Annotatef(err, "sql: %s", query)
+					}
+				} else {
+					avgRowLength = 0
+				}
+				tableType = TableTypeBase
+				if engine == "" && (comment == "" || comment == TableTypeViewStr) {
+					tableType = TableTypeView
+				} else if engine == "" {
+					tctx.L().Warn("Invalid table without engine found", zap.String("database", schema), zap.String("table", table))
+					continue
+				}
+				if _, ok := selectedTableType[tableType]; !ok {
+					continue
+				}
+				dbTables[schema] = append(dbTables[schema], &TableInfo{table, avgRowLength, tableType})
+			}
 		}
-		return nil
-	}, query); err != nil {
-		return nil, errors.Annotatef(err, "sql: %s", query)
 	}
 	return dbTables, nil
 }
