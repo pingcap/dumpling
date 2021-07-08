@@ -6,8 +6,10 @@ import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
+	"encoding/csv"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path"
 	"runtime"
@@ -657,7 +659,7 @@ func (s *testSQLSuite) TestBuildTableSampleQueries(c *C) {
 		if len(handleColNames) > 0 {
 			taskChan := make(chan Task, 128)
 			quotaCols := make([]string, 0, len(handleColNames))
-			for _, col := range quotaCols {
+			for _, col := range handleColNames {
 				quotaCols = append(quotaCols, wrapBackTicks(col))
 			}
 			selectFields := strings.Join(quotaCols, ",")
@@ -891,7 +893,7 @@ func (s *testSQLSuite) TestBuildRegionQueriesWithoutPartition(c *C) {
 		// Test build tasks through table region
 		taskChan := make(chan Task, 128)
 		quotaCols := make([]string, 0, len(handleColNames))
-		for _, col := range quotaCols {
+		for _, col := range handleColNames {
 			quotaCols = append(quotaCols, wrapBackTicks(col))
 		}
 		selectFields := strings.Join(quotaCols, ",")
@@ -1104,7 +1106,7 @@ func (s *testSQLSuite) TestBuildRegionQueriesWithPartitions(c *C) {
 		// Test build tasks through table region
 		taskChan := make(chan Task, 128)
 		quotaCols := make([]string, 0, len(handleColNames))
-		for _, col := range quotaCols {
+		for _, col := range handleColNames {
 			quotaCols = append(quotaCols, wrapBackTicks(col))
 		}
 		selectFields := strings.Join(quotaCols, ",")
@@ -1197,14 +1199,16 @@ func readRegionCsvDriverValues(c *C) [][]driver.Value {
 	// nolint: dogsled
 	_, filename, _, _ := runtime.Caller(0)
 	csvFilename := path.Join(path.Dir(filename), "region_results.csv")
-	c.Log("csvFileName:", csvFilename)
-	content, err := os.ReadFile(csvFilename)
+	file, err := os.Open(csvFilename)
 	c.Assert(err, IsNil)
-	lines := strings.Split(string(content), "\n")
-	values := make([][]driver.Value, 0, len(lines))
-	c.Log("lines:", lines)
-	for _, line := range lines {
-		results := strings.Split(line, ",")
+	csvReader := csv.NewReader(file)
+	values := make([][]driver.Value, 0, 990)
+	for {
+		results, err := csvReader.Read()
+		if err == io.EOF {
+			break
+		}
+		c.Assert(err, IsNil)
 		if len(results) != 3 {
 			continue
 		}
@@ -1442,7 +1446,7 @@ func (s *testSQLSuite) TestBuildVersion3RegionQueries(c *C) {
 		// Test build tasks through table region
 		taskChan := make(chan Task, 128)
 		quotaCols := make([]string, 0, len(handleColNames))
-		for _, col := range quotaCols {
+		for _, col := range handleColNames {
 			quotaCols = append(quotaCols, wrapBackTicks(col))
 		}
 		selectFields := strings.Join(quotaCols, ",")

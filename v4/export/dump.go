@@ -1235,8 +1235,9 @@ func (d *Dumper) renewSelectTableRegionFuncForLowerTiDB(tctx *tcontext.Context) 
 		}
 	}
 	for _, tbInfos := range tableInfoMap {
-		for _, tbInfo := range tbInfos {
-			tbInfo := tbInfo
+		for _, tbInfoLoop := range tbInfos {
+			// make sure tbInfo is only used in this loop
+			tbInfo := tbInfoLoop
 			sort.Slice(tbInfo, func(i, j int) bool {
 				return tbInfo[i] < tbInfo[j]
 			})

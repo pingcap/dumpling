@@ -1058,8 +1058,15 @@ func GetPartitionNames(db *sql.Conn, schema, table string) (partitions []string,
 }
 
 // GetPartitionTableIDs get partition tableIDs through histograms.
+// SHOW STATS_HISTOGRAMS  has db_name,table_name,partition_name but doesn't have partition id
+// mysql.stats_histograms has partition_id but doesn't have db_name,table_name,partition_name
+// So we combine the results from these two sqls to get partition ids for each table
+// If UPDATE_TIME,DISTINCT_COUNT are equal, we assume these two records can represent one line.
+// If histograms are not accurate or (UPDATE_TIME,DISTINCT_COUNT) has duplicate data, it's still fine.
+// Because the possibility is low and the effect is that we will select more than one regions in one time,
+// this will not affect the correctness of the dumping data and will not affect the memory usage much.
 // This method is tricky, but no better way is found.
-// TiDB v3.0.0's information_schema.partition table doesn't have partition name or partition id info
+// Because TiDB v3.0.0's information_schema.partition table doesn't have partition name or partition id info
 // return (dbName -> tbName -> partitionName -> partitionID, error)
 func GetPartitionTableIDs(db *sql.Conn, tables map[string]map[string]struct{}) (map[string]map[string]map[string]int64, error) {
 	const (
@@ -1085,19 +1092,16 @@ func GetPartitionTableIDs(db *sql.Conn, tables map[string]map[string]struct{}) (
 			continue
 		}
 		if tbm, ok := tables[dbName]; ok {
-			if _, ok = tbm[tbName]; !ok {
-				continue
+			if _, ok = tbm[tbName]; ok {
+				if _, ok = saveMap[updateTime]; !ok {
+					saveMap[updateTime] = make(map[string]partitionInfo)
+				}
+				saveMap[updateTime][distinctCount] = partitionInfo{
+					dbName:        dbName,
+					tbName:        tbName,
+					partitionName: partitionName,
+				}
 			}
-		} else {
-			continue
-		}
-		if _, ok := saveMap[updateTime]; !ok {
-			saveMap[updateTime] = make(map[string]partitionInfo)
-		}
-		saveMap[updateTime][distinctCount] = partitionInfo{
-			dbName:        dbName,
-			tbName:        tbName,
-			partitionName: partitionName,
 		}
 	}
 	err = simpleQuery(db, selectStatsHistogramsSQL, func(rows *sql.Rows) error {
