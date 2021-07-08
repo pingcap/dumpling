@@ -33,6 +33,8 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+var openDBFunc = sql.Open
+
 // Dumper is the dump progress structure
 type Dumper struct {
 	tctx      *tcontext.Context
@@ -41,10 +43,6 @@ type Dumper struct {
 
 	extStore storage.ExternalStorage
 	dbHandle *sql.DB
-	// renewSelectTableRegionFuncForLowerTiDB needs dbHandle without snapshot to make sure
-	// the result of SHOW STATS_HISTOGRAMS and SELECT FROM mysql.stats_histograms are similar
-	// this db handle will be closed in this function, too
-	oldDBHandle *sql.DB
 
 	tidbPDClientForGC         pd.Client
 	selectTiDBTableRegionFunc func(tctx *tcontext.Context, conn *sql.Conn, dbName, tableName string) (pkFields []string, pkVals [][]string, err error)
@@ -1167,19 +1165,13 @@ func setSessionParam(d *Dumper) error {
 			}
 		}
 	}
-	if err = d.resetDBWithSessionParams(d.tctx, pool, conf.GetDSN(""), conf.SessionParams); err != nil {
+	if d.dbHandle, err = resetDBWithSessionParams(d.tctx, pool, conf.GetDSN(""), conf.SessionParams); err != nil {
 		return errors.Trace(err)
 	}
 	return nil
 }
 
 func (d *Dumper) renewSelectTableRegionFuncForLowerTiDB(tctx *tcontext.Context) error {
-	defer func() {
-		if d.oldDBHandle != nil {
-			d.oldDBHandle.Close()
-			d.oldDBHandle = nil
-		}
-	}()
 	conf := d.conf
 	if !(conf.ServerInfo.ServerType == ServerTypeTiDB && conf.ServerInfo.ServerVersion != nil && conf.ServerInfo.HasTiKV &&
 		conf.ServerInfo.ServerVersion.Compare(*decodeRegionVersion) >= 0 &&
@@ -1187,10 +1179,16 @@ func (d *Dumper) renewSelectTableRegionFuncForLowerTiDB(tctx *tcontext.Context) 
 		tctx.L().Debug("no need to build region info because database is not TiDB 3.x")
 		return nil
 	}
-	conn, err := d.oldDBHandle.Conn(tctx)
+	dbHandle, err := openDBFunc("mysql", conf.GetDSN(""))
 	if err != nil {
 		return errors.Trace(err)
 	}
+	defer dbHandle.Close()
+	conn, err := dbHandle.Conn(tctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	defer conn.Close()
 	dbInfos, err := GetDBInfo(conn, DatabaseTablesToMap(conf.Tables))
 	if err != nil {
 		return errors.Trace(err)
