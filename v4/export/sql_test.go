@@ -1228,6 +1228,13 @@ func (s *testSQLSuite) TestBuildVersion3RegionQueries(c *C) {
 	conn, err := db.Conn(context.Background())
 	c.Assert(err, IsNil)
 	tctx, cancel := tcontext.Background().WithLogger(appLogger).WithCancel()
+	oldOpenFunc := openDBFunc
+	defer func() {
+		openDBFunc = oldOpenFunc
+	}()
+	openDBFunc = func(_, _ string) (*sql.DB, error) {
+		return db, nil
+	}
 
 	conf := DefaultConfig()
 	conf.ServerInfo = ServerInfo{
@@ -1248,7 +1255,6 @@ func (s *testSQLSuite) TestBuildVersion3RegionQueries(c *C) {
 		tctx:                      tctx,
 		conf:                      conf,
 		cancelCtx:                 cancel,
-		oldDBHandle:               db,
 		selectTiDBTableRegionFunc: selectTiDBTableRegion,
 	}
 	showStatsHistograms := buildMockNewRows(mock, []string{"Db_name", "Table_name", "Partition_name", "Column_name", "Is_index", "Update_time", "Distinct_count", "Null_count", "Avg_col_size", "Correlation"},

@@ -12,12 +12,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/pingcap/tidb/store/helper"
-
 	tcontext "github.com/pingcap/dumpling/v4/context"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/model"
+	"github.com/pingcap/tidb/store/helper"
 	"go.uber.org/zap"
 )
 
@@ -569,7 +568,7 @@ func isUnknownSystemVariableErr(err error) bool {
 	return strings.Contains(err.Error(), "Unknown system variable")
 }
 
-func (d *Dumper) resetDBWithSessionParams(tctx *tcontext.Context, db *sql.DB, dsn string, params map[string]interface{}) error {
+func resetDBWithSessionParams(tctx *tcontext.Context, db *sql.DB, dsn string, params map[string]interface{}) (*sql.DB, error) {
 	support := make(map[string]interface{})
 	for k, v := range params {
 		var pv interface{}
@@ -591,7 +590,7 @@ func (d *Dumper) resetDBWithSessionParams(tctx *tcontext.Context, db *sql.DB, ds
 				tctx.L().Info("session variable is not supported by db", zap.String("variable", k), zap.Reflect("value", v))
 				continue
 			}
-			return errors.Trace(err)
+			return nil, errors.Trace(err)
 		}
 
 		support[k] = pv
@@ -610,12 +609,7 @@ func (d *Dumper) resetDBWithSessionParams(tctx *tcontext.Context, db *sql.DB, ds
 	}
 
 	newDB, err := sql.Open("mysql", dsn)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	d.oldDBHandle, d.dbHandle = db, newDB
-	return nil
+	return newDB, errors.Trace(err)
 }
 
 func createConnWithConsistency(ctx context.Context, db *sql.DB) (*sql.Conn, error) {
@@ -1103,6 +1097,9 @@ func GetPartitionTableIDs(db *sql.Conn, tables map[string]map[string]struct{}) (
 				}
 			}
 		}
+	}
+	if len(saveMap) == 0 {
+		return map[string]map[string]map[string]int64{}, nil
 	}
 	err = simpleQuery(db, selectStatsHistogramsSQL, func(rows *sql.Rows) error {
 		var (
