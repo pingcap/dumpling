@@ -843,7 +843,9 @@ func prepareTableListToDump(tctx *tcontext.Context, conf *Config, db *sql.Conn) 
 	if !conf.NoViews {
 		tableTypes = append(tableTypes, TableTypeView)
 	}
-	conf.Tables, err = ListAllDatabasesTables(db, databases, tableTypes...)
+	// for consistency lock, we need to build the tables to dump as soon as possible
+	asap := conf.Consistency == consistencyTypeLock
+	conf.Tables, err = ListAllDatabasesTables(tctx, db, databases, asap, tableTypes...)
 	if err != nil {
 		return err
 	}

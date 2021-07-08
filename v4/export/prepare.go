@@ -139,8 +139,9 @@ func ParseTableType(s string) (TableType, error) {
 
 // TableInfo is the table info for a table in database
 type TableInfo struct {
-	Name string
-	Type TableType
+	Name         string
+	AvgRowLength uint64
+	Type         TableType
 }
 
 // Equals returns true the table info is the same with another one
@@ -163,9 +164,9 @@ func (d DatabaseTables) AppendTable(dbName string, table *TableInfo) DatabaseTab
 }
 
 // AppendTables appends several basic tables to DatabaseTables
-func (d DatabaseTables) AppendTables(dbName string, tableNames ...string) DatabaseTables {
-	for _, t := range tableNames {
-		d[dbName] = append(d[dbName], &TableInfo{t, TableTypeBase})
+func (d DatabaseTables) AppendTables(dbName string, tableNames []string, avgRowLengths []uint64) DatabaseTables {
+	for i, t := range tableNames {
+		d[dbName] = append(d[dbName], &TableInfo{t, avgRowLengths[i], TableTypeBase})
 	}
 	return d
 }
@@ -173,7 +174,7 @@ func (d DatabaseTables) AppendTables(dbName string, tableNames ...string) Databa
 // AppendViews appends several views to DatabaseTables
 func (d DatabaseTables) AppendViews(dbName string, viewNames ...string) DatabaseTables {
 	for _, v := range viewNames {
-		d[dbName] = append(d[dbName], &TableInfo{v, TableTypeView})
+		d[dbName] = append(d[dbName], &TableInfo{v, 0, TableTypeView})
 	}
 	return d
 }
