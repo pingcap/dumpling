@@ -320,15 +320,13 @@ func SelectTiDBRowID(db *sql.Conn, database, table string) (bool, error) {
 }
 
 // GetSuitableRows gets suitable rows for each table
-func GetSuitableRows(tctx *tcontext.Context, db *sql.Conn, database, table string) uint64 {
+func GetSuitableRows(avgRowLength uint64) uint64 {
 	const (
 		defaultRows  = 200000
 		maxRows      = 1000000
 		bytesPerFile = 128 * 1024 * 1024 // 128MB per file by default
 	)
-	avgRowLength, err := GetAVGRowLength(tctx, db, database, table)
-	if err != nil || avgRowLength == 0 {
-		tctx.L().Debug("fail to get average row length", zap.Uint64("averageRowLength", avgRowLength), zap.Error(err))
+	if avgRowLength == 0 {
 		return defaultRows
 	}
 	estimateRows := bytesPerFile / avgRowLength
@@ -336,18 +334,6 @@ func GetSuitableRows(tctx *tcontext.Context, db *sql.Conn, database, table strin
 		return maxRows
 	}
 	return estimateRows
-}
-
-// GetAVGRowLength gets whether this table's average row length
-func GetAVGRowLength(tctx *tcontext.Context, db *sql.Conn, database, table string) (uint64, error) {
-	const query = "select AVG_ROW_LENGTH from INFORMATION_SCHEMA.TABLES where table_schema=? and table_name=?;"
-	var avgRowLength uint64
-	row := db.QueryRowContext(tctx, query, database, table)
-	err := row.Scan(&avgRowLength)
-	if err != nil {
-		return 0, errors.Annotatef(err, "sql: %s", query)
-	}
-	return avgRowLength, nil
 }
 
 // GetColumnTypes gets *sql.ColumnTypes from a specified table

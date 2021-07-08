@@ -33,6 +33,7 @@ type TableMeta interface {
 	SpecialComments() StringIter
 	ShowCreateTable() string
 	ShowCreateView() string
+	AvgRowLength() uint64
 }
 
 // SQLRowIter is the iterator on a collection of sql.Row.
