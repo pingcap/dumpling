@@ -286,14 +286,16 @@ func (d *Dumper) dumpDatabases(tctx *tcontext.Context, metaConn *sql.Conn, taskC
 	conf := d.conf
 	allTables := conf.Tables
 	for dbName, tables := range allTables {
-		createDatabaseSQL, err := ShowCreateDatabase(metaConn, dbName)
-		if err != nil {
-			return err
-		}
-		task := NewTaskDatabaseMeta(dbName, createDatabaseSQL)
-		ctxDone := d.sendTaskToChan(tctx, task, taskChan)
-		if ctxDone {
-			return tctx.Err()
+		if !conf.NoSchemas {
+			createDatabaseSQL, err := ShowCreateDatabase(metaConn, dbName)
+			if err != nil {
+				return err
+			}
+			task := NewTaskDatabaseMeta(dbName, createDatabaseSQL)
+			ctxDone := d.sendTaskToChan(tctx, task, taskChan)
+			if ctxDone {
+				return tctx.Err()
+			}
 		}
 
 		for _, table := range tables {
@@ -304,18 +306,22 @@ func (d *Dumper) dumpDatabases(tctx *tcontext.Context, metaConn *sql.Conn, taskC
 				return err
 			}
 
-			if table.Type == TableTypeView {
-				task := NewTaskViewMeta(dbName, table.Name, meta.ShowCreateTable(), meta.ShowCreateView())
-				ctxDone = d.sendTaskToChan(tctx, task, taskChan)
-				if ctxDone {
-					return tctx.Err()
+			if !conf.NoSchemas {
+				if table.Type == TableTypeView {
+					task := NewTaskViewMeta(dbName, table.Name, meta.ShowCreateTable(), meta.ShowCreateView())
+					ctxDone := d.sendTaskToChan(tctx, task, taskChan)
+					if ctxDone {
+						return tctx.Err()
+					}
+				} else {
+					task := NewTaskTableMeta(dbName, table.Name, meta.ShowCreateTable())
+					ctxDone := d.sendTaskToChan(tctx, task, taskChan)
+					if ctxDone {
+						return tctx.Err()
+					}
 				}
-			} else {
-				task := NewTaskTableMeta(dbName, table.Name, meta.ShowCreateTable())
-				ctxDone = d.sendTaskToChan(tctx, task, taskChan)
-				if ctxDone {
-					return tctx.Err()
-				}
+			}
+			if table.Type == TableTypeBase {
 				err = d.dumpTableData(tctx, metaConn, meta, taskChan)
 				if err != nil {
 					return err
@@ -429,7 +435,7 @@ func (d *Dumper) sequentialDumpTable(tctx *tcontext.Context, conn *sql.Conn, met
 			zap.String("database", meta.DatabaseName()),
 			zap.String("table", meta.TableName()))
 	}
-	orderByClause, err := buildOrderByClause(conf, conn, meta.DatabaseName(), meta.TableName())
+	orderByClause, err := buildOrderByClause(conf, conn, meta.DatabaseName(), meta.TableName(), meta.HasImplicitRowID())
 	if err != nil {
 		return err
 	}
@@ -456,12 +462,12 @@ func (d *Dumper) concurrentDumpTable(tctx *tcontext.Context, conn *sql.Conn, met
 			zap.String("database", db), zap.String("table", tbl), zap.Error(err))
 	}
 
-	orderByClause, err := buildOrderByClause(conf, conn, db, tbl)
+	orderByClause, err := buildOrderByClause(conf, conn, db, tbl, meta.HasImplicitRowID())
 	if err != nil {
 		return err
 	}
 
-	field, err := pickupPossibleField(meta, conn, conf)
+	field, err := pickupPossibleField(meta, conn)
 	if err != nil || field == "" {
 		// skip split chunk logic if not found proper field
 		tctx.L().Warn("fallback to sequential dump due to no proper field",
@@ -576,7 +582,7 @@ func (d *Dumper) selectMinAndMaxIntValue(conn *sql.Conn, db, tbl, field string) 
 }
 
 func (d *Dumper) concurrentDumpTiDBTables(tctx *tcontext.Context, conn *sql.Conn, meta TableMeta, taskChan chan<- Task) error {
-	db, tbl := meta.DatabaseName(), meta.TableName()
+	db, tbl, hasImplicitRowID := meta.DatabaseName(), meta.TableName(), meta.HasImplicitRowID()
 
 	var (
 		handleColNames []string
@@ -586,7 +592,7 @@ func (d *Dumper) concurrentDumpTiDBTables(tctx *tcontext.Context, conn *sql.Conn
 	if d.conf.ServerInfo.ServerVersion.Compare(*tableSampleVersion) >= 0 {
 		tctx.L().Debug("dumping TiDB tables with TABLESAMPLE",
 			zap.String("database", db), zap.String("table", tbl))
-		handleColNames, handleVals, err = selectTiDBTableSample(tctx, conn, db, tbl)
+		handleColNames, handleVals, err = selectTiDBTableSample(tctx, conn, db, tbl, hasImplicitRowID)
 	} else {
 		tctx.L().Debug("dumping TiDB tables with TABLE REGIONS",
 			zap.String("database", db), zap.String("table", tbl))
@@ -594,7 +600,7 @@ func (d *Dumper) concurrentDumpTiDBTables(tctx *tcontext.Context, conn *sql.Conn
 		partitions, err = GetPartitionNames(conn, db, tbl)
 		if err == nil {
 			if len(partitions) == 0 {
-				handleColNames, handleVals, err = selectTiDBTableRegion(tctx, conn, db, tbl)
+				handleColNames, handleVals, err = selectTiDBTableRegion(tctx, conn, db, tbl, hasImplicitRowID)
 			} else {
 				return d.concurrentDumpTiDBPartitionTables(tctx, conn, meta, taskChan, partitions)
 			}
@@ -607,7 +613,7 @@ func (d *Dumper) concurrentDumpTiDBTables(tctx *tcontext.Context, conn *sql.Conn
 }
 
 func (d *Dumper) concurrentDumpTiDBPartitionTables(tctx *tcontext.Context, conn *sql.Conn, meta TableMeta, taskChan chan<- Task, partitions []string) error {
-	db, tbl := meta.DatabaseName(), meta.TableName()
+	db, tbl, hasImplicitRowID := meta.DatabaseName(), meta.TableName(), meta.HasImplicitRowID()
 	tctx.L().Debug("dumping TiDB tables with TABLE REGIONS for partition table",
 		zap.String("database", db), zap.String("table", tbl), zap.Strings("partitions", partitions))
 
@@ -615,7 +621,7 @@ func (d *Dumper) concurrentDumpTiDBPartitionTables(tctx *tcontext.Context, conn 
 	totalChunk := 0
 	cachedHandleVals := make([][][]string, len(partitions))
 
-	handleColNames, _, err := selectTiDBRowKeyFields(conn, db, tbl, checkTiDBTableRegionPkFields)
+	handleColNames, _, err := selectTiDBRowKeyFields(conn, db, tbl, hasImplicitRowID, checkTiDBTableRegionPkFields)
 	if err != nil {
 		return err
 	}
@@ -670,8 +676,8 @@ func (d *Dumper) L() log.Logger {
 	return d.tctx.L()
 }
 
-func selectTiDBTableSample(tctx *tcontext.Context, conn *sql.Conn, dbName, tableName string) (pkFields []string, pkVals [][]string, err error) {
-	pkFields, pkColTypes, err := selectTiDBRowKeyFields(conn, dbName, tableName, nil)
+func selectTiDBTableSample(tctx *tcontext.Context, conn *sql.Conn, dbName, tableName string, hasImplicitRowID bool) (pkFields []string, pkVals [][]string, err error) {
+	pkFields, pkColTypes, err := selectTiDBRowKeyFields(conn, dbName, tableName, hasImplicitRowID, nil)
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}
@@ -715,11 +721,7 @@ func buildTiDBTableSampleQuery(pkFields []string, dbName, tblName string) string
 	return fmt.Sprintf(template, pks, escapeString(dbName), escapeString(tblName), pks)
 }
 
-func selectTiDBRowKeyFields(conn *sql.Conn, dbName, tableName string, checkPkFields func([]string, []string) error) (pkFields, pkColTypes []string, err error) {
-	hasImplicitRowID, err := SelectTiDBRowID(conn, dbName, tableName)
-	if err != nil {
-		return
-	}
+func selectTiDBRowKeyFields(conn *sql.Conn, dbName, tableName string, hasImplicitRowID bool, checkPkFields func([]string, []string) error) (pkFields, pkColTypes []string, err error) {
 	if hasImplicitRowID {
 		pkFields, pkColTypes = []string{"_tidb_rowid"}, []string{"BIGINT"}
 	} else {
@@ -744,8 +746,8 @@ func checkTiDBTableRegionPkFields(pkFields, pkColTypes []string) (err error) {
 	return
 }
 
-func selectTiDBTableRegion(tctx *tcontext.Context, conn *sql.Conn, dbName, tableName string) (pkFields []string, pkVals [][]string, err error) {
-	pkFields, _, err = selectTiDBRowKeyFields(conn, dbName, tableName, checkTiDBTableRegionPkFields)
+func selectTiDBTableRegion(tctx *tcontext.Context, conn *sql.Conn, dbName, tableName string, hasImplicitRowID bool) (pkFields []string, pkVals [][]string, err error) {
+	pkFields, _, err = selectTiDBRowKeyFields(conn, dbName, tableName, hasImplicitRowID, checkTiDBTableRegionPkFields)
 	if err != nil {
 		return
 	}
@@ -860,8 +862,17 @@ func dumpTableMeta(conf *Config, conn *sql.Conn, db string, table *TableInfo) (T
 	if err != nil {
 		return nil, err
 	}
+	var (
+		colTypes         []*sql.ColumnType
+		hasImplicitRowID bool
+	)
+	if conf.ServerInfo.ServerType == ServerTypeTiDB {
+		hasImplicitRowID, err = SelectTiDBRowID(conn, db, tbl)
+		if err != nil {
+			return nil, err
+		}
+	}
 
-	var colTypes []*sql.ColumnType
 	// If all columns are generated
 	if selectField == "" {
 		colTypes, err = GetColumnTypes(conn, "*", db, tbl)
@@ -873,12 +884,13 @@ func dumpTableMeta(conf *Config, conn *sql.Conn, db string, table *TableInfo) (T
 	}
 
 	meta := &tableMeta{
-		avgRowLength:  table.AvgRowLength,
-		database:      db,
-		table:         tbl,
-		colTypes:      colTypes,
-		selectedField: selectField,
-		selectedLen:   selectLen,
+		avgRowLength:     table.AvgRowLength,
+		database:         db,
+		table:            tbl,
+		colTypes:         colTypes,
+		selectedField:    selectField,
+		selectedLen:      selectLen,
+		hasImplicitRowID: hasImplicitRowID,
 		specCmts: []string{
 			"/*!40101 SET NAMES binary*/;",
 		},

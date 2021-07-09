@@ -284,18 +284,12 @@ func buildSelectQuery(database, table, fields, partition, where, orderByClause s
 	return query.String()
 }
 
-func buildOrderByClause(conf *Config, db *sql.Conn, database, table string) (string, error) {
+func buildOrderByClause(conf *Config, db *sql.Conn, database, table string, hasImplicitRowID bool) (string, error) {
 	if !conf.SortByPk {
 		return "", nil
 	}
-	if conf.ServerInfo.ServerType == ServerTypeTiDB {
-		ok, err := SelectTiDBRowID(db, database, table)
-		if err != nil {
-			return "", errors.Trace(err)
-		}
-		if ok {
-			return orderByTiDBRowID, nil
-		}
+	if hasImplicitRowID {
+		return orderByTiDBRowID, nil
 	}
 	cols, err := GetPrimaryKeyColumns(db, database, table)
 	if err != nil {
@@ -911,17 +905,10 @@ func simpleQueryWithArgs(conn *sql.Conn, handleOneRow func(*sql.Rows) error, sql
 	return errors.Annotatef(rows.Err(), "sql: %s", sql)
 }
 
-func pickupPossibleField(meta TableMeta, db *sql.Conn, conf *Config) (string, error) {
-	dbName, tableName := meta.DatabaseName(), meta.TableName()
-	// If detected server is TiDB, try using _tidb_rowid
-	if conf.ServerInfo.ServerType == ServerTypeTiDB {
-		ok, err := SelectTiDBRowID(db, dbName, tableName)
-		if err != nil {
-			return "", err
-		}
-		if ok {
-			return "_tidb_rowid", nil
-		}
+func pickupPossibleField(meta TableMeta, db *sql.Conn) (string, error) {
+	// try using _tidb_rowid first
+	if meta.HasImplicitRowID() {
+		return "_tidb_rowid", nil
 	}
 	// try to use pk
 	fieldName, err := getNumericIndex(db, meta)

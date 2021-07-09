@@ -249,15 +249,16 @@ func (td *tableData) RawRows() *sql.Rows {
 }
 
 type tableMeta struct {
-	database        string
-	table           string
-	colTypes        []*sql.ColumnType
-	selectedField   string
-	selectedLen     int
-	specCmts        []string
-	showCreateTable string
-	showCreateView  string
-	avgRowLength    uint64
+	database         string
+	table            string
+	colTypes         []*sql.ColumnType
+	selectedField    string
+	selectedLen      int
+	specCmts         []string
+	showCreateTable  string
+	showCreateView   string
+	avgRowLength     uint64
+	hasImplicitRowID bool
 }
 
 func (tm *tableMeta) ColumnTypes() []string {
@@ -310,6 +311,10 @@ func (tm *tableMeta) ShowCreateView() string {
 
 func (tm *tableMeta) AvgRowLength() uint64 {
 	return tm.avgRowLength
+}
+
+func (tm *tableMeta) HasImplicitRowID() bool {
+	return tm.hasImplicitRowID
 }
 
 type metaData struct {
