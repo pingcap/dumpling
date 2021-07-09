@@ -53,3 +53,42 @@ func (s *testSQLSuite) TestDumpBlock(c *C) {
 	c.Assert(errors.ErrorEqual(d.dumpDatabases(writerCtx, conn, taskChan), context.Canceled), IsTrue)
 	c.Assert(errors.ErrorEqual(wg.Wait(), writerErr), IsTrue)
 }
+
+func (s *testSQLSuite) TestDumpTableMeta(c *C) {
+	db, mock, err := sqlmock.New()
+	c.Assert(err, IsNil)
+	defer db.Close()
+
+	database := "foo"
+	table := "bar"
+
+	tctx, cancel := tcontext.Background().WithLogger(appLogger).WithCancel()
+	defer cancel()
+	conn, err := db.Conn(tctx)
+	c.Assert(err, IsNil)
+	conf := DefaultConfig()
+	conf.NoSchemas = true
+
+	for serverType := ServerTypeUnknown; serverType < ServerTypeAll; serverType++ {
+		conf.ServerInfo.ServerType = ServerType(serverType)
+		hasImplicitRowID := false
+		mock.ExpectQuery("SELECT COLUMN_NAME").
+			WithArgs(database, table).
+			WillReturnRows(sqlmock.NewRows([]string{"column_name", "extra"}).AddRow("id", ""))
+		if serverType == ServerTypeTiDB {
+			mock.ExpectExec("SELECT _tidb_rowid from").
+				WillReturnResult(sqlmock.NewResult(0, 0))
+			hasImplicitRowID = true
+		}
+		mock.ExpectQuery(fmt.Sprintf("SELECT \\* FROM `%s`.`%s`", database, table)).
+			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(1))
+		meta, err := dumpTableMeta(conf, conn, database, &TableInfo{Type: TableTypeBase, Name: table})
+		c.Assert(err, IsNil)
+		c.Assert(meta.DatabaseName(), Equals, database)
+		c.Assert(meta.TableName(), Equals, table)
+		c.Assert(meta.SelectedField(), Equals, "*")
+		c.Assert(meta.SelectedLen(), Equals, 1)
+		c.Assert(meta.ShowCreateTable(), Equals, "")
+		c.Assert(meta.HasImplicitRowID(), Equals, hasImplicitRowID)
+	}
+}

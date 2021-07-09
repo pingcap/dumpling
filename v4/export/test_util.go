@@ -58,18 +58,19 @@ func newMockMetaIR(targetName string, meta string, specialComments []string) Met
 }
 
 type mockTableIR struct {
-	dbName          string
-	tblName         string
-	chunIndex       int
-	data            [][]driver.Value
-	selectedField   string
-	selectedLen     int
-	specCmt         []string
-	colTypes        []string
-	colNames        []string
-	escapeBackSlash bool
-	rowErr          error
-	rows            *sql.Rows
+	dbName           string
+	tblName          string
+	chunIndex        int
+	data             [][]driver.Value
+	selectedField    string
+	selectedLen      int
+	specCmt          []string
+	colTypes         []string
+	colNames         []string
+	escapeBackSlash  bool
+	rowErr           error
+	rows             *sql.Rows
+	hasImplicitRowID bool
 	SQLRowIter
 }
 
@@ -87,6 +88,10 @@ func (m *mockTableIR) ShowCreateView() string {
 
 func (m *mockTableIR) AvgRowLength() uint64 {
 	return 0
+}
+
+func (m *mockTableIR) HasImplicitRowID() bool {
+	return m.hasImplicitRowID
 }
 
 func (m *mockTableIR) Start(_ *tcontext.Context, conn *sql.Conn) error {
