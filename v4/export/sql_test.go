@@ -75,9 +75,9 @@ func (s *testSQLSuite) TestBuildSelectAllQuery(c *C) {
 	orderByClause, err := buildOrderByClause(mockConf, conn, "test", "t", true)
 	c.Assert(err, IsNil)
 
-	mock.ExpectQuery("SELECT COLUMN_NAME").
-		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg()).
-		WillReturnRows(sqlmock.NewRows([]string{"column_name", "extra"}).AddRow("id", ""))
+	mock.ExpectQuery("SHOW COLUMNS FROM").
+		WillReturnRows(sqlmock.NewRows([]string{"Field", "Type", "Null", "Key", "Default", "Extra"}).
+			AddRow("id", "int(11)", "NO", "PRI", nil, ""))
 
 	selectedField, _, err := buildSelectField(conn, "test", "t", false)
 	c.Assert(err, IsNil)
@@ -91,9 +91,9 @@ func (s *testSQLSuite) TestBuildSelectAllQuery(c *C) {
 	orderByClause, err = buildOrderByClause(mockConf, conn, "test", "t", false)
 	c.Assert(err, IsNil)
 
-	mock.ExpectQuery("SELECT COLUMN_NAME").
-		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg()).
-		WillReturnRows(sqlmock.NewRows([]string{"column_name", "extra"}).AddRow("id", ""))
+	mock.ExpectQuery("SHOW COLUMNS FROM").
+		WillReturnRows(sqlmock.NewRows([]string{"Field", "Type", "Null", "Key", "Default", "Extra"}).
+			AddRow("id", "int(11)", "NO", "PRI", nil, ""))
 
 	selectedField, _, err = buildSelectField(conn, "test", "t", false)
 	c.Assert(err, IsNil)
@@ -114,9 +114,9 @@ func (s *testSQLSuite) TestBuildSelectAllQuery(c *C) {
 		orderByClause, err := buildOrderByClause(mockConf, conn, "test", "t", false)
 		c.Assert(err, IsNil, cmt)
 
-		mock.ExpectQuery("SELECT COLUMN_NAME").
-			WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg()).
-			WillReturnRows(sqlmock.NewRows([]string{"column_name", "extra"}).AddRow("id", ""))
+		mock.ExpectQuery("SHOW COLUMNS FROM").
+			WillReturnRows(sqlmock.NewRows([]string{"Field", "Type", "Null", "Key", "Default", "Extra"}).
+				AddRow("id", "int(11)", "NO", "PRI", nil, ""))
 
 		selectedField, _, err = buildSelectField(conn, "test", "t", false)
 		c.Assert(err, IsNil)
@@ -138,9 +138,9 @@ func (s *testSQLSuite) TestBuildSelectAllQuery(c *C) {
 		orderByClause, err := buildOrderByClause(mockConf, conn, "test", "t", false)
 		c.Assert(err, IsNil, cmt)
 
-		mock.ExpectQuery("SELECT COLUMN_NAME").
-			WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg()).
-			WillReturnRows(sqlmock.NewRows([]string{"column_name", "extra"}).AddRow("id", ""))
+		mock.ExpectQuery("SHOW COLUMNS FROM").
+			WillReturnRows(sqlmock.NewRows([]string{"Field", "Type", "Null", "Key", "Default", "Extra"}).
+				AddRow("id", "int(11)", "NO", "PRI", nil, ""))
 
 		selectedField, _, err = buildSelectField(conn, "test", "t", false)
 		c.Assert(err, IsNil)
@@ -157,9 +157,9 @@ func (s *testSQLSuite) TestBuildSelectAllQuery(c *C) {
 		mockConf.ServerInfo.ServerType = ServerType(tp)
 		cmt := Commentf("current server type: ", tp)
 
-		mock.ExpectQuery("SELECT COLUMN_NAME").
-			WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg()).
-			WillReturnRows(sqlmock.NewRows([]string{"column_name", "extra"}).AddRow("id", ""))
+		mock.ExpectQuery("SHOW COLUMNS FROM").
+			WillReturnRows(sqlmock.NewRows([]string{"Field", "Type", "Null", "Key", "Default", "Extra"}).
+				AddRow("id", "int(11)", "NO", "PRI", nil, ""))
 
 		selectedField, _, err := buildSelectField(conn, "test", "t", false)
 		c.Assert(err, IsNil)
@@ -238,9 +238,9 @@ func (s *testSQLSuite) TestBuildSelectField(c *C) {
 	c.Assert(err, IsNil)
 
 	// generate columns not found
-	mock.ExpectQuery("SELECT COLUMN_NAME").
-		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg()).
-		WillReturnRows(sqlmock.NewRows([]string{"column_name", "extra"}).AddRow("id", ""))
+	mock.ExpectQuery("SHOW COLUMNS FROM").
+		WillReturnRows(sqlmock.NewRows([]string{"Field", "Type", "Null", "Key", "Default", "Extra"}).
+			AddRow("id", "int(11)", "NO", "PRI", nil, ""))
 
 	selectedField, _, err := buildSelectField(conn, "test", "t", false)
 	c.Assert(selectedField, Equals, "*")
@@ -248,10 +248,11 @@ func (s *testSQLSuite) TestBuildSelectField(c *C) {
 	c.Assert(mock.ExpectationsWereMet(), IsNil)
 
 	// user assigns completeInsert
-	mock.ExpectQuery("SELECT COLUMN_NAME").
-		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg()).
-		WillReturnRows(sqlmock.NewRows([]string{"column_name", "extra"}).AddRow("id", "").
-			AddRow("name", "").AddRow("quo`te", ""))
+	mock.ExpectQuery("SHOW COLUMNS FROM").
+		WillReturnRows(sqlmock.NewRows([]string{"Field", "Type", "Null", "Key", "Default", "Extra"}).
+			AddRow("id", "int(11)", "NO", "PRI", nil, "").
+			AddRow("name", "varchar(12)", "NO", "", nil, "").
+			AddRow("quo`te", "varchar(12)", "NO", "UNI", nil, ""))
 
 	selectedField, _, err = buildSelectField(conn, "test", "t", true)
 	c.Assert(selectedField, Equals, "`id`,`name`,`quo``te`")
@@ -259,10 +260,12 @@ func (s *testSQLSuite) TestBuildSelectField(c *C) {
 	c.Assert(mock.ExpectationsWereMet(), IsNil)
 
 	// found generate columns, rest columns is `id`,`name`
-	mock.ExpectQuery("SELECT COLUMN_NAME").
-		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg()).
-		WillReturnRows(sqlmock.NewRows([]string{"column_name", "extra"}).
-			AddRow("id", "").AddRow("name", "").AddRow("quo`te", "").AddRow("generated", "VIRTUAL GENERATED"))
+	mock.ExpectQuery("SHOW COLUMNS FROM").
+		WillReturnRows(sqlmock.NewRows([]string{"Field", "Type", "Null", "Key", "Default", "Extra"}).
+			AddRow("id", "int(11)", "NO", "PRI", nil, "").
+			AddRow("name", "varchar(12)", "NO", "", nil, "").
+			AddRow("quo`te", "varchar(12)", "NO", "UNI", nil, "").
+			AddRow("generated", "varchar(12)", "NO", "", nil, "VIRTUAL GENERATED"))
 
 	selectedField, _, err = buildSelectField(conn, "test", "t", false)
 	c.Assert(selectedField, Equals, "`id`,`name`,`quo``te`")

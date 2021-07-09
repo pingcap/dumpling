@@ -72,9 +72,9 @@ func (s *testSQLSuite) TestDumpTableMeta(c *C) {
 	for serverType := ServerTypeUnknown; serverType < ServerTypeAll; serverType++ {
 		conf.ServerInfo.ServerType = ServerType(serverType)
 		hasImplicitRowID := false
-		mock.ExpectQuery("SELECT COLUMN_NAME").
-			WithArgs(database, table).
-			WillReturnRows(sqlmock.NewRows([]string{"column_name", "extra"}).AddRow("id", ""))
+		mock.ExpectQuery("SHOW COLUMNS FROM").
+			WillReturnRows(sqlmock.NewRows([]string{"Field", "Type", "Null", "Key", "Default", "Extra"}).
+				AddRow("id", "int(11)", "NO", "PRI", nil, ""))
 		if serverType == ServerTypeTiDB {
 			mock.ExpectExec("SELECT _tidb_rowid from").
 				WillReturnResult(sqlmock.NewResult(0, 0))
