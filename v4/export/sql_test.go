@@ -1214,8 +1214,7 @@ func readRegionCsvDriverValues(c *C) [][]driver.Value {
 		}
 		regionID, err := strconv.Atoi(results[0])
 		c.Assert(err, IsNil)
-		startKey := strings.Trim(results[1], `"`)
-		endKey := strings.Trim(results[2], `"`)
+		startKey, endKey := results[1], results[2]
 		values = append(values, []driver.Value{regionID, startKey, endKey})
 	}
 	return values
