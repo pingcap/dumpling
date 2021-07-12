@@ -50,6 +50,7 @@ func (s *testWriteSuite) SetUpSuite(_ *C) {
 	}
 	InitMetricsVector(s.mockCfg.Labels)
 }
+
 func (s *testWriteSuite) TearDownTest(c *C) {
 	RemoveLabelValuesWithTaskInMetrics(s.mockCfg.Labels)
 

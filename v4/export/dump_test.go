@@ -59,9 +59,6 @@ func (s *testSQLSuite) TestDumpTableMeta(c *C) {
 	c.Assert(err, IsNil)
 	defer db.Close()
 
-	database := "foo"
-	table := "bar"
-
 	tctx, cancel := tcontext.Background().WithLogger(appLogger).WithCancel()
 	defer cancel()
 	conn, err := db.Conn(tctx)

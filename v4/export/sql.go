@@ -160,14 +160,17 @@ func ListAllDatabasesTables(tctx *tcontext.Context, db *sql.Conn, databaseNames 
 		for _, schema := range databaseNames {
 			dbTables[schema] = make([]*TableInfo, 0)
 		}
-		if err := simpleQueryWithArgs(db, func(rows *sql.Rows) error {
-			var sqlAvgRowLength sql.NullInt64
-			if err := rows.Scan(&schema, &table, &tableTypeStr, &sqlAvgRowLength); err != nil {
-				return errors.Trace(err)
+		if err = simpleQueryWithArgs(db, func(rows *sql.Rows) error {
+			var (
+				sqlAvgRowLength sql.NullInt64
+				err2            error
+			)
+			if err2 = rows.Scan(&schema, &table, &tableTypeStr, &sqlAvgRowLength); err != nil {
+				return errors.Trace(err2)
 			}
-			tableType, err = ParseTableType(tableTypeStr)
-			if err != nil {
-				return errors.Trace(err)
+			tableType, err2 = ParseTableType(tableTypeStr)
+			if err2 != nil {
+				return errors.Trace(err2)
 			}
 
 			if sqlAvgRowLength.Valid {
@@ -185,7 +188,7 @@ func ListAllDatabasesTables(tctx *tcontext.Context, db *sql.Conn, databaseNames 
 		}
 	} else {
 		queryTemplate := "SHOW TABLE STATUS FROM `%s`"
-		selectedTableType := make(map[TableType]struct{}, 0)
+		selectedTableType := make(map[TableType]struct{})
 		for _, tableType = range tableTypes {
 			selectedTableType[tableType] = struct{}{}
 		}
@@ -345,63 +348,47 @@ func GetColumnTypes(db *sql.Conn, fields, database, table string) ([]*sql.Column
 }
 
 // GetPrimaryKeyAndColumnTypes gets all primary columns and their types in ordinal order
-func GetPrimaryKeyAndColumnTypes(conn *sql.Conn, database, table string) ([]string, []string, error) {
-	query :=
-		`SELECT c.COLUMN_NAME, DATA_TYPE FROM
-INFORMATION_SCHEMA.COLUMNS c INNER JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE k ON
-c.column_name = k.column_name and
-c.table_schema = k.table_schema and
-c.table_name = k.table_name and
-c.table_schema = ? and
-c.table_name = ?
-WHERE COLUMN_KEY = 'PRI'
-ORDER BY k.ORDINAL_POSITION;`
-	var colNames, colTypes []string
-	if err := simpleQueryWithArgs(conn, func(rows *sql.Rows) error {
-		var colName, colType string
-		if err := rows.Scan(&colName, &colType); err != nil {
-			return errors.Trace(err)
-		}
-		colNames = append(colNames, colName)
-		colTypes = append(colTypes, strings.ToUpper(colType))
-		return nil
-	}, query, database, table); err != nil {
-		return nil, nil, errors.Annotatef(err, "sql: %s", query)
+func GetPrimaryKeyAndColumnTypes(conn *sql.Conn, meta TableMeta) ([]string, []string, error) {
+	var (
+		colNames, colTypes []string
+		err                error
+	)
+	colNames, err = GetPrimaryKeyColumns(conn, meta.DatabaseName(), meta.TableName())
+	if err != nil {
+		return nil, nil, err
+	}
+	colName2Type := string2Map(meta.ColumnNames(), meta.ColumnTypes())
+	colTypes = make([]string, len(colNames))
+	for i, colName := range colNames {
+		colTypes[i] = colName2Type[colName]
 	}
 	return colNames, colTypes, nil
 }
 
 // GetPrimaryKeyColumns gets all primary columns in ordinal order
 func GetPrimaryKeyColumns(db *sql.Conn, database, table string) ([]string, error) {
-	priKeyColsQuery := "SELECT column_name FROM information_schema.KEY_COLUMN_USAGE " +
-		"WHERE table_schema = ? AND table_name = ? AND CONSTRAINT_NAME = 'PRIMARY' order by ORDINAL_POSITION;"
-	rows, err := db.QueryContext(context.Background(), priKeyColsQuery, database, table)
+	priKeyColsQuery := fmt.Sprintf("SHOW INDEX FROM `%s`.`%s`", escapeString(database), escapeString(table))
+	rows, err := db.QueryContext(context.Background(), priKeyColsQuery)
 	if err != nil {
 		return nil, errors.Annotatef(err, "sql: %s", priKeyColsQuery)
 	}
-	defer rows.Close()
-	var cols []string
-	var col string
-	for rows.Next() {
-		err = rows.Scan(&col)
-		if err != nil {
-			return nil, errors.Annotatef(err, "sql: %s", priKeyColsQuery)
-		}
-		cols = append(cols, col)
-	}
-	if err = rows.Err(); err != nil {
+	results, err := GetSpecifiedColumnValuesAndClose(rows, "KEY_NAME", "COLUMN_NAME")
+	if err != nil {
 		return nil, errors.Annotatef(err, "sql: %s", priKeyColsQuery)
+	}
+	cols := make([]string, 0, len(results))
+	for _, oneRow := range results {
+		keyName, columnName := oneRow[0], oneRow[1]
+		if keyName == "PRIMARY" {
+			cols = append(cols, columnName)
+		}
 	}
 	return cols, nil
 }
 
 func getNumericIndex(db *sql.Conn, meta TableMeta) (string, error) {
 	database, table := meta.DatabaseName(), meta.TableName()
-	colNames, colTypes := meta.ColumnNames(), meta.ColumnTypes()
-	colName2Type := make(map[string]string, len(colNames))
-	for i := range colNames {
-		colName2Type[colNames[i]] = colTypes[i]
-	}
+	colName2Type := string2Map(meta.ColumnNames(), meta.ColumnTypes())
 	keyQuery := fmt.Sprintf("SHOW INDEX FROM `%s`.`%s`", escapeString(database), escapeString(table))
 	rows, err := db.QueryContext(context.Background(), keyQuery)
 	if err != nil {
