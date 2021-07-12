@@ -68,9 +68,9 @@ type mockTableIR struct {
 	colTypes         []string
 	colNames         []string
 	escapeBackSlash  bool
+	hasImplicitRowID bool
 	rowErr           error
 	rows             *sql.Rows
-	hasImplicitRowID bool
 	SQLRowIter
 }
 

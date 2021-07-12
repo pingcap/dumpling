@@ -3,7 +3,6 @@
 package export
 
 import (
-	"database/sql"
 	"fmt"
 	"time"
 
@@ -59,19 +58,4 @@ func calculateTableCount(m DatabaseTables) int {
 		}
 	}
 	return cnt
-}
-
-func (d *Dumper) getEstimateTotalRowsCount(tctx *tcontext.Context, conn *sql.Conn) error {
-	conf := d.conf
-	var totalCount uint64
-	for db, tables := range conf.Tables {
-		for _, m := range tables {
-			if m.Type == TableTypeBase {
-				c := estimateCount(tctx, db, m.Name, conn, "", conf)
-				totalCount += c
-			}
-		}
-	}
-	AddCounter(estimateTotalRowsCounter, conf.Labels, float64(totalCount))
-	return nil
 }
