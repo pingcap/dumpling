@@ -143,7 +143,7 @@ func RestoreCharset(w io.StringWriter) {
 // ListAllDatabasesTables lists all the databases and tables from the database
 // if asap is true, will use information_schema to get table info in one query
 // if asap is false, will use show table status for each database because it has better performance according to our tests
-func ListAllDatabasesTables(tctx *tcontext.Context, db *sql.Conn, databaseNames []string, asap bool, tableTypes ...TableType) (DatabaseTables, error) {
+func ListAllDatabasesTables(tctx *tcontext.Context, db *sql.Conn, databaseNames []string, asap bool, tableTypes ...TableType) (DatabaseTables, error) { // revive:disable-line:flag-parameter
 	dbTables := DatabaseTables{}
 	var (
 		schema, table, tableTypeStr string
@@ -287,7 +287,7 @@ func buildSelectQuery(database, table, fields, partition, where, orderByClause s
 	return query.String()
 }
 
-func buildOrderByClause(conf *Config, db *sql.Conn, database, table string, hasImplicitRowID bool) (string, error) {
+func buildOrderByClause(conf *Config, db *sql.Conn, database, table string, hasImplicitRowID bool) (string, error) { // revive:disable-line:flag-parameter
 	if !conf.SortByPk {
 		return "", nil
 	}
