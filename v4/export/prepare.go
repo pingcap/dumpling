@@ -126,6 +126,7 @@ func (t TableType) String() string {
 	}
 }
 
+// ParseTableType parses table type string to TableType
 func ParseTableType(s string) (TableType, error) {
 	switch s {
 	case TableTypeBaseStr:
