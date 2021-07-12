@@ -221,6 +221,7 @@ func (d *Dumper) Dump() (dumpErr error) {
 		d.dumpSQL(writerCtx, taskChan)
 	}
 	close(taskChan)
+	_ = metaConn.Close()
 	if err := wg.Wait(); err != nil {
 		summary.CollectFailureUnit("dump table data", err)
 		return errors.Trace(err)
