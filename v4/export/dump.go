@@ -243,7 +243,6 @@ func (d *Dumper) Dump() (dumpErr error) {
 		summary.CollectFailureUnit("dump table data", err)
 		return errors.Trace(err)
 	}
-	finishedRowsCounter.DeleteLabelValues("")
 	summary.CollectSuccessUnit("dump cost", countTotalTask(writers), time.Since(tableDataStartTime))
 
 	summary.SetSuccessStatus(true)
