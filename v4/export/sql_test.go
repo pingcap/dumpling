@@ -16,12 +16,12 @@ import (
 	"strings"
 
 	tcontext "github.com/pingcap/dumpling/v4/context"
-	"github.com/siddontang/go-mysql/mysql"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/coreos/go-semver/semver"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/errors"
+	"github.com/siddontang/go-mysql/mysql"
 )
 
 var _ = Suite(&testSQLSuite{})
