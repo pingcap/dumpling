@@ -6,11 +6,7 @@ import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
-<<<<<<< HEAD
-=======
 	"encoding/csv"
-	"errors"
->>>>>>> ef07f40 (dump: always split TiDB v3.* tables through tidb rowid to save TiDB's memory (#301))
 	"fmt"
 	"io"
 	"os"
@@ -20,6 +16,7 @@ import (
 	"strings"
 
 	tcontext "github.com/pingcap/dumpling/v4/context"
+	"github.com/siddontang/go-mysql/mysql"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/coreos/go-semver/semver"
