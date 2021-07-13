@@ -1,6 +1,6 @@
 module github.com/pingcap/dumpling
 
-go 1.16
+go 1.13
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.0
@@ -22,12 +22,6 @@ require (
 	github.com/pingcap/tidb-tools v4.0.9-0.20201127090955-2707c97b3853+incompatible
 	github.com/prometheus/client_golang v1.5.1
 	github.com/prometheus/client_model v0.2.0
-<<<<<<< HEAD
-=======
-	github.com/satori/go.uuid v1.2.1-0.20181028125025-b2ce2384e17b // indirect
-	github.com/siddontang/go-log v0.0.0-20190221022429-1e957dd83bed // indirect
-	github.com/siddontang/go-mysql v0.0.0-20200222075837-12e89848f047
->>>>>>> 292cbe6 (*: replace storage.Create by storage.New, upgrade dumpling CI to go 1.16 (#286))
 	github.com/soheilhy/cmux v0.1.4
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
 	github.com/spf13/pflag v1.0.5
