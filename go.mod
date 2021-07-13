@@ -16,9 +16,16 @@ require (
 	github.com/pingcap/br v4.0.0-beta.2.0.20210203034957-7bc483ab69d5+incompatible
 	github.com/pingcap/check v0.0.0-20200212061837-5e12011dc712
 	github.com/pingcap/errors v0.11.5-0.20201126102027-b0a155152ca3
+<<<<<<< HEAD
 	github.com/pingcap/failpoint v0.0.0-20200702092429-9f69995143ce
 	github.com/pingcap/log v0.0.0-20201112100606-8f1e84a3abc8
 	github.com/pingcap/tidb v1.1.0-beta.0.20210129045644-ea6ccf82e934 // indirect
+=======
+	github.com/pingcap/failpoint v0.0.0-20210316064728-7acb0f0a3dfd
+	github.com/pingcap/log v0.0.0-20210317133921-96f4fcab92a4
+	github.com/pingcap/parser v0.0.0-20210513020953-ae2c4497c07b
+	github.com/pingcap/tidb v1.1.0-beta.0.20210517044538-8ad868f801fc
+>>>>>>> ef07f40 (dump: always split TiDB v3.* tables through tidb rowid to save TiDB's memory (#301))
 	github.com/pingcap/tidb-tools v4.0.9-0.20201127090955-2707c97b3853+incompatible
 	github.com/prometheus/client_golang v1.5.1
 	github.com/prometheus/client_model v0.2.0
