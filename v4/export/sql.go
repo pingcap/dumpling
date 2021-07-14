@@ -50,7 +50,9 @@ func ShowCreateDatabase(db *sql.Conn, database string) (string, error) {
 	query := fmt.Sprintf("SHOW CREATE DATABASE `%s`", escapeString(database))
 	err := simpleQuery(db, query, handleOneRow)
 	if err != nil {
-		return "", errors.Annotatef(err, "sql: %s", query)
+		// Falling back to simple create statement. This can happen
+		// with MemSQL/SingleStore as MemSQL doesn't support `SHOW CREATE DATABASE`
+		return fmt.Sprintf("CREATE DATABASE `%s`", escapeString(database)), nil
 	}
 	return oneRow[1], nil
 }
@@ -642,7 +644,14 @@ func createConnWithConsistency(ctx context.Context, db *sql.DB) (*sql.Conn, erro
 	query = "START TRANSACTION /*!40108 WITH CONSISTENT SNAPSHOT */"
 	_, err = conn.ExecContext(ctx, query)
 	if err != nil {
-		return nil, errors.Annotatef(err, "sql: %s", query)
+		// Some MySQL Compatible databases like Vitess and MemSQL/SingleStore
+		// are newer than 4.1.8 (the version comment) but don't acutally support
+		// `WITH CONSISTENT SNAPSHOT`. So retry without that if the statement fails.
+		query = "START TRANSACTION"
+		_, err = conn.ExecContext(ctx, query)
+		if err != nil {
+			return nil, errors.Annotatef(err, "sql: %s", query)
+		}
 	}
 	return conn, nil
 }
