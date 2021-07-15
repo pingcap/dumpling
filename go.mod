@@ -19,12 +19,12 @@ require (
 	github.com/joho/sqltocsv v0.0.0-20210428211105-a6d6801d59df // indirect
 	github.com/kr/text v0.2.0 // indirect
 	github.com/mattn/go-runewidth v0.0.10 // indirect
-	github.com/pingcap/br v4.0.14-0.20210708110729-47fb71a4d5a0+incompatible
+	github.com/pingcap/br v4.0.14-0.20210715051733-8afeee8f2859+incompatible
 	github.com/pingcap/check v0.0.0-20200212061837-5e12011dc712
 	github.com/pingcap/errors v0.11.5-0.20201126102027-b0a155152ca3
 	github.com/pingcap/failpoint v0.0.0-20210316064728-7acb0f0a3dfd
 	github.com/pingcap/log v0.0.0-20210317133921-96f4fcab92a4
-	github.com/pingcap/tidb v1.1.0-beta.0.20210308110454-a7199ff91648 // indirect
+	github.com/pingcap/tidb v1.1.0-beta.0.20210715025933-fb96fe79e72a // indirect
 	github.com/pingcap/tidb-tools v4.0.9-0.20201127090955-2707c97b3853+incompatible
 	github.com/prometheus/client_golang v1.5.1
 	github.com/prometheus/client_model v0.2.0
