@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -70,6 +71,7 @@ const (
 	flagReadTimeout              = "read-timeout"
 	flagTransactionalConsistency = "transactional-consistency"
 	flagCompress                 = "compress"
+	flagTZUTC                    = "tz-utc"
 
 	// FlagHelp represents the help flag
 	FlagHelp = "help"
@@ -90,6 +92,7 @@ type Config struct {
 	EscapeBackslash          bool
 	DumpEmptyDatabase        bool
 	PosAfterConnect          bool
+	TimeZone                 string
 	CompressType             storage.CompressType
 
 	Host     string
@@ -190,6 +193,9 @@ func (conf *Config) GetDSN(db string) string {
 	if conf.AllowCleartextPasswords {
 		dsn += "&allowCleartextPasswords=1"
 	}
+	if conf.TimeZone != "" {
+		dsn += "&time_zone=" + url.QueryEscape(fmt.Sprintf("'%s'", conf.TimeZone))
+	}
 	return dsn
 }
 
@@ -246,6 +252,7 @@ func (conf *Config) DefineFlags(flags *pflag.FlagSet) {
 	flags.Bool(flagTransactionalConsistency, true, "Only support transactional consistency")
 	_ = flags.MarkHidden(flagTransactionalConsistency)
 	flags.StringP(flagCompress, "c", "", "Compress output file type, support 'gzip', 'no-compression' now")
+	flags.Bool(flagTZUTC, false, "SET TIME_ZONE='+00:00' at top of dump to allow dumping of TIMESTAMP data with UTC time")
 }
 
 // ParseFromFlags parses dumpling's export.Config from flags
@@ -391,6 +398,13 @@ func (conf *Config) ParseFromFlags(flags *pflag.FlagSet) error {
 	conf.TiDBMemQuotaQuery, err = flags.GetUint64(flagTidbMemQuotaQuery)
 	if err != nil {
 		return errors.Trace(err)
+	}
+	useUTCTimeZone, err := flags.GetBool(flagTZUTC)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if useUTCTimeZone {
+		conf.TimeZone = "+00:00"
 	}
 
 	if conf.Threads <= 0 {
