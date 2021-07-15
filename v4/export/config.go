@@ -169,13 +169,6 @@ func DefaultConfig() *Config {
 	}
 }
 
-// Clone clones a dumpling config.
-func (conf *Config) Clone() *Config {
-	clone := &Config{}
-	*clone = *conf
-	return clone
-}
-
 // String returns dumpling's config in json format
 func (conf *Config) String() string {
 	cfg, err := json.Marshal(conf)

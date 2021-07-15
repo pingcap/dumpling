@@ -297,15 +297,22 @@ func (s *testWriteSuite) TestWrite(c *C) {
 	c.Assert(err, IsNil)
 }
 
+// cloneConfigForTest clones a dumpling config.
+func cloneConfigForTest(conf *Config) *Config {
+	clone := &Config{}
+	*clone = *conf
+	return clone
+}
+
 func configForWriteSQL(config *Config, fileSize, statementSize uint64) *Config {
-	cfg := config.Clone()
+	cfg := cloneConfigForTest(config)
 	cfg.FileSize = fileSize
 	cfg.StatementSize = statementSize
 	return cfg
 }
 
 func configForWriteCSV(config *Config, noHeader bool, opt *csvOption) *Config {
-	cfg := config.Clone()
+	cfg := cloneConfigForTest(config)
 	cfg.NoHeader = noHeader
 	cfg.CsvNullValue = opt.nullValue
 	cfg.CsvDelimiter = string(opt.delimiter)
