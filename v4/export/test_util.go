@@ -58,17 +58,19 @@ func newMockMetaIR(targetName string, meta string, specialComments []string) Met
 }
 
 type mockTableIR struct {
-	dbName          string
-	tblName         string
-	chunIndex       int
-	data            [][]driver.Value
-	selectedField   string
-	specCmt         []string
-	colTypes        []string
-	colNames        []string
-	escapeBackSlash bool
-	rowErr          error
-	rows            *sql.Rows
+	dbName           string
+	tblName          string
+	chunIndex        int
+	data             [][]driver.Value
+	selectedField    string
+	selectedLen      int
+	specCmt          []string
+	colTypes         []string
+	colNames         []string
+	escapeBackSlash  bool
+	hasImplicitRowID bool
+	rowErr           error
+	rows             *sql.Rows
 	SQLRowIter
 }
 
@@ -84,7 +86,19 @@ func (m *mockTableIR) ShowCreateView() string {
 	return ""
 }
 
+<<<<<<< HEAD
 func (m *mockTableIR) Start(tctx *tcontext.Context, conn *sql.Conn) error {
+=======
+func (m *mockTableIR) AvgRowLength() uint64 {
+	return 0
+}
+
+func (m *mockTableIR) HasImplicitRowID() bool {
+	return m.hasImplicitRowID
+}
+
+func (m *mockTableIR) Start(_ *tcontext.Context, conn *sql.Conn) error {
+>>>>>>> dc97ee9 (*: reduce dumpling accessing database and information_schema usage to improve its stability (#305))
 	return nil
 }
 
@@ -114,6 +128,10 @@ func (m *mockTableIR) ColumnNames() []string {
 
 func (m *mockTableIR) SelectedField() string {
 	return m.selectedField
+}
+
+func (m *mockTableIR) SelectedLen() int {
+	return m.selectedLen
 }
 
 func (m *mockTableIR) SpecialComments() StringIter {
@@ -160,6 +178,7 @@ func newMockTableIR(databaseName, tableName string, data [][]driver.Value, speci
 		data:          data,
 		specCmt:       specialComments,
 		selectedField: "*",
+		selectedLen:   len(colTypes),
 		colTypes:      colTypes,
 		SQLRowIter:    nil,
 	}

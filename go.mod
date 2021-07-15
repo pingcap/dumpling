@@ -22,7 +22,10 @@ require (
 	github.com/pingcap/tidb-tools v4.0.9-0.20201127090955-2707c97b3853+incompatible
 	github.com/prometheus/client_golang v1.5.1
 	github.com/prometheus/client_model v0.2.0
+<<<<<<< HEAD
 	github.com/siddontang/go-mysql v0.0.0-20200222075837-12e89848f047
+=======
+>>>>>>> dc97ee9 (*: reduce dumpling accessing database and information_schema usage to improve its stability (#305))
 	github.com/soheilhy/cmux v0.1.4
 	github.com/spf13/pflag v1.0.5
 	github.com/syndtr/goleveldb v1.0.1-0.20190625010220-02440ea7a285 // indirect
