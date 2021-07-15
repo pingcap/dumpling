@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
@@ -526,18 +525,10 @@ func (conf *Config) createExternalStorage(ctx context.Context) (storage.External
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	httpClient := http.DefaultClient
-	httpClient.Timeout = 30 * time.Second
-	maxIdleConnsPerHost := http.DefaultMaxIdleConnsPerHost
-	if conf.Threads > maxIdleConnsPerHost {
-		maxIdleConnsPerHost = conf.Threads
-	}
-	transport := http.DefaultTransport.(*http.Transport).Clone()
-	transport.MaxIdleConnsPerHost = maxIdleConnsPerHost
-	httpClient.Transport = transport
 
 	return storage.New(ctx, b, &storage.ExternalStorageOptions{
-		HTTPClient: httpClient,
+		SkipCheckPath:   true,
+		SendCredentials: false,
 	})
 }
 
