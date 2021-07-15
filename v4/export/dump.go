@@ -979,11 +979,7 @@ func initLogger(d *Dumper) error {
 // createExternalStore is an initialization step of Dumper.
 func createExternalStore(d *Dumper) error {
 	tctx, conf := d.tctx, d.conf
-	b, err := storage.ParseBackend(conf.OutputDirPath, &conf.BackendOptions)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	extStore, err := storage.Create(tctx, b, false)
+	extStore, err := conf.createExternalStorage(tctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -1228,11 +1224,7 @@ func (d *Dumper) renewSelectTableRegionFuncForLowerTiDB(tctx *tcontext.Context) 
 				d.L().Debug("fail to decode region start key", zap.Error(err), zap.String("key", region.StartKey), zap.Int64("tableID", tableID))
 				continue
 			}
-			if handle.IsInt() {
-				tableInfoMap[db][tbl] = append(tableInfoMap[db][tbl], handle.IntValue())
-			} else {
-				d.L().Debug("not an int handle", zap.Error(err), zap.Stringer("handle", handle))
-			}
+			tableInfoMap[db][tbl] = append(tableInfoMap[db][tbl], handle)
 		}
 	}
 	for _, tbInfos := range tableInfoMap {

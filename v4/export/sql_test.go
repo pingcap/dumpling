@@ -21,7 +21,6 @@ import (
 	"github.com/coreos/go-semver/semver"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/errors"
-	"github.com/siddontang/go-mysql/mysql"
 )
 
 var _ = Suite(&testSQLSuite{})
@@ -1457,11 +1456,7 @@ func (s *testSQLSuite) TestBuildVersion3RegionQueries(c *C) {
 				WillReturnResult(sqlmock.NewResult(0, 0))
 		} else {
 			mock.ExpectExec("SELECT _tidb_rowid").
-				WillReturnError(&mysql.MyError{
-					Code:    mysql.ER_BAD_FIELD_ERROR,
-					State:   "42S22",
-					Message: "Unknown column '_tidb_rowid' in 'field list'",
-				})
+				WillReturnError(errors.New(`1054, "Unknown column '_tidb_rowid' in 'field list'"`))
 			rows := sqlmock.NewRows([]string{"COLUMN_NAME", "DATA_TYPE"})
 			for i := range handleColNames {
 				rows.AddRow(handleColNames[i], handleColTypes[i])
