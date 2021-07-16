@@ -4,9 +4,7 @@ package export
 
 import (
 	"context"
-	"database/sql"
 	"database/sql/driver"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -15,10 +13,18 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/coreos/go-semver/semver"
 	. "github.com/pingcap/check"
-	"github.com/siddontang/go-mysql/mysql"
+	"github.com/pingcap/errors"
 )
 
-var _ = Suite(&testSQLSuite{})
+var (
+	_                = Suite(&testSQLSuite{})
+	showIndexHeaders = []string{"Table", "Non_unique", "Key_name", "Seq_in_index", "Column_name", "Collation", "Cardinality", "Sub_part", "Packed", "Null", "Index_type", "Comment", "Index_comment"}
+)
+
+const (
+	database = "foo"
+	table    = "bar"
+)
 
 type testSQLSuite struct{}
 
@@ -74,41 +80,33 @@ func (s *testSQLSuite) TestBuildSelectAllQuery(c *C) {
 	// Test TiDB server.
 	mockConf.ServerInfo.ServerType = ServerTypeTiDB
 
-	// _tidb_rowid is available.
-	mock.ExpectExec("SELECT _tidb_rowid from `test`.`t`").
-		WillReturnResult(sqlmock.NewResult(0, 0))
-
-	orderByClause, err := buildOrderByClause(mockConf, conn, "test", "t")
+	orderByClause, err := buildOrderByClause(mockConf, conn, database, table, true)
 	c.Assert(err, IsNil)
 
-	mock.ExpectQuery("SELECT COLUMN_NAME").
-		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg()).
-		WillReturnRows(sqlmock.NewRows([]string{"column_name", "extra"}).AddRow("id", ""))
+	mock.ExpectQuery("SHOW COLUMNS FROM").
+		WillReturnRows(sqlmock.NewRows([]string{"Field", "Type", "Null", "Key", "Default", "Extra"}).
+			AddRow("id", "int(11)", "NO", "PRI", nil, ""))
 
-	selectedField, _, err := buildSelectField(conn, "test", "t", false)
+	selectedField, _, err := buildSelectField(conn, database, table, false)
 	c.Assert(err, IsNil)
-	q := buildSelectQuery("test", "t", selectedField, "", "", orderByClause)
-	c.Assert(q, Equals, "SELECT * FROM `test`.`t` ORDER BY `_tidb_rowid`")
+	q := buildSelectQuery(database, table, selectedField, "", "", orderByClause)
+	c.Assert(q, Equals, fmt.Sprintf("SELECT * FROM `%s`.`%s` ORDER BY `_tidb_rowid`", database, table))
 
-	// _tidb_rowid is unavailable, or PKIsHandle.
-	mock.ExpectExec("SELECT _tidb_rowid from `test`.`t`").
-		WillReturnError(errors.New(`1054, "Unknown column '_tidb_rowid' in 'field list'"`))
+	mock.ExpectQuery(fmt.Sprintf("SHOW INDEX FROM `%s`.`%s`", database, table)).
+		WillReturnRows(sqlmock.NewRows(showIndexHeaders).
+			AddRow(table, 0, "PRIMARY", 1, "id", "A", 0, nil, nil, "", "BTREE", "", ""))
 
-	mock.ExpectQuery("SELECT column_name FROM information_schema.KEY_COLUMN_USAGE").
-		WithArgs("test", "t").
-		WillReturnRows(sqlmock.NewRows([]string{"column_name"}).AddRow("id"))
-
-	orderByClause, err = buildOrderByClause(mockConf, conn, "test", "t")
+	orderByClause, err = buildOrderByClause(mockConf, conn, database, table, false)
 	c.Assert(err, IsNil)
 
-	mock.ExpectQuery("SELECT COLUMN_NAME").
-		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg()).
-		WillReturnRows(sqlmock.NewRows([]string{"column_name", "extra"}).AddRow("id", ""))
+	mock.ExpectQuery("SHOW COLUMNS FROM").
+		WillReturnRows(sqlmock.NewRows([]string{"Field", "Type", "Null", "Key", "Default", "Extra"}).
+			AddRow("id", "int(11)", "NO", "PRI", nil, ""))
 
-	selectedField, _, err = buildSelectField(conn, "test", "t", false)
+	selectedField, _, err = buildSelectField(conn, database, table, false)
 	c.Assert(err, IsNil)
-	q = buildSelectQuery("test", "t", selectedField, "", "", orderByClause)
-	c.Assert(q, Equals, "SELECT * FROM `test`.`t` ORDER BY `id`")
+	q = buildSelectQuery(database, table, selectedField, "", "", orderByClause)
+	c.Assert(q, Equals, fmt.Sprintf("SELECT * FROM `%s`.`%s` ORDER BY `id`", database, table))
 	c.Assert(mock.ExpectationsWereMet(), IsNil)
 
 	// Test other servers.
@@ -118,20 +116,20 @@ func (s *testSQLSuite) TestBuildSelectAllQuery(c *C) {
 	for _, serverTp := range otherServers {
 		mockConf.ServerInfo.ServerType = serverTp
 		cmt := Commentf("server type: %s", serverTp)
-		mock.ExpectQuery("SELECT column_name FROM information_schema.KEY_COLUMN_USAGE").
-			WithArgs("test", "t").
-			WillReturnRows(sqlmock.NewRows([]string{"column_name"}).AddRow("id"))
-		orderByClause, err := buildOrderByClause(mockConf, conn, "test", "t")
+		mock.ExpectQuery(fmt.Sprintf("SHOW INDEX FROM `%s`.`%s`", database, table)).
+			WillReturnRows(sqlmock.NewRows(showIndexHeaders).
+				AddRow(table, 0, "PRIMARY", 1, "id", "A", 0, nil, nil, "", "BTREE", "", ""))
+		orderByClause, err := buildOrderByClause(mockConf, conn, database, table, false)
 		c.Assert(err, IsNil, cmt)
 
-		mock.ExpectQuery("SELECT COLUMN_NAME").
-			WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg()).
-			WillReturnRows(sqlmock.NewRows([]string{"column_name", "extra"}).AddRow("id", ""))
+		mock.ExpectQuery("SHOW COLUMNS FROM").
+			WillReturnRows(sqlmock.NewRows([]string{"Field", "Type", "Null", "Key", "Default", "Extra"}).
+				AddRow("id", "int(11)", "NO", "PRI", nil, ""))
 
-		selectedField, _, err = buildSelectField(conn, "test", "t", false)
+		selectedField, _, err = buildSelectField(conn, database, table, false)
 		c.Assert(err, IsNil)
-		q = buildSelectQuery("test", "t", selectedField, "", "", orderByClause)
-		c.Assert(q, Equals, "SELECT * FROM `test`.`t` ORDER BY `id`", cmt)
+		q = buildSelectQuery(database, table, selectedField, "", "", orderByClause)
+		c.Assert(q, Equals, fmt.Sprintf("SELECT * FROM `%s`.`%s` ORDER BY `id`", database, table), cmt)
 		err = mock.ExpectationsWereMet()
 		c.Assert(err, IsNil, cmt)
 		c.Assert(mock.ExpectationsWereMet(), IsNil, cmt)
@@ -141,21 +139,20 @@ func (s *testSQLSuite) TestBuildSelectAllQuery(c *C) {
 	for _, serverTp := range otherServers {
 		mockConf.ServerInfo.ServerType = serverTp
 		cmt := Commentf("server type: %s", serverTp)
-		mock.ExpectQuery("SELECT column_name FROM information_schema.KEY_COLUMN_USAGE").
-			WithArgs("test", "t").
-			WillReturnRows(sqlmock.NewRows([]string{"column_name"}))
+		mock.ExpectQuery(fmt.Sprintf("SHOW INDEX FROM `%s`.`%s`", database, table)).
+			WillReturnRows(sqlmock.NewRows(showIndexHeaders))
 
-		orderByClause, err := buildOrderByClause(mockConf, conn, "test", "t")
+		orderByClause, err := buildOrderByClause(mockConf, conn, database, table, false)
 		c.Assert(err, IsNil, cmt)
 
-		mock.ExpectQuery("SELECT COLUMN_NAME").
-			WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg()).
-			WillReturnRows(sqlmock.NewRows([]string{"column_name", "extra"}).AddRow("id", ""))
+		mock.ExpectQuery("SHOW COLUMNS FROM").
+			WillReturnRows(sqlmock.NewRows([]string{"Field", "Type", "Null", "Key", "Default", "Extra"}).
+				AddRow("id", "int(11)", "NO", "PRI", nil, ""))
 
 		selectedField, _, err = buildSelectField(conn, "test", "t", false)
 		c.Assert(err, IsNil)
-		q := buildSelectQuery("test", "t", selectedField, "", "", orderByClause)
-		c.Assert(q, Equals, "SELECT * FROM `test`.`t`", cmt)
+		q := buildSelectQuery(database, table, selectedField, "", "", orderByClause)
+		c.Assert(q, Equals, fmt.Sprintf("SELECT * FROM `%s`.`%s`", database, table), cmt)
 		err = mock.ExpectationsWereMet()
 		c.Assert(err, IsNil, cmt)
 		c.Assert(mock.ExpectationsWereMet(), IsNil)
@@ -167,14 +164,14 @@ func (s *testSQLSuite) TestBuildSelectAllQuery(c *C) {
 		mockConf.ServerInfo.ServerType = ServerType(tp)
 		cmt := Commentf("current server type: ", tp)
 
-		mock.ExpectQuery("SELECT COLUMN_NAME").
-			WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg()).
-			WillReturnRows(sqlmock.NewRows([]string{"column_name", "extra"}).AddRow("id", ""))
+		mock.ExpectQuery("SHOW COLUMNS FROM").
+			WillReturnRows(sqlmock.NewRows([]string{"Field", "Type", "Null", "Key", "Default", "Extra"}).
+				AddRow("id", "int(11)", "NO", "PRI", nil, ""))
 
 		selectedField, _, err := buildSelectField(conn, "test", "t", false)
 		c.Assert(err, IsNil)
-		q := buildSelectQuery("test", "t", selectedField, "", "", "")
-		c.Assert(q, Equals, "SELECT * FROM `test`.`t`", cmt)
+		q := buildSelectQuery(database, table, selectedField, "", "", "")
+		c.Assert(q, Equals, fmt.Sprintf("SELECT * FROM `%s`.`%s`", database, table), cmt)
 		c.Assert(mock.ExpectationsWereMet(), IsNil, cmt)
 	}
 }
@@ -192,73 +189,47 @@ func (s *testSQLSuite) TestBuildOrderByClause(c *C) {
 	// Test TiDB server.
 	mockConf.ServerInfo.ServerType = ServerTypeTiDB
 
-	// _tidb_rowid is available.
-	mock.ExpectExec("SELECT _tidb_rowid from `test`.`t`").
-		WillReturnResult(sqlmock.NewResult(0, 0))
-
-	orderByClause, err := buildOrderByClause(mockConf, conn, "test", "t")
+	orderByClause, err := buildOrderByClause(mockConf, conn, database, table, true)
 	c.Assert(err, IsNil)
 	c.Assert(orderByClause, Equals, orderByTiDBRowID)
 
-	// _tidb_rowid is unavailable, or PKIsHandle.
-	mock.ExpectExec("SELECT _tidb_rowid from `test`.`t`").
-		WillReturnError(errors.New(`1054, "Unknown column '_tidb_rowid' in 'field list'"`))
+	mock.ExpectQuery(fmt.Sprintf("SHOW INDEX FROM `%s`.`%s`", database, table)).
+		WillReturnRows(sqlmock.NewRows(showIndexHeaders).AddRow(table, 0, "PRIMARY", 1, "id", "A", 0, nil, nil, "", "BTREE", "", ""))
 
-	mock.ExpectQuery("SELECT column_name FROM information_schema.KEY_COLUMN_USAGE").
-		WithArgs("test", "t").
-		WillReturnRows(sqlmock.NewRows([]string{"column_name"}).AddRow("id"))
-
-	orderByClause, err = buildOrderByClause(mockConf, conn, "test", "t")
+	orderByClause, err = buildOrderByClause(mockConf, conn, database, table, false)
 	c.Assert(err, IsNil)
 	c.Assert(orderByClause, Equals, "ORDER BY `id`")
 
-	// Test other servers.
-	otherServers := []ServerType{ServerTypeUnknown, ServerTypeMySQL, ServerTypeMariaDB}
-
 	// Test table with primary key.
-	for _, serverTp := range otherServers {
-		mockConf.ServerInfo.ServerType = serverTp
-		cmt := Commentf("server type: %s", serverTp)
-		mock.ExpectQuery("SELECT column_name FROM information_schema.KEY_COLUMN_USAGE").
-			WithArgs("test", "t").
-			WillReturnRows(sqlmock.NewRows([]string{"column_name"}).AddRow("id"))
-		orderByClause, err := buildOrderByClause(mockConf, conn, "test", "t")
-		c.Assert(err, IsNil, cmt)
-		c.Assert(orderByClause, Equals, "ORDER BY `id`", cmt)
-	}
+	mock.ExpectQuery(fmt.Sprintf("SHOW INDEX FROM `%s`.`%s`", database, table)).
+		WillReturnRows(sqlmock.NewRows(showIndexHeaders).AddRow(table, 0, "PRIMARY", 1, "id", "A", 0, nil, nil, "", "BTREE", "", ""))
+	orderByClause, err = buildOrderByClause(mockConf, conn, database, table, false)
+	c.Assert(err, IsNil)
+	c.Assert(orderByClause, Equals, "ORDER BY `id`")
 
 	// Test table with joint primary key.
-	for _, serverTp := range otherServers {
-		mockConf.ServerInfo.ServerType = serverTp
-		cmt := Commentf("server type: %s", serverTp)
-		mock.ExpectQuery("SELECT column_name FROM information_schema.KEY_COLUMN_USAGE").
-			WithArgs("test", "t").
-			WillReturnRows(sqlmock.NewRows([]string{"column_name"}).AddRow("id").AddRow("name"))
-		orderByClause, err := buildOrderByClause(mockConf, conn, "test", "t")
-		c.Assert(err, IsNil, cmt)
-		c.Assert(orderByClause, Equals, "ORDER BY `id`,`name`", cmt)
-	}
+	mock.ExpectQuery(fmt.Sprintf("SHOW INDEX FROM `%s`.`%s`", database, table)).
+		WillReturnRows(sqlmock.NewRows(showIndexHeaders).
+			AddRow(table, 0, "PRIMARY", 1, "id", "A", 0, nil, nil, "", "BTREE", "", "").
+			AddRow(table, 0, "PRIMARY", 2, "name", "A", 0, nil, nil, "", "BTREE", "", ""))
+	orderByClause, err = buildOrderByClause(mockConf, conn, database, table, false)
+	c.Assert(err, IsNil)
+	c.Assert(orderByClause, Equals, "ORDER BY `id`,`name`")
 
 	// Test table without primary key.
-	for _, serverTp := range otherServers {
-		mockConf.ServerInfo.ServerType = serverTp
-		cmt := Commentf("server type: %s", serverTp)
-		mock.ExpectQuery("SELECT column_name FROM information_schema.KEY_COLUMN_USAGE").
-			WithArgs("test", "t").
-			WillReturnRows(sqlmock.NewRows([]string{"column_name"}))
+	mock.ExpectQuery(fmt.Sprintf("SHOW INDEX FROM `%s`.`%s`", database, table)).
+		WillReturnRows(sqlmock.NewRows(showIndexHeaders))
 
-		orderByClause, err := buildOrderByClause(mockConf, conn, "test", "t")
-		c.Assert(err, IsNil, cmt)
-		c.Assert(orderByClause, Equals, "", cmt)
-	}
+	orderByClause, err = buildOrderByClause(mockConf, conn, database, table, false)
+	c.Assert(err, IsNil)
+	c.Assert(orderByClause, Equals, "")
 
 	// Test when config.SortByPk is disabled.
 	mockConf.SortByPk = false
-	for tp := ServerTypeUnknown; tp < ServerTypeAll; tp++ {
-		mockConf.ServerInfo.ServerType = ServerType(tp)
-		cmt := Commentf("current server type: ", tp)
+	for _, hasImplicitRowID := range []bool{false, true} {
+		cmt := Commentf("current hasImplicitRowID: ", hasImplicitRowID)
 
-		orderByClause, err := buildOrderByClause(mockConf, conn, "test", "t")
+		orderByClause, err := buildOrderByClause(mockConf, conn, database, table, hasImplicitRowID)
 		c.Assert(err, IsNil, cmt)
 		c.Assert(orderByClause, Equals, "", cmt)
 	}
@@ -272,9 +243,9 @@ func (s *testSQLSuite) TestBuildSelectField(c *C) {
 	c.Assert(err, IsNil)
 
 	// generate columns not found
-	mock.ExpectQuery("SELECT COLUMN_NAME").
-		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg()).
-		WillReturnRows(sqlmock.NewRows([]string{"column_name", "extra"}).AddRow("id", ""))
+	mock.ExpectQuery("SHOW COLUMNS FROM").
+		WillReturnRows(sqlmock.NewRows([]string{"Field", "Type", "Null", "Key", "Default", "Extra"}).
+			AddRow("id", "int(11)", "NO", "PRI", nil, ""))
 
 	selectedField, _, err := buildSelectField(conn, "test", "t", false)
 	c.Assert(selectedField, Equals, "*")
@@ -282,10 +253,11 @@ func (s *testSQLSuite) TestBuildSelectField(c *C) {
 	c.Assert(mock.ExpectationsWereMet(), IsNil)
 
 	// user assigns completeInsert
-	mock.ExpectQuery("SELECT COLUMN_NAME").
-		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg()).
-		WillReturnRows(sqlmock.NewRows([]string{"column_name", "extra"}).AddRow("id", "").
-			AddRow("name", "").AddRow("quo`te", ""))
+	mock.ExpectQuery("SHOW COLUMNS FROM").
+		WillReturnRows(sqlmock.NewRows([]string{"Field", "Type", "Null", "Key", "Default", "Extra"}).
+			AddRow("id", "int(11)", "NO", "PRI", nil, "").
+			AddRow("name", "varchar(12)", "NO", "", nil, "").
+			AddRow("quo`te", "varchar(12)", "NO", "UNI", nil, ""))
 
 	selectedField, _, err = buildSelectField(conn, "test", "t", true)
 	c.Assert(selectedField, Equals, "`id`,`name`,`quo``te`")
@@ -293,10 +265,12 @@ func (s *testSQLSuite) TestBuildSelectField(c *C) {
 	c.Assert(mock.ExpectationsWereMet(), IsNil)
 
 	// found generate columns, rest columns is `id`,`name`
-	mock.ExpectQuery("SELECT COLUMN_NAME").
-		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg()).
-		WillReturnRows(sqlmock.NewRows([]string{"column_name", "extra"}).
-			AddRow("id", "").AddRow("name", "").AddRow("quo`te", "").AddRow("generated", "VIRTUAL GENERATED"))
+	mock.ExpectQuery("SHOW COLUMNS FROM").
+		WillReturnRows(sqlmock.NewRows([]string{"Field", "Type", "Null", "Key", "Default", "Extra"}).
+			AddRow("id", "int(11)", "NO", "PRI", nil, "").
+			AddRow("name", "varchar(12)", "NO", "", nil, "").
+			AddRow("quo`te", "varchar(12)", "NO", "UNI", nil, "").
+			AddRow("generated", "varchar(12)", "NO", "", nil, "VIRTUAL GENERATED"))
 
 	selectedField, _, err = buildSelectField(conn, "test", "t", false)
 	c.Assert(selectedField, Equals, "`id`,`name`,`quo``te`")
@@ -353,62 +327,62 @@ func (s *testSQLSuite) TestShowCreateView(c *C) {
 }
 
 func (s *testSQLSuite) TestGetSuitableRows(c *C) {
+	testCases := []struct {
+		avgRowLength uint64
+		expectedRows uint64
+	}{
+		{
+			0,
+			200000,
+		},
+		{
+			32,
+			1000000,
+		},
+		{
+			1024,
+			131072,
+		},
+		{
+			4096,
+			32768,
+		},
+	}
+	for _, testCase := range testCases {
+		rows := GetSuitableRows(testCase.avgRowLength)
+		c.Assert(rows, Equals, testCase.expectedRows)
+	}
+}
+
+func (s *testSQLSuite) TestSelectTiDBRowID(c *C) {
 	db, mock, err := sqlmock.New()
 	c.Assert(err, IsNil)
 	defer db.Close()
 	conn, err := db.Conn(context.Background())
 	c.Assert(err, IsNil)
-	tctx, cancel := tcontext.Background().WithCancel()
-	defer cancel()
-	const (
-		query    = "select AVG_ROW_LENGTH from INFORMATION_SCHEMA.TABLES where table_schema=\\? and table_name=\\?;"
-		database = "foo"
-		table    = "bar"
-	)
+	database, table := "test", "t"
 
-	testCases := []struct {
-		avgRowLength uint64
-		expectedRows uint64
-		returnErr    error
-	}{
-		{
-			32,
-			200000,
-			sql.ErrNoRows,
-		},
-		{
-			0,
-			200000,
-			nil,
-		},
-		{
-			32,
-			1000000,
-			nil,
-		},
-		{
-			1024,
-			131072,
-			nil,
-		},
-		{
-			4096,
-			32768,
-			nil,
-		},
-	}
-	for _, testCase := range testCases {
-		if testCase.returnErr == nil {
-			mock.ExpectQuery(query).WithArgs(database, table).
-				WillReturnRows(sqlmock.NewRows([]string{"AVG_ROW_LENGTH"}).
-					AddRow(testCase.avgRowLength))
-		} else {
-			mock.ExpectQuery(query).WithArgs(database, table).
-				WillReturnError(testCase.returnErr)
-		}
-		rows := GetSuitableRows(tctx, conn, database, table)
-		c.Assert(rows, Equals, testCase.expectedRows)
-	}
+	// _tidb_rowid is unavailable, or PKIsHandle.
+	mock.ExpectExec("SELECT _tidb_rowid from `test`.`t`").
+		WillReturnError(errors.New(`1054, "Unknown column '_tidb_rowid' in 'field list'"`))
+	hasImplicitRowID, err := SelectTiDBRowID(conn, database, table)
+	c.Assert(err, IsNil)
+	c.Assert(hasImplicitRowID, IsFalse)
+
+	// _tidb_rowid is available.
+	mock.ExpectExec("SELECT _tidb_rowid from `test`.`t`").
+		WillReturnResult(sqlmock.NewResult(0, 0))
+	hasImplicitRowID, err = SelectTiDBRowID(conn, database, table)
+	c.Assert(err, IsNil)
+	c.Assert(hasImplicitRowID, IsTrue)
+
+	// _tidb_rowid returns error
+	expectedErr := errors.New("mock error")
+	mock.ExpectExec("SELECT _tidb_rowid from `test`.`t`").
+		WillReturnError(expectedErr)
+	hasImplicitRowID, err = SelectTiDBRowID(conn, database, table)
+	c.Assert(errors.Cause(err), Equals, expectedErr)
+	c.Assert(hasImplicitRowID, IsFalse)
 }
 
 func (s *testSQLSuite) TestBuildTableSampleQueries(c *C) {
@@ -430,11 +404,6 @@ func (s *testSQLSuite) TestBuildTableSampleQueries(c *C) {
 		ServerVersion: tableSampleVersion,
 	}
 
-	const (
-		database = "foo"
-		table    = "bar"
-	)
-
 	testCases := []struct {
 		handleColNames       []string
 		handleColTypes       []string
@@ -451,7 +420,7 @@ func (s *testSQLSuite) TestBuildTableSampleQueries(c *C) {
 		},
 		{
 			[]string{"a"},
-			[]string{"bigint"},
+			[]string{"BIGINT"},
 			[][]driver.Value{{1}},
 			[]string{"`a`<1", "`a`>=1"},
 			false,
@@ -459,7 +428,7 @@ func (s *testSQLSuite) TestBuildTableSampleQueries(c *C) {
 		// check whether dumpling can turn to dump whole table
 		{
 			[]string{"a"},
-			[]string{"bigint"},
+			[]string{"BIGINT"},
 			[][]driver.Value{},
 			nil,
 			false,
@@ -467,21 +436,21 @@ func (s *testSQLSuite) TestBuildTableSampleQueries(c *C) {
 		// check whether dumpling can turn to dump whole table
 		{
 			[]string{"_tidb_rowid"},
-			[]string{"bigint"},
+			[]string{"BIGINT"},
 			[][]driver.Value{},
 			nil,
 			true,
 		},
 		{
 			[]string{"_tidb_rowid"},
-			[]string{"bigint"},
+			[]string{"BIGINT"},
 			[][]driver.Value{{1}},
 			[]string{"`_tidb_rowid`<1", "`_tidb_rowid`>=1"},
 			true,
 		},
 		{
 			[]string{"a"},
-			[]string{"bigint"},
+			[]string{"BIGINT"},
 			[][]driver.Value{
 				{1},
 				{2},
@@ -492,14 +461,14 @@ func (s *testSQLSuite) TestBuildTableSampleQueries(c *C) {
 		},
 		{
 			[]string{"a", "b"},
-			[]string{"bigint", "bigint"},
+			[]string{"BIGINT", "BIGINT"},
 			[][]driver.Value{{1, 2}},
 			[]string{"`a`<1 or(`a`=1 and `b`<2)", "`a`>1 or(`a`=1 and `b`>=2)"},
 			false,
 		},
 		{
 			[]string{"a", "b"},
-			[]string{"bigint", "bigint"},
+			[]string{"BIGINT", "BIGINT"},
 			[][]driver.Value{
 				{1, 2},
 				{3, 4},
@@ -515,7 +484,7 @@ func (s *testSQLSuite) TestBuildTableSampleQueries(c *C) {
 		},
 		{
 			[]string{"a", "b", "c"},
-			[]string{"bigint", "bigint", "bigint"},
+			[]string{"BIGINT", "BIGINT", "BIGINT"},
 			[][]driver.Value{
 				{1, 2, 3},
 				{4, 5, 6},
@@ -529,7 +498,7 @@ func (s *testSQLSuite) TestBuildTableSampleQueries(c *C) {
 		},
 		{
 			[]string{"a", "b", "c"},
-			[]string{"bigint", "bigint", "bigint"},
+			[]string{"BIGINT", "BIGINT", "BIGINT"},
 			[][]driver.Value{
 				{1, 2, 3},
 				{1, 4, 5},
@@ -543,7 +512,7 @@ func (s *testSQLSuite) TestBuildTableSampleQueries(c *C) {
 		},
 		{
 			[]string{"a", "b", "c"},
-			[]string{"bigint", "bigint", "bigint"},
+			[]string{"BIGINT", "BIGINT", "BIGINT"},
 			[][]driver.Value{
 				{1, 2, 3},
 				{1, 2, 8},
@@ -558,7 +527,7 @@ func (s *testSQLSuite) TestBuildTableSampleQueries(c *C) {
 		// special case: avoid return same samples
 		{
 			[]string{"a", "b", "c"},
-			[]string{"bigint", "bigint", "bigint"},
+			[]string{"BIGINT", "BIGINT", "BIGINT"},
 			[][]driver.Value{
 				{1, 2, 3},
 				{1, 2, 3},
@@ -573,7 +542,7 @@ func (s *testSQLSuite) TestBuildTableSampleQueries(c *C) {
 		// special case: numbers has bigger lexicographically order but lower number
 		{
 			[]string{"a", "b", "c"},
-			[]string{"bigint", "bigint", "bigint"},
+			[]string{"BIGINT", "BIGINT", "BIGINT"},
 			[][]driver.Value{
 				{12, 2, 3},
 				{111, 4, 5},
@@ -588,7 +557,7 @@ func (s *testSQLSuite) TestBuildTableSampleQueries(c *C) {
 		// test string fields
 		{
 			[]string{"a", "b", "c"},
-			[]string{"bigint", "bigint", "varchar"},
+			[]string{"BIGINT", "BIGINT", "varchar"},
 			[][]driver.Value{
 				{1, 2, "3"},
 				{1, 4, "5"},
@@ -602,7 +571,7 @@ func (s *testSQLSuite) TestBuildTableSampleQueries(c *C) {
 		},
 		{
 			[]string{"a", "b", "c", "d"},
-			[]string{"bigint", "bigint", "bigint", "bigint"},
+			[]string{"BIGINT", "BIGINT", "BIGINT", "BIGINT"},
 			[][]driver.Value{
 				{1, 2, 3, 4},
 				{5, 6, 7, 8},
@@ -652,34 +621,28 @@ func (s *testSQLSuite) TestBuildTableSampleQueries(c *C) {
 		if len(handleColNames) > 0 {
 			taskChan := make(chan Task, 128)
 			quotaCols := make([]string, 0, len(handleColNames))
-			for _, col := range quotaCols {
+			for _, col := range handleColNames {
 				quotaCols = append(quotaCols, wrapBackTicks(col))
 			}
 			selectFields := strings.Join(quotaCols, ",")
-			meta := &tableMeta{
-				database:      database,
-				table:         table,
-				selectedField: selectFields,
-				specCmts: []string{
+			meta := &mockTableIR{
+				dbName:           database,
+				tblName:          table,
+				selectedField:    selectFields,
+				hasImplicitRowID: testCase.hasTiDBRowID,
+				colTypes:         handleColTypes,
+				colNames:         handleColNames,
+				specCmt: []string{
 					"/*!40101 SET NAMES binary*/;",
 				},
 			}
 
-			if testCase.hasTiDBRowID {
-				mock.ExpectExec(fmt.Sprintf("SELECT _tidb_rowid from `%s`.`%s` LIMIT 0", database, table)).
-					WillReturnResult(sqlmock.NewResult(0, 0))
-			} else {
-				mock.ExpectExec(fmt.Sprintf("SELECT _tidb_rowid from `%s`.`%s` LIMIT 0", database, table)).
-					WillReturnError(&mysql.MyError{
-						Code:    mysql.ER_BAD_FIELD_ERROR,
-						State:   "42S22",
-						Message: "Unknown column '_tidb_rowid' in 'field list'",
-					})
-				rows := sqlmock.NewRows([]string{"COLUMN_NAME", "DATA_TYPE"})
-				for i := range handleColNames {
-					rows.AddRow(handleColNames[i], handleColTypes[i])
+			if !testCase.hasTiDBRowID {
+				rows := sqlmock.NewRows(showIndexHeaders)
+				for i, handleColName := range handleColNames {
+					rows.AddRow(table, 0, "PRIMARY", i, handleColName, "A", 0, nil, nil, "", "BTREE", "", "")
 				}
-				mock.ExpectQuery("SELECT c.COLUMN_NAME, DATA_TYPE FROM").WithArgs(database, table).WillReturnRows(rows)
+				mock.ExpectQuery(fmt.Sprintf("SHOW INDEX FROM `%s`.`%s`", database, table)).WillReturnRows(rows)
 			}
 
 			rows := sqlmock.NewRows(handleColNames)
@@ -687,17 +650,21 @@ func (s *testSQLSuite) TestBuildTableSampleQueries(c *C) {
 				rows.AddRow(handleVal...)
 			}
 			mock.ExpectQuery(fmt.Sprintf("SELECT .* FROM `%s`.`%s` TABLESAMPLE REGIONS", database, table)).WillReturnRows(rows)
-
-			rows = sqlmock.NewRows([]string{"COLUMN_NAME", "EXTRA"})
-			for _, handleCol := range handleColNames {
-				rows.AddRow(handleCol, "")
-			}
-			mock.ExpectQuery("SELECT COLUMN_NAME,EXTRA FROM INFORMATION_SCHEMA.COLUMNS").WithArgs(database, table).
-				WillReturnRows(rows)
-			// special case, no value found, will scan whole table and try build order clause
+			// special case, no enough value to split chunks
 			if len(handleVals) == 0 {
-				mock.ExpectExec(fmt.Sprintf("SELECT _tidb_rowid from `%s`.`%s` LIMIT 0", database, table)).
-					WillReturnResult(sqlmock.NewResult(0, 0))
+				if !testCase.hasTiDBRowID {
+					rows = sqlmock.NewRows(showIndexHeaders)
+					for i, handleColName := range handleColNames {
+						rows.AddRow(table, 0, "PRIMARY", i, handleColName, "A", 0, nil, nil, "", "BTREE", "", "")
+					}
+					mock.ExpectQuery(fmt.Sprintf("SHOW INDEX FROM `%s`.`%s`", database, table)).WillReturnRows(rows)
+					mock.ExpectQuery("SHOW INDEX FROM").WillReturnRows(sqlmock.NewRows(showIndexHeaders))
+				} else {
+					d.conf.Rows = 200000
+					mock.ExpectQuery("EXPLAIN SELECT `_tidb_rowid`").
+						WillReturnRows(sqlmock.NewRows([]string{"id", "count", "task", "operator info"}).
+							AddRow("IndexReader_5", "0.00", "root", "index:IndexScan_4"))
+				}
 			}
 
 			c.Assert(d.concurrentDumpTable(tctx, conn, meta, taskChan), IsNil)
@@ -716,14 +683,13 @@ func (s *testSQLSuite) TestBuildTableSampleQueries(c *C) {
 
 			// special case, no value found
 			if len(handleVals) == 0 {
-				orderByClause = orderByTiDBRowID
-				query := buildSelectQuery(database, table, "*", "", "", orderByClause)
+				query := buildSelectQuery(database, table, selectFields, "", "", orderByClause)
 				checkQuery(0, query)
 				continue
 			}
 
 			for i, w := range testCase.expectedWhereClauses {
-				query := buildSelectQuery(database, table, "*", "", buildWhereCondition(d.conf, w), orderByClause)
+				query := buildSelectQuery(database, table, selectFields, "", buildWhereCondition(d.conf, w), orderByClause)
 				checkQuery(i, query)
 			}
 		}
@@ -806,6 +772,7 @@ func (s *testSQLSuite) TestBuildRegionQueriesWithoutPartition(c *C) {
 		ServerType:    ServerTypeTiDB,
 		ServerVersion: gcSafePointVersion,
 	}
+	d.conf.Rows = 200000
 	database := "foo"
 	table := "bar"
 
@@ -821,7 +788,7 @@ func (s *testSQLSuite) TestBuildRegionQueriesWithoutPartition(c *C) {
 				{"7480000000000000FF3300000000000000F8", "7480000000000000FF3300000000000000F8"},
 			},
 			[]string{"a"},
-			[]string{"bigint"},
+			[]string{"BIGINT"},
 			[]string{
 				"",
 			},
@@ -832,7 +799,7 @@ func (s *testSQLSuite) TestBuildRegionQueriesWithoutPartition(c *C) {
 				{"7480000000000000FF3300000000000000F8", "7480000000000000FF3300000000000000F8"},
 			},
 			[]string{"_tidb_rowid"},
-			[]string{"bigint"},
+			[]string{"BIGINT"},
 			[]string{
 				"",
 			},
@@ -846,7 +813,7 @@ func (s *testSQLSuite) TestBuildRegionQueriesWithoutPartition(c *C) {
 				{"7480000000000000FF335F728000000000FF2BF2010000000000FA", "tableID=51, _tidb_rowid=2880001"},
 			},
 			[]string{"a"},
-			[]string{"bigint"},
+			[]string{"BIGINT"},
 			[]string{
 				"`a`<960001",
 				"`a`>=960001 and `a`<1920001",
@@ -865,7 +832,7 @@ func (s *testSQLSuite) TestBuildRegionQueriesWithoutPartition(c *C) {
 				{"7480000000000000FF335F728000000000FF2BF2010000000000FA", "tableID=51, _tidb_rowid=2880001"},
 			},
 			[]string{"_tidb_rowid"},
-			[]string{"bigint"},
+			[]string{"BIGINT"},
 			[]string{
 				"`_tidb_rowid`<960001",
 				"`_tidb_rowid`>=960001 and `_tidb_rowid`<1920001",
@@ -884,16 +851,15 @@ func (s *testSQLSuite) TestBuildRegionQueriesWithoutPartition(c *C) {
 
 		// Test build tasks through table region
 		taskChan := make(chan Task, 128)
-		quotaCols := make([]string, 0, len(handleColNames))
-		for _, col := range quotaCols {
-			quotaCols = append(quotaCols, wrapBackTicks(col))
-		}
-		selectFields := strings.Join(quotaCols, ",")
-		meta := &tableMeta{
-			database:      database,
-			table:         table,
-			selectedField: selectFields,
-			specCmts: []string{
+		meta := &mockTableIR{
+			dbName:           database,
+			tblName:          table,
+			selectedField:    "*",
+			selectedLen:      len(handleColNames),
+			hasImplicitRowID: testCase.hasTiDBRowID,
+			colTypes:         handleColTypes,
+			colNames:         handleColNames,
+			specCmt: []string{
 				"/*!40101 SET NAMES binary*/;",
 			},
 		}
@@ -901,21 +867,12 @@ func (s *testSQLSuite) TestBuildRegionQueriesWithoutPartition(c *C) {
 		mock.ExpectQuery("SELECT PARTITION_NAME from INFORMATION_SCHEMA.PARTITIONS").
 			WithArgs(database, table).WillReturnRows(sqlmock.NewRows([]string{"PARTITION_NAME"}).AddRow(nil))
 
-		if testCase.hasTiDBRowID {
-			mock.ExpectExec(fmt.Sprintf("SELECT _tidb_rowid from `%s`.`%s` LIMIT 0", database, table)).
-				WillReturnResult(sqlmock.NewResult(0, 0))
-		} else {
-			mock.ExpectExec(fmt.Sprintf("SELECT _tidb_rowid from `%s`.`%s` LIMIT 0", database, table)).
-				WillReturnError(&mysql.MyError{
-					Code:    mysql.ER_BAD_FIELD_ERROR,
-					State:   "42S22",
-					Message: "Unknown column '_tidb_rowid' in 'field list'",
-				})
-			rows := sqlmock.NewRows([]string{"COLUMN_NAME", "DATA_TYPE"})
-			for i := range handleColNames {
-				rows.AddRow(handleColNames[i], handleColTypes[i])
+		if !testCase.hasTiDBRowID {
+			rows := sqlmock.NewRows(showIndexHeaders)
+			for i, handleColName := range handleColNames {
+				rows.AddRow(table, 0, "PRIMARY", i, handleColName, "A", 0, nil, nil, "", "BTREE", "", "")
 			}
-			mock.ExpectQuery("SELECT c.COLUMN_NAME, DATA_TYPE FROM").WithArgs(database, table).WillReturnRows(rows)
+			mock.ExpectQuery(fmt.Sprintf("SHOW INDEX FROM `%s`.`%s`", database, table)).WillReturnRows(rows)
 		}
 
 		rows := sqlmock.NewRows([]string{"START_KEY", "tidb_decode_key(START_KEY)"})
@@ -925,19 +882,15 @@ func (s *testSQLSuite) TestBuildRegionQueriesWithoutPartition(c *C) {
 		mock.ExpectQuery("SELECT START_KEY,tidb_decode_key\\(START_KEY\\) from INFORMATION_SCHEMA.TIKV_REGION_STATUS").
 			WithArgs(database, table).WillReturnRows(rows)
 
-		rows = sqlmock.NewRows([]string{"COLUMN_NAME", "EXTRA"})
-		for _, handleCol := range handleColNames {
-			rows.AddRow(handleCol, "")
-		}
-		mock.ExpectQuery("SELECT COLUMN_NAME,EXTRA FROM INFORMATION_SCHEMA.COLUMNS").WithArgs(database, table).
-			WillReturnRows(rows)
-
 		orderByClause := buildOrderByClauseString(handleColNames)
 		// special case, no enough value to split chunks
-		if len(regionResults) <= 1 {
-			mock.ExpectExec(fmt.Sprintf("SELECT _tidb_rowid from `%s`.`%s` LIMIT 0", database, table)).
-				WillReturnResult(sqlmock.NewResult(0, 0))
-			orderByClause = orderByTiDBRowID
+		if !testCase.hasTiDBRowID && len(regionResults) <= 1 {
+			rows = sqlmock.NewRows(showIndexHeaders)
+			for i, handleColName := range handleColNames {
+				rows.AddRow(table, 0, "PRIMARY", i, handleColName, "A", 0, nil, nil, "", "BTREE", "", "")
+			}
+			mock.ExpectQuery(fmt.Sprintf("SHOW INDEX FROM `%s`.`%s`", database, table)).WillReturnRows(rows)
+			mock.ExpectQuery("SHOW INDEX FROM").WillReturnRows(sqlmock.NewRows(showIndexHeaders))
 		}
 		c.Assert(d.concurrentDumpTable(tctx, conn, meta, taskChan), IsNil)
 		c.Assert(mock.ExpectationsWereMet(), IsNil)
@@ -973,8 +926,6 @@ func (s *testSQLSuite) TestBuildRegionQueriesWithPartitions(c *C) {
 		ServerType:    ServerTypeTiDB,
 		ServerVersion: gcSafePointVersion,
 	}
-	database := "foo"
-	table := "bar"
 	partitions := []string{"p0", "p1", "p2"}
 
 	testCases := []struct {
@@ -1001,7 +952,7 @@ func (s *testSQLSuite) TestBuildRegionQueriesWithPartitions(c *C) {
 				},
 			},
 			[]string{"_tidb_rowid"},
-			[]string{"bigint"},
+			[]string{"BIGINT"},
 			[][]string{
 				{""}, {""}, {""},
 			},
@@ -1030,7 +981,7 @@ func (s *testSQLSuite) TestBuildRegionQueriesWithPartitions(c *C) {
 				},
 			},
 			[]string{"_tidb_rowid"},
-			[]string{"bigint"},
+			[]string{"BIGINT"},
 			[][]string{
 				{
 					"`_tidb_rowid`<10001",
@@ -1067,7 +1018,7 @@ func (s *testSQLSuite) TestBuildRegionQueriesWithPartitions(c *C) {
 				},
 			},
 			[]string{"a"},
-			[]string{"bigint"},
+			[]string{"BIGINT"},
 			[][]string{
 
 				{
@@ -1096,16 +1047,15 @@ func (s *testSQLSuite) TestBuildRegionQueriesWithPartitions(c *C) {
 
 		// Test build tasks through table region
 		taskChan := make(chan Task, 128)
-		quotaCols := make([]string, 0, len(handleColNames))
-		for _, col := range quotaCols {
-			quotaCols = append(quotaCols, wrapBackTicks(col))
-		}
-		selectFields := strings.Join(quotaCols, ",")
-		meta := &tableMeta{
-			database:      database,
-			table:         table,
-			selectedField: selectFields,
-			specCmts: []string{
+		meta := &mockTableIR{
+			dbName:           database,
+			tblName:          table,
+			selectedField:    "*",
+			selectedLen:      len(handleColNames),
+			hasImplicitRowID: testCase.hasTiDBRowID,
+			colTypes:         handleColTypes,
+			colNames:         handleColNames,
+			specCmt: []string{
 				"/*!40101 SET NAMES binary*/;",
 			},
 		}
@@ -1117,21 +1067,12 @@ func (s *testSQLSuite) TestBuildRegionQueriesWithPartitions(c *C) {
 		mock.ExpectQuery("SELECT PARTITION_NAME from INFORMATION_SCHEMA.PARTITIONS").
 			WithArgs(database, table).WillReturnRows(rows)
 
-		if testCase.hasTiDBRowID {
-			mock.ExpectExec(fmt.Sprintf("SELECT _tidb_rowid from `%s`.`%s` LIMIT 0", database, table)).
-				WillReturnResult(sqlmock.NewResult(0, 0))
-		} else {
-			mock.ExpectExec(fmt.Sprintf("SELECT _tidb_rowid from `%s`.`%s` LIMIT 0", database, table)).
-				WillReturnError(&mysql.MyError{
-					Code:    mysql.ER_BAD_FIELD_ERROR,
-					State:   "42S22",
-					Message: "Unknown column '_tidb_rowid' in 'field list'",
-				})
-			rows = sqlmock.NewRows([]string{"COLUMN_NAME", "DATA_TYPE"})
-			for i := range handleColNames {
-				rows.AddRow(handleColNames[i], handleColTypes[i])
+		if !testCase.hasTiDBRowID {
+			rows = sqlmock.NewRows(showIndexHeaders)
+			for i, handleColName := range handleColNames {
+				rows.AddRow(table, 0, "PRIMARY", i, handleColName, "A", 0, nil, nil, "", "BTREE", "", "")
 			}
-			mock.ExpectQuery("SELECT c.COLUMN_NAME, DATA_TYPE FROM").WithArgs(database, table).WillReturnRows(rows)
+			mock.ExpectQuery(fmt.Sprintf("SHOW INDEX FROM `%s`.`%s`", database, table)).WillReturnRows(rows)
 		}
 
 		for i, partition := range partitions {
@@ -1141,20 +1082,6 @@ func (s *testSQLSuite) TestBuildRegionQueriesWithPartitions(c *C) {
 			}
 			mock.ExpectQuery(fmt.Sprintf("SHOW TABLE `%s`.`%s` PARTITION\\(`%s`\\) REGIONS", escapeString(database), escapeString(table), escapeString(partition))).
 				WillReturnRows(rows)
-		}
-
-		for range partitions {
-			rows = sqlmock.NewRows([]string{"COLUMN_NAME", "EXTRA"})
-			for _, handleCol := range handleColNames {
-				rows.AddRow(handleCol, "")
-			}
-			mock.ExpectQuery("SELECT COLUMN_NAME,EXTRA FROM INFORMATION_SCHEMA.COLUMNS").WithArgs(database, table).
-				WillReturnRows(rows)
-			// special case, dump whole table
-			if testCase.dumpWholeTable {
-				mock.ExpectExec(fmt.Sprintf("SELECT _tidb_rowid from `%s`.`%s` LIMIT 0", database, table)).
-					WillReturnResult(sqlmock.NewResult(0, 0))
-			}
 		}
 
 		orderByClause := buildOrderByClauseString(handleColNames)
