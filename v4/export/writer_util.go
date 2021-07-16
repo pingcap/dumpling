@@ -141,13 +141,12 @@ type rateWriteSpeedLimit struct {
 // The number of bytes currently downloaded has exceeded the speed limit value and needs to be paused.
 // Use a sliding window to prevent newSize from exceeding WaitN n.
 func (sl *rateWriteSpeedLimit) CheckSpeed(pCtx *tcontext.Context, newSize uint64) {
-	temp := newSize
 	for {
 		if pCtx == nil || pCtx.Err() != nil {
 			return
 		}
-		if temp <= sl.limit {
-			if err := sl.limiter.WaitN(pCtx, int(temp)); err != nil {
+		if newSize <= sl.limit {
+			if err := sl.limiter.WaitN(pCtx, int(newSize)); err != nil {
 				pCtx.L().Error("fail to write speed limit.", zap.Error(err))
 			}
 			break
@@ -155,7 +154,7 @@ func (sl *rateWriteSpeedLimit) CheckSpeed(pCtx *tcontext.Context, newSize uint64
 		if err := sl.limiter.WaitN(pCtx, int(sl.limit)); err != nil {
 			pCtx.L().Error("fail to write speed limit.", zap.Error(err))
 		}
-		temp -= sl.limit
+		newSize -= sl.limit
 	}
 }
 

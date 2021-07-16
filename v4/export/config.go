@@ -169,7 +169,7 @@ func DefaultConfig() *Config {
 		SessionParams:      make(map[string]interface{}),
 		OutputFileTemplate: DefaultOutputFileTemplate,
 		PosAfterConnect:    false,
-		WriteSpeedLimit:    0,
+		WriteSpeedLimit:    UnspecifiedSize,
 	}
 }
 
