@@ -645,22 +645,10 @@ func (s *testSQLSuite) TestBuildTableSampleQueries(c *C) {
 				},
 			}
 
-<<<<<<< HEAD
-			if testCase.hasTiDBRowID {
-				mock.ExpectExec(fmt.Sprintf("SELECT _tidb_rowid from `%s`.`%s` LIMIT 0", database, table)).
-					WillReturnResult(sqlmock.NewResult(0, 0))
-			} else {
-				mock.ExpectExec(fmt.Sprintf("SELECT _tidb_rowid from `%s`.`%s` LIMIT 0", database, table)).
-					WillReturnError(errors.Errorf("ERROR %d (%s): %s", 1054, "42S22", "Unknown column '_tidb_rowid' in 'field list'"))
-				rows := sqlmock.NewRows([]string{"COLUMN_NAME", "DATA_TYPE"})
-				for i := range handleColNames {
-					rows.AddRow(handleColNames[i], handleColTypes[i])
-=======
 			if !testCase.hasTiDBRowID {
 				rows := sqlmock.NewRows(showIndexHeaders)
 				for i, handleColName := range handleColNames {
 					rows.AddRow(table, 0, "PRIMARY", i, handleColName, "A", 0, nil, nil, "", "BTREE", "", "")
->>>>>>> dc97ee9 (*: reduce dumpling accessing database and information_schema usage to improve its stability (#305))
 				}
 				mock.ExpectQuery(fmt.Sprintf("SHOW INDEX FROM `%s`.`%s`", database, table)).WillReturnRows(rows)
 			}
@@ -888,22 +876,10 @@ func (s *testSQLSuite) TestBuildRegionQueriesWithoutPartition(c *C) {
 		mock.ExpectQuery("SELECT PARTITION_NAME from INFORMATION_SCHEMA.PARTITIONS").
 			WithArgs(database, table).WillReturnRows(sqlmock.NewRows([]string{"PARTITION_NAME"}).AddRow(nil))
 
-<<<<<<< HEAD
-		if testCase.hasTiDBRowID {
-			mock.ExpectExec(fmt.Sprintf("SELECT _tidb_rowid from `%s`.`%s` LIMIT 0", database, table)).
-				WillReturnResult(sqlmock.NewResult(0, 0))
-		} else {
-			mock.ExpectExec(fmt.Sprintf("SELECT _tidb_rowid from `%s`.`%s` LIMIT 0", database, table)).
-				WillReturnError(errors.Errorf("ERROR %d (%s): %s", 1054, "42S22", "Unknown column '_tidb_rowid' in 'field list'"))
-			rows := sqlmock.NewRows([]string{"COLUMN_NAME", "DATA_TYPE"})
-			for i := range handleColNames {
-				rows.AddRow(handleColNames[i], handleColTypes[i])
-=======
 		if !testCase.hasTiDBRowID {
 			rows := sqlmock.NewRows(showIndexHeaders)
 			for i, handleColName := range handleColNames {
 				rows.AddRow(table, 0, "PRIMARY", i, handleColName, "A", 0, nil, nil, "", "BTREE", "", "")
->>>>>>> dc97ee9 (*: reduce dumpling accessing database and information_schema usage to improve its stability (#305))
 			}
 			mock.ExpectQuery(fmt.Sprintf("SHOW INDEX FROM `%s`.`%s`", database, table)).WillReturnRows(rows)
 		}
@@ -1101,22 +1077,10 @@ func (s *testSQLSuite) TestBuildRegionQueriesWithPartitions(c *C) {
 		mock.ExpectQuery("SELECT PARTITION_NAME from INFORMATION_SCHEMA.PARTITIONS").
 			WithArgs(database, table).WillReturnRows(rows)
 
-<<<<<<< HEAD
-		if testCase.hasTiDBRowID {
-			mock.ExpectExec(fmt.Sprintf("SELECT _tidb_rowid from `%s`.`%s` LIMIT 0", database, table)).
-				WillReturnResult(sqlmock.NewResult(0, 0))
-		} else {
-			mock.ExpectExec(fmt.Sprintf("SELECT _tidb_rowid from `%s`.`%s` LIMIT 0", database, table)).
-				WillReturnError(errors.Errorf("ERROR %d (%s): %s", 1054, "42S22", "Unknown column '_tidb_rowid' in 'field list'"))
-			rows = sqlmock.NewRows([]string{"COLUMN_NAME", "DATA_TYPE"})
-			for i := range handleColNames {
-				rows.AddRow(handleColNames[i], handleColTypes[i])
-=======
 		if !testCase.hasTiDBRowID {
 			rows = sqlmock.NewRows(showIndexHeaders)
 			for i, handleColName := range handleColNames {
 				rows.AddRow(table, 0, "PRIMARY", i, handleColName, "A", 0, nil, nil, "", "BTREE", "", "")
->>>>>>> dc97ee9 (*: reduce dumpling accessing database and information_schema usage to improve its stability (#305))
 			}
 			mock.ExpectQuery(fmt.Sprintf("SHOW INDEX FROM `%s`.`%s`", database, table)).WillReturnRows(rows)
 		}
@@ -1426,22 +1390,10 @@ func (s *testSQLSuite) TestBuildVersion3RegionQueries(c *C) {
 			},
 		}
 
-<<<<<<< HEAD
-		if testCase.hasTiDBRowID {
-			mock.ExpectExec("SELECT _tidb_rowid").
-				WillReturnResult(sqlmock.NewResult(0, 0))
-		} else {
-			mock.ExpectExec("SELECT _tidb_rowid").
-				WillReturnError(errors.New(`1054, "Unknown column '_tidb_rowid' in 'field list'"`))
-			rows := sqlmock.NewRows([]string{"COLUMN_NAME", "DATA_TYPE"})
-			for i := range handleColNames {
-				rows.AddRow(handleColNames[i], handleColTypes[i])
-=======
 		if !testCase.hasTiDBRowID {
 			rows := sqlmock.NewRows(showIndexHeaders)
 			for i, handleColName := range handleColNames {
 				rows.AddRow(table, 0, "PRIMARY", i, handleColName, "A", 0, nil, nil, "", "BTREE", "", "")
->>>>>>> dc97ee9 (*: reduce dumpling accessing database and information_schema usage to improve its stability (#305))
 			}
 			mock.ExpectQuery(fmt.Sprintf("SHOW INDEX FROM `%s`.`%s`", database, table)).WillReturnRows(rows)
 		}
