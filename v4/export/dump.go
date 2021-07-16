@@ -56,7 +56,7 @@ func NewDumper(ctx context.Context, conf *Config) (*Dumper, error) {
 		tctx:                      tctx,
 		conf:                      conf,
 		cancelCtx:                 cancelFn,
-		writeSpeedLimiter: NewWriteSpeedLimiter(conf.WriteSpeedLimit),
+		writeSpeedLimiter:         NewWriteSpeedLimiter(conf.WriteSpeedLimit),
 		selectTiDBTableRegionFunc: selectTiDBTableRegion,
 	}
 	err := adjustConfig(conf,

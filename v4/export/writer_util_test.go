@@ -303,7 +303,7 @@ func (s *testWriteSuite) TestSQLDataTypes(c *C) {
 		colType := []string{sqlType}
 		tableIR := newMockTableIR("test", "t", tableData, nil, colType)
 		bf := storage.NewBufferWriter()
-		writeSpeedLimiter := NewWriteSpeedLimiter(0)
+		writeSpeedLimiter := NewWriteSpeedLimiter(UnspecifiedSize)
 
 		conf := configForWriteSQL(s.mockCfg, UnspecifiedSize, UnspecifiedSize)
 		n, err := WriteInsert(tcontext.Background(), conf, tableIR, tableIR, bf, writeSpeedLimiter)
