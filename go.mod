@@ -29,7 +29,6 @@ require (
 	github.com/pingcap/tidb-tools v4.0.9-0.20201127090955-2707c97b3853+incompatible
 	github.com/prometheus/client_golang v1.5.1
 	github.com/prometheus/client_model v0.2.0
-	github.com/rivo/uniseg v0.2.0 // indirect
 	github.com/soheilhy/cmux v0.1.4
 	github.com/spf13/pflag v1.0.5
 	github.com/tikv/pd v0.0.0-20210105112549-e5be7fd38659
