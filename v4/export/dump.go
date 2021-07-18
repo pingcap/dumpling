@@ -45,6 +45,7 @@ type Dumper struct {
 	dbHandle *sql.DB
 
 	tidbPDClientForGC         pd.Client
+	writeSpeedLimiter         WriteSpeedLimiter
 	selectTiDBTableRegionFunc func(tctx *tcontext.Context, conn *sql.Conn, meta TableMeta) (pkFields []string, pkVals [][]string, err error)
 }
 
@@ -55,6 +56,7 @@ func NewDumper(ctx context.Context, conf *Config) (*Dumper, error) {
 		tctx:                      tctx,
 		conf:                      conf,
 		cancelCtx:                 cancelFn,
+		writeSpeedLimiter:         NewWriteSpeedLimiter(conf.WriteSpeedLimit),
 		selectTiDBTableRegionFunc: selectTiDBTableRegion,
 	}
 	err := adjustConfig(conf,
@@ -255,7 +257,7 @@ func (d *Dumper) startWriters(tctx *tcontext.Context, wg *errgroup.Group, taskCh
 		if err != nil {
 			return nil, func() {}, err
 		}
-		writer := NewWriter(tctx, int64(i), conf, conn, d.extStore)
+		writer := NewWriter(tctx, int64(i), conf, conn, d.extStore, d.writeSpeedLimiter)
 		writer.rebuildConnFn = rebuildConnFn
 		writer.setFinishTableCallBack(func(task Task) {
 			if _, ok := task.(*TaskTableData); ok {

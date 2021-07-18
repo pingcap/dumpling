@@ -91,7 +91,8 @@ func (s *testIRImplSuite) TestChunkRowIter(c *C) {
 	sqlRowIter := newRowIter(rows, 2)
 
 	res := newSimpleRowReceiver(2)
-	wp := newWriterPipe(nil, testFileSize, testStatementSize, nil)
+	writeSpeedLimiter := NewWriteSpeedLimiter(UnspecifiedSize)
+	wp := newWriterPipe(nil, testFileSize, testStatementSize, nil, writeSpeedLimiter)
 
 	var resSize [][]uint64
 	for sqlRowIter.HasNext() {
@@ -99,7 +100,7 @@ func (s *testIRImplSuite) TestChunkRowIter(c *C) {
 		for sqlRowIter.HasNext() {
 			c.Assert(sqlRowIter.Decode(res), IsNil)
 			sz := uint64(len(res.data[0]) + len(res.data[1]))
-			wp.AddFileSize(sz)
+			wp.AddFileSize(nil, sz)
 			sqlRowIter.Next()
 			resSize = append(resSize, []uint64{wp.currentFileSize, wp.currentStatementSize})
 			if wp.ShouldSwitchStatement() {

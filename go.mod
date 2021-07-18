@@ -34,5 +34,6 @@ require (
 	go.uber.org/zap v1.16.0
 	golang.org/x/lint v0.0.0-20200302205851-738671d3881b // indirect
 	golang.org/x/sync v0.0.0-20201020160332-67f06af15bc9
+	golang.org/x/time v0.0.0-20191024005414-555d28b269f0
 	sigs.k8s.io/yaml v1.2.0 // indirect
 )
