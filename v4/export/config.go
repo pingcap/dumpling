@@ -250,7 +250,7 @@ func (conf *Config) DefineFlags(flags *pflag.FlagSet) {
 	flags.Bool(flagTransactionalConsistency, true, "Only support transactional consistency")
 	_ = flags.MarkHidden(flagTransactionalConsistency)
 	flags.StringP(flagCompress, "c", "", "Compress output file type, support 'gzip', 'no-compression' now")
-	flags.String(flagWriteSpeedLimit, "", "Dump phase network speed limit. No setting no limit.")
+	flags.String(flagWriteSpeedLimit, "", "Dump phase network speed limit. No setting no limit. Unit must be specified (128B, 64KiB, 32MiB, 1.5GiB)")
 	_ = flags.MarkHidden(flagWriteSpeedLimit)
 }
 

@@ -44,8 +44,8 @@ type Dumper struct {
 	extStore storage.ExternalStorage
 	dbHandle *sql.DB
 
-	tidbPDClientForGC pd.Client
-	writeSpeedLimiter WriteSpeedLimiter
+	tidbPDClientForGC         pd.Client
+	writeSpeedLimiter         WriteSpeedLimiter
 	selectTiDBTableRegionFunc func(tctx *tcontext.Context, conn *sql.Conn, meta TableMeta) (pkFields []string, pkVals [][]string, err error)
 }
 
