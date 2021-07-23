@@ -45,7 +45,7 @@ type Dumper struct {
 	dbHandle *sql.DB
 
 	tidbPDClientForGC         pd.Client
-	selectTiDBTableRegionFunc func(tctx *tcontext.Context, conn *sql.Conn, dbName, tableName string) (pkFields []string, pkVals [][]string, err error)
+	selectTiDBTableRegionFunc func(tctx *tcontext.Context, conn *sql.Conn, meta TableMeta) (pkFields []string, pkVals [][]string, err error)
 }
 
 // NewDumper returns a new Dumper
@@ -1259,8 +1259,9 @@ func (d *Dumper) renewSelectTableRegionFuncForLowerTiDB(tctx *tcontext.Context) 
 		}
 	}
 
-	d.selectTiDBTableRegionFunc = func(tctx *tcontext.Context, conn *sql.Conn, dbName, tableName string) (pkFields []string, pkVals [][]string, err error) {
-		pkFields, _, err = selectTiDBRowKeyFields(conn, dbName, tableName, checkTiDBTableRegionPkFields)
+	d.selectTiDBTableRegionFunc = func(tctx *tcontext.Context, conn *sql.Conn, meta TableMeta) (pkFields []string, pkVals [][]string, err error) {
+		dbName, tableName := meta.DatabaseName(), meta.TableName()
+		pkFields, _, err = selectTiDBRowKeyFields(conn, meta, checkTiDBTableRegionPkFields)
 		if err != nil {
 			return
 		}

@@ -4,9 +4,9 @@ package export
 
 import (
 	"context"
+	"database/sql"
 	"database/sql/driver"
 	"encoding/csv"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -1172,10 +1172,10 @@ func (s *testSQLSuite) TestBuildVersion3RegionQueries(c *C) {
 	database := "test"
 	conf.Tables = DatabaseTables{
 		database: []*TableInfo{
-			{"t1", TableTypeBase},
-			{"t2", TableTypeBase},
-			{"t3", TableTypeBase},
-			{"t4", TableTypeBase},
+			{"t1", 0, TableTypeBase},
+			{"t2", 0, TableTypeBase},
+			{"t3", 0, TableTypeBase},
+			{"t4", 0, TableTypeBase},
 		},
 	}
 	d := &Dumper{
@@ -1308,7 +1308,7 @@ func (s *testSQLSuite) TestBuildVersion3RegionQueries(c *C) {
 		{
 			"t1",
 			[]string{"a"},
-			[]string{"int"},
+			[]string{"INT"},
 			[]string{
 				"`a`<960001",
 				"`a`>=960001 and `a`<1920001",
@@ -1324,7 +1324,7 @@ func (s *testSQLSuite) TestBuildVersion3RegionQueries(c *C) {
 		{
 			"t2",
 			[]string{"a"},
-			[]string{"int"},
+			[]string{"INT"},
 			[]string{
 				"`a`<960001",
 				"`a`>=960001 and `a`<2960001",
@@ -1337,7 +1337,7 @@ func (s *testSQLSuite) TestBuildVersion3RegionQueries(c *C) {
 		{
 			"t3",
 			[]string{"_tidb_rowid"},
-			[]string{"int"},
+			[]string{"BIGINT"},
 			[]string{
 				"`_tidb_rowid`<81584",
 				"`_tidb_rowid`>=81584 and `_tidb_rowid`<1041584",
@@ -1354,7 +1354,7 @@ func (s *testSQLSuite) TestBuildVersion3RegionQueries(c *C) {
 		{
 			"t4",
 			[]string{"_tidb_rowid"},
-			[]string{"int"},
+			[]string{"BIGINT"},
 			[]string{
 				"`_tidb_rowid`<180001",
 				"`_tidb_rowid`>=180001 and `_tidb_rowid`<1140001",
@@ -1378,43 +1378,25 @@ func (s *testSQLSuite) TestBuildVersion3RegionQueries(c *C) {
 
 		// Test build tasks through table region
 		taskChan := make(chan Task, 128)
-		quotaCols := make([]string, 0, len(handleColNames))
-		for _, col := range handleColNames {
-			quotaCols = append(quotaCols, wrapBackTicks(col))
-		}
-		selectFields := strings.Join(quotaCols, ",")
-		meta := &tableMeta{
-			database:      database,
-			table:         table,
-			selectedField: selectFields,
-			specCmts: []string{
+		meta := &mockTableIR{
+			dbName:           database,
+			tblName:          table,
+			selectedField:    "*",
+			hasImplicitRowID: testCase.hasTiDBRowID,
+			colNames:         handleColNames,
+			colTypes:         handleColTypes,
+			specCmt: []string{
 				"/*!40101 SET NAMES binary*/;",
 			},
 		}
 
-		if testCase.hasTiDBRowID {
-			mock.ExpectExec("SELECT _tidb_rowid").
-				WillReturnResult(sqlmock.NewResult(0, 0))
-		} else {
-			mock.ExpectExec("SELECT _tidb_rowid").
-				WillReturnError(&mysql.MyError{
-					Code:    mysql.ER_BAD_FIELD_ERROR,
-					State:   "42S22",
-					Message: "Unknown column '_tidb_rowid' in 'field list'",
-				})
-			rows := sqlmock.NewRows([]string{"COLUMN_NAME", "DATA_TYPE"})
-			for i := range handleColNames {
-				rows.AddRow(handleColNames[i], handleColTypes[i])
+		if !testCase.hasTiDBRowID {
+			rows := sqlmock.NewRows(showIndexHeaders)
+			for i, handleColName := range handleColNames {
+				rows.AddRow(table, 0, "PRIMARY", i, handleColName, "A", 0, nil, nil, "", "BTREE", "", "")
 			}
-			mock.ExpectQuery("SELECT c.COLUMN_NAME, DATA_TYPE FROM").WithArgs(database, table).WillReturnRows(rows)
+			mock.ExpectQuery(fmt.Sprintf("SHOW INDEX FROM `%s`.`%s`", database, table)).WillReturnRows(rows)
 		}
-
-		rows := sqlmock.NewRows([]string{"COLUMN_NAME", "EXTRA"})
-		for _, handleCol := range handleColNames {
-			rows.AddRow(handleCol, "")
-		}
-		mock.ExpectQuery("SELECT COLUMN_NAME,EXTRA FROM INFORMATION_SCHEMA.COLUMNS").WithArgs(database, table).
-			WillReturnRows(rows)
 
 		orderByClause := buildOrderByClauseString(handleColNames)
 		c.Assert(d.concurrentDumpTable(tctx, conn, meta, taskChan), IsNil)
