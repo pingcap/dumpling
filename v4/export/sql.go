@@ -626,6 +626,7 @@ func resetDBWithSessionParams(tctx *tcontext.Context, db *sql.DB, dsn string, pa
 	}
 
 	newDB, err := sql.Open("mysql", dsn)
+	db.Close()
 	return newDB, errors.Trace(err)
 }
 
