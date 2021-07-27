@@ -672,22 +672,23 @@ func adjustConfig(conf *Config, fns ...func(*Config) error) error {
 }
 
 func registerTLSConfig(conf *Config) error {
-
 	var err error
 	var tlsConfig *tls.Config
 
 	if len(conf.Security.CAPath) > 0 {
-		conf.Security.SSLCABytes, err = ioutil.ReadFile(conf.Security.CAPath)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		conf.Security.SSLCertBytes, err = ioutil.ReadFile(conf.Security.CertPath)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		conf.Security.SSLKEYBytes, err = ioutil.ReadFile(conf.Security.KeyPath)
-		if err != nil {
-			return errors.Trace(err)
+		if len(conf.Security.SSLCABytes) == 0 {
+			conf.Security.SSLCABytes, err = ioutil.ReadFile(conf.Security.CAPath)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			conf.Security.SSLCertBytes, err = ioutil.ReadFile(conf.Security.CertPath)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			conf.Security.SSLKEYBytes, err = ioutil.ReadFile(conf.Security.KeyPath)
+			if err != nil {
+				return errors.Trace(err)
+			}
 		}
 		tlsConfig, err = utils.ToTLSConfigWithVerifyByRawbytes(conf.Security.SSLCABytes,
 			conf.Security.SSLCertBytes, conf.Security.SSLKEYBytes, []string{})
