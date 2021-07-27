@@ -471,7 +471,10 @@ func (d *Dumper) concurrentDumpTiDBTables(conn *sql.Conn, meta TableMeta, taskCh
 		return err
 	}
 	where := buildWhereClauses(handleColNames, handleVals)
-	orderByClause := buildOrderByClauseString(handleColNames)
+	orderByClause := ""
+	if conf.SortByPk {
+		orderByClause = buildOrderByClauseString(handleColNames)
+	}
 
 	for i, w := range where {
 		query := buildSelectQuery(db, tbl, selectField, buildWhereCondition(conf, w), orderByClause)
