@@ -40,11 +40,34 @@ jobs:
         uses: actions/setup-go@v2
         with:
           go-version: 1.16
-      - name: Download dependencies
-        run: sh install.sh
       - name: Start MySQL
         run: |
           sudo systemctl start mysql.service
           mysqladmin -uroot -proot password ''
+      - name: Download dependencies
+        run: sh install.sh
+      - name: Integration test
+        run: make integration_test
+
+  integration-test-mysql8:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: true
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Go 1.16
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.16
+      - name: stop default MySQL
+        run: |
+          sudo systemctl stop mysql.service
+      - uses: mirromutth/mysql-action@v1.1
+        name: "start mysql 8.0"
+        with:
+          mysql version: '8.0' # Optional, default value is "latest". The version of the MySQL
+      - name: Download dependencies
+        run: sh install.sh
       - name: Integration test
         run: make integration_test
