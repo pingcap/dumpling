@@ -67,6 +67,14 @@ jobs:
         name: "start mysql 8.0"
         with:
           mysql version: '8.0' # Optional, default value is "latest". The version of the MySQL
+          mysql root password: ''
+          mysql user: 'developer'
+          mysql password: "developer"
+      - name: Wait for MySQL
+        run: |
+          while ! mysqladmin ping --host=127.0.0.1 --password="" --silent; do
+            sleep 1
+          done
       - name: Download dependencies
         run: sh install.sh
       - name: Integration test
