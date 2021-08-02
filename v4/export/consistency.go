@@ -31,6 +31,7 @@ func NewConsistencyController(ctx context.Context, conf *Config, session *sql.DB
 		return &ConsistencyFlushTableWithReadLock{
 			serverType: conf.ServerInfo.ServerType,
 			conn:       conn,
+			session:    session,
 		}, nil
 	case consistencyTypeLock:
 		return &ConsistencyLockDumpingTables{
@@ -78,6 +79,7 @@ func (c *ConsistencyNone) PingContext(_ context.Context) error {
 type ConsistencyFlushTableWithReadLock struct {
 	serverType ServerType
 	conn       *sql.Conn
+	session    *sql.DB
 }
 
 // Setup implements ConsistencyController.Setup
@@ -85,13 +87,22 @@ func (c *ConsistencyFlushTableWithReadLock) Setup(tctx *tcontext.Context) error 
 	if c.serverType == ServerTypeTiDB {
 		return errors.New("'flush table with read lock' cannot be used to ensure the consistency in TiDB")
 	}
+	defer func() {
+		c.conn.Close()
+		c.conn = nil
+	}()
 	return FlushTableWithReadLock(tctx, c.conn)
 }
 
 // TearDown implements ConsistencyController.TearDown
 func (c *ConsistencyFlushTableWithReadLock) TearDown(ctx context.Context) error {
+	var err error
 	if c.conn == nil {
-		return nil
+		c.conn, err = c.session.Conn(ctx)
+		if err != nil {
+			println("err,", err.Error())
+			return errors.Trace(err)
+		}
 	}
 	defer func() {
 		c.conn.Close()
