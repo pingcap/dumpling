@@ -100,7 +100,6 @@ func (c *ConsistencyFlushTableWithReadLock) TearDown(ctx context.Context) error 
 	if c.conn == nil {
 		c.conn, err = c.session.Conn(ctx)
 		if err != nil {
-			println("err,", err.Error())
 			return errors.Trace(err)
 		}
 	}
