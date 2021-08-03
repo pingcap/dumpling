@@ -23,10 +23,14 @@ import (
 
 const (
 	orderByTiDBRowID = "ORDER BY `_tidb_rowid`"
+)
 
-	listTableByInfoSchema      = "listTableByInfoSchema"
-	listTableByShowFullTables  = "listTableByShowFullTables"
-	listTableByShowTableStatus = "listTableByShowTableStatus"
+type listTableType int
+
+const (
+	listTableByInfoSchema listTableType = iota
+	listTableByShowFullTables
+	listTableByShowTableStatus
 )
 
 // ShowDatabases shows the databases of a database server.
@@ -161,7 +165,7 @@ func RestoreCharset(w io.StringWriter) {
 // listTableByShowTableStatus has better performance than listTableByInfoSchema
 // listTableByShowFullTables is used in mysql8 version [8.0.3,8.0.23), more details can be found in the comments of func matchMysqlBugversion
 func ListAllDatabasesTables(tctx *tcontext.Context, db *sql.Conn, databaseNames []string,
-	listTableType string, tableTypes ...TableType) (DatabaseTables, error) { // revive:disable-line:flag-parameter
+	listType listTableType, tableTypes ...TableType) (DatabaseTables, error) { // revive:disable-line:flag-parameter
 	dbTables := DatabaseTables{}
 	var (
 		schema, table, tableTypeStr string
@@ -170,7 +174,7 @@ func ListAllDatabasesTables(tctx *tcontext.Context, db *sql.Conn, databaseNames 
 		err                         error
 	)
 
-	switch listTableType {
+	switch listType {
 	case listTableByInfoSchema:
 		tableTypeConditions := make([]string, len(tableTypes))
 		for i, tableType := range tableTypes {
