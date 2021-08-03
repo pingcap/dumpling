@@ -861,9 +861,15 @@ func prepareTableListToDump(tctx *tcontext.Context, conf *Config, db *sql.Conn) 
 	if !conf.NoViews {
 		tableTypes = append(tableTypes, TableTypeView)
 	}
-	// for consistency lock, we need to build the tables to dump as soon as possible
-	asap := conf.Consistency == consistencyTypeLock
-	conf.Tables, err = ListAllDatabasesTables(tctx, db, databases, asap, tableTypes...)
+	listTableType := listTableByInfoSchema
+	if conf.Consistency == consistencyTypeLock {
+		// for consistency lock, we need to build the tables to dump as soon as possible
+		listTableType = listTableByShowTableStatus
+	}
+	if matchMysqlBugversion(conf) {
+		listTableType = listTableByShowFullTables
+	}
+	conf.Tables, err = ListAllDatabasesTables(tctx, db, databases, listTableType, tableTypes...)
 	if err != nil {
 		return err
 	}
@@ -1045,16 +1051,16 @@ func detectServerInfo(d *Dumper) error {
 // resolveAutoConsistency is an initialization step of Dumper.
 func resolveAutoConsistency(d *Dumper) error {
 	conf := d.conf
-	if conf.Consistency != "auto" {
+	if conf.Consistency != consistencyTypeAuto {
 		return nil
 	}
 	switch conf.ServerInfo.ServerType {
 	case ServerTypeTiDB:
-		conf.Consistency = "snapshot"
+		conf.Consistency = consistencyTypeSnapshot
 	case ServerTypeMySQL, ServerTypeMariaDB:
-		conf.Consistency = "flush"
+		conf.Consistency = consistencyTypeFlush
 	default:
-		conf.Consistency = "none"
+		conf.Consistency = consistencyTypeNone
 	}
 	return nil
 }
