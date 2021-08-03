@@ -88,3 +88,24 @@ func (s *testSQLSuite) TestDumpTableMeta(c *C) {
 		c.Assert(meta.HasImplicitRowID(), Equals, hasImplicitRowID)
 	}
 }
+
+func (s *testSQLSuite) TestGetListTableTypeByConf(c *C) {
+	conf := defaultConfigForTest(c)
+	cases := []struct {
+		serverInfo  ServerInfo
+		consistency string
+		expected    listTableType
+	}{
+		{ParseServerInfo(tcontext.Background(), "8.0.2"), consistencyTypeLock, listTableByShowTableStatus},
+		{ParseServerInfo(tcontext.Background(), "8.0.3"), consistencyTypeFlush, listTableByShowFullTables},
+		{ParseServerInfo(tcontext.Background(), "8.0.23"), consistencyTypeNone, listTableByInfoSchema},
+		{ParseServerInfo(tcontext.Background(), "5.7.25-TiDB-3.0.6"), consistencyTypeSnapshot, listTableByInfoSchema},
+	}
+
+	for _, x := range cases {
+		conf.Consistency = x.consistency
+		conf.ServerInfo = x.serverInfo
+		cmt := Commentf("server info %s", x.serverInfo)
+		c.Assert(getListTableTypeByConf(conf), Equals, x.expected, cmt)
+	}
+}
