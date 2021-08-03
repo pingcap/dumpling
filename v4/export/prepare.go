@@ -9,8 +9,9 @@ import (
 	"strings"
 	"text/template"
 
-	tcontext "github.com/pingcap/dumpling/v4/context"
 	"github.com/pingcap/errors"
+
+	tcontext "github.com/pingcap/dumpling/v4/context"
 )
 
 const (
