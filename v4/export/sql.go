@@ -157,8 +157,8 @@ func RestoreCharset(w io.StringWriter) {
 }
 
 // ListAllDatabasesTables lists all the databases and tables from the database
-// listTableByInfoSchema, list tables by information_schema
-// listTableByShowTableStatus, has better performance than listTableByInfoSchema
+// listTableByInfoSchema list tables by table information_schema in MySQL
+// listTableByShowTableStatus has better performance than listTableByInfoSchema
 // listTableByShowFullTables is used in mysql8 version [8.0.3,8.0.23), more details can be found in the comments of func matchMysqlBugversion
 func ListAllDatabasesTables(tctx *tcontext.Context, db *sql.Conn, databaseNames []string,
 	listTableType string, tableTypes ...TableType) (DatabaseTables, error) { // revive:disable-line:flag-parameter
