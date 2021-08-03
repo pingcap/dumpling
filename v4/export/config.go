@@ -708,7 +708,7 @@ func adjustFileFormat(conf *Config) error {
 }
 
 func matchMysqlBugversion(conf *Config) bool {
-	// if 8.0.3<= mysql8 version < 8.0.23
+	// if 8.0.3 <= mysql8 version < 8.0.23
 	// FLUSH TABLES WITH READ LOCK could block other sessions from executing SHOW TABLE STATUS.
 	// see more in https://dev.mysql.com/doc/relnotes/mysql/8.0/en/news-8-0-23.html
 	return conf.ServerInfo.ServerType == ServerTypeMySQL &&
