@@ -146,7 +146,7 @@ func (s *testPrepareSuite) TestListAllTablesByTableStatus(c *C) {
 			if tbInfo.Type == TableTypeBase {
 				rows.AddRow(tbInfo.Name, "InnoDB", 10, "Dynamic", 0, 0, 16384, 0, 0, 0, nil, "2021-07-08 03:04:07", nil, nil, "latin1_swedish_ci", nil, "", "")
 			} else {
-				rows.AddRow(tbInfo.Name, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, "VIEW")
+				rows.AddRow(tbInfo.Name, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, TableTypeView.String())
 			}
 		}
 		mock.ExpectQuery(fmt.Sprintf(query, dbName)).WillReturnRows(rows)
@@ -170,7 +170,7 @@ func (s *testPrepareSuite) TestListAllTablesByTableStatus(c *C) {
 		AppendViews("db", "t2")
 	mock.ExpectQuery(fmt.Sprintf(query, "db")).WillReturnRows(sqlmock.NewRows(showTableStatusColumnNames).
 		AddRow("t1", "InnoDB", 10, "Dynamic", 0, 1, 16384, 0, 0, 0, nil, "2021-07-08 03:04:07", nil, nil, "latin1_swedish_ci", nil, "", "").
-		AddRow("t2", nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, "VIEW"))
+		AddRow("t2", nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, TableTypeView.String()))
 	tables, err = ListAllDatabasesTables(tctx, conn, []string{"db"}, listTableByShowTableStatus, TableTypeBase, TableTypeView)
 	c.Assert(err, IsNil)
 	c.Assert(len(tables), Equals, 1)
@@ -207,7 +207,7 @@ func (s *testPrepareSuite) TestListAllTablesByShowFullTables(c *C) {
 			if tbInfo.Type == TableTypeBase {
 				rows.AddRow(tbInfo.Name, TableTypeBase.String())
 			} else {
-				rows.AddRow(tbInfo.Name, "VIEW")
+				rows.AddRow(tbInfo.Name, TableTypeView.String())
 			}
 		}
 		mock.ExpectQuery(fmt.Sprintf(query, dbName)).WillReturnRows(rows)
@@ -236,7 +236,7 @@ func (s *testPrepareSuite) TestListAllTablesByShowFullTables(c *C) {
 			if tbInfo.Type == TableTypeBase {
 				rows.AddRow(tbInfo.Name, TableTypeBase.String())
 			} else {
-				rows.AddRow(tbInfo.Name, "VIEW")
+				rows.AddRow(tbInfo.Name, TableTypeView.String())
 			}
 		}
 		mock.ExpectQuery(fmt.Sprintf(query, dbName)).WillReturnRows(rows)
