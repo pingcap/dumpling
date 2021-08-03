@@ -851,6 +851,18 @@ func extractTiDBRowIDFromDecodedKey(indexField, key string) (string, error) {
 	return "", errors.Errorf("decoded key %s doesn't have %s field", key, indexField)
 }
 
+func getListTableTypeByConf(conf *Config) listTableType {
+	listType := listTableByInfoSchema
+	if conf.Consistency == consistencyTypeLock {
+		// for consistency lock, we need to build the tables to dump as soon as possible
+		listType = listTableByShowTableStatus
+	}
+	if conf.Consistency == consistencyTypeFlush && matchMysqlBugversion(conf.ServerInfo) {
+		listType = listTableByShowFullTables
+	}
+	return listType
+}
+
 func prepareTableListToDump(tctx *tcontext.Context, conf *Config, db *sql.Conn) error {
 	databases, err := prepareDumpingDatabases(conf, db)
 	if err != nil {
@@ -861,15 +873,7 @@ func prepareTableListToDump(tctx *tcontext.Context, conf *Config, db *sql.Conn) 
 	if !conf.NoViews {
 		tableTypes = append(tableTypes, TableTypeView)
 	}
-	listTableType := listTableByInfoSchema
-	if conf.Consistency == consistencyTypeLock {
-		// for consistency lock, we need to build the tables to dump as soon as possible
-		listTableType = listTableByShowTableStatus
-	}
-	if matchMysqlBugversion(conf) {
-		listTableType = listTableByShowFullTables
-	}
-	conf.Tables, err = ListAllDatabasesTables(tctx, db, databases, listTableType, tableTypes...)
+	conf.Tables, err = ListAllDatabasesTables(tctx, db, databases, getListTableTypeByConf(conf), tableTypes...)
 	if err != nil {
 		return err
 	}
