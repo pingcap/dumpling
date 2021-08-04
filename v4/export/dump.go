@@ -852,12 +852,13 @@ func extractTiDBRowIDFromDecodedKey(indexField, key string) (string, error) {
 }
 
 func getListTableTypeByConf(conf *Config) listTableType {
+	// use listTableByInfoSchema by default because it has more accurate information
 	listType := listTableByInfoSchema
 	if conf.Consistency == consistencyTypeLock {
 		// for consistency lock, we need to build the tables to dump as soon as possible
 		listType = listTableByShowTableStatus
-	}
-	if conf.Consistency == consistencyTypeFlush && matchMysqlBugversion(conf.ServerInfo) {
+	} else if matchMysqlBugversion(conf.ServerInfo) {
+		// For some buggy versions of mysql, we need a workaround to get a list of table names.
 		listType = listTableByShowFullTables
 	}
 	return listType
