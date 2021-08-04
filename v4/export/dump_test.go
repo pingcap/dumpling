@@ -105,7 +105,7 @@ func (s *testSQLSuite) TestGetListTableTypeByConf(c *C) {
 		// bug version
 		{ParseServerInfo(tcontext.Background(), "8.0.3"), consistencyTypeLock, listTableByShowTableStatus},
 		{ParseServerInfo(tcontext.Background(), "8.0.3"), consistencyTypeFlush, listTableByShowFullTables},
-		{ParseServerInfo(tcontext.Background(), "8.0.3"), consistencyTypeNone, listTableByShowFullTables},
+		{ParseServerInfo(tcontext.Background(), "8.0.3"), consistencyTypeNone, listTableByInfoSchema},
 	}
 
 	for _, x := range cases {
