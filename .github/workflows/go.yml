@@ -29,7 +29,7 @@ jobs:
         run: make test WITH_RACE=1
       - uses: codecov/codecov-action@v1
 
-  integration-test-mysql-57:
+  integration-test-mysql-57-latest:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -65,7 +65,7 @@ jobs:
       - name: Integration test
         run: make integration_test
 
-  integration-test-mysql-8:
+  integration-test-mysql-8-latest:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -101,14 +101,14 @@ jobs:
       - name: Integration test
         run: make integration_test
 
-  integration-test-mysql-8-0-3:
+  integration-test-mysql-8022:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
       fail-fast: true
     services:
       mysql:
-        image: mysql:8.0.3
+        image: mysql:8.0.22
         env:
           MYSQL_ALLOW_EMPTY_PASSWORD: yes
         ports:
