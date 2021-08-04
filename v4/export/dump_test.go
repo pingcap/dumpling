@@ -96,16 +96,22 @@ func (s *testSQLSuite) TestGetListTableTypeByConf(c *C) {
 		consistency string
 		expected    listTableType
 	}{
-		{ParseServerInfo(tcontext.Background(), "8.0.2"), consistencyTypeLock, listTableByShowTableStatus},
-		{ParseServerInfo(tcontext.Background(), "8.0.3"), consistencyTypeFlush, listTableByShowFullTables},
-		{ParseServerInfo(tcontext.Background(), "8.0.23"), consistencyTypeNone, listTableByInfoSchema},
 		{ParseServerInfo(tcontext.Background(), "5.7.25-TiDB-3.0.6"), consistencyTypeSnapshot, listTableByInfoSchema},
+		// no bug version
+		{ParseServerInfo(tcontext.Background(), "8.0.2"), consistencyTypeLock, listTableByShowTableStatus},
+		{ParseServerInfo(tcontext.Background(), "8.0.2"), consistencyTypeFlush, listTableByInfoSchema},
+		{ParseServerInfo(tcontext.Background(), "8.0.23"), consistencyTypeNone, listTableByInfoSchema},
+
+		// bug version
+		{ParseServerInfo(tcontext.Background(), "8.0.3"), consistencyTypeLock, listTableByShowTableStatus},
+		{ParseServerInfo(tcontext.Background(), "8.0.3"), consistencyTypeFlush, listTableByShowFullTables},
+		{ParseServerInfo(tcontext.Background(), "8.0.3"), consistencyTypeNone, listTableByShowFullTables},
 	}
 
 	for _, x := range cases {
 		conf.Consistency = x.consistency
 		conf.ServerInfo = x.serverInfo
-		cmt := Commentf("server info %s", x.serverInfo)
+		cmt := Commentf("server info %s consistency %s", x.serverInfo, x.consistency)
 		c.Assert(getListTableTypeByConf(conf), Equals, x.expected, cmt)
 	}
 }

@@ -3,11 +3,9 @@
 package export
 
 import (
-	"context"
+	tcontext "github.com/pingcap/dumpling/v4/context"
 
 	. "github.com/pingcap/check"
-
-	tcontext "github.com/pingcap/dumpling/v4/context"
 )
 
 var _ = Suite(&testConfigSuite{})
@@ -16,7 +14,7 @@ type testConfigSuite struct{}
 
 func (s *testConfigSuite) TestCreateExternalStorage(c *C) {
 	mockConfig := defaultConfigForTest(c)
-	loc, err := mockConfig.createExternalStorage(context.Background())
+	loc, err := mockConfig.createExternalStorage(tcontext.Background())
 	c.Assert(err, IsNil)
 	c.Assert(loc.URI(), Matches, "file:.*")
 }
