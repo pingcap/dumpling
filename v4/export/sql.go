@@ -223,14 +223,13 @@ func ListAllDatabasesTables(tctx *tcontext.Context, db *sql.Conn, databaseNames 
 			if err != nil {
 				return nil, errors.Annotatef(err, "sql: %s", query)
 			}
-			results, err := GetSpecifiedColumnValuesAndClose(rows,
-				strings.ToUpper(fmt.Sprintf("Tables_in_%s", schema)), "TABLE_TYPE")
+			results, err := GetColumnValuesAndIgonreColumnName(rows)
 			if err != nil {
 				return nil, errors.Annotatef(err, "sql: %s", query)
 			}
 			for _, oneRow := range results {
 				table = oneRow[0]
-				avgRowLength = 0
+				avgRowLength = 0 // can't get avgRowLength from the result of `show full tables` so hardcode to 0 here
 				var err2 error
 				tableType, err2 = ParseTableType(oneRow[1])
 				if err2 != nil {
@@ -589,6 +588,39 @@ func GetSpecifiedColumnValuesAndClose(rows *sql.Rows, columnName ...string) ([][
 		}
 	}
 	return strs, errors.Trace(rows.Err())
+}
+
+// GetColumnValuesAndIgonreColumnName get columns' values and ignore column name
+func GetColumnValuesAndIgonreColumnName(rows *sql.Rows) ([][]string, error) {
+	if rows == nil {
+		return [][]string{}, nil
+	}
+	defer rows.Close()
+	results := [][]string{}
+	columns, err := rows.Columns()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	columnsLen := len(columns)
+	addr := make([]interface{}, columnsLen)
+	oneRow := make([]sql.NullString, columnsLen)
+	for i := range columns {
+		addr[i] = &oneRow[i]
+	}
+	for rows.Next() {
+		err := rows.Scan(addr...)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		tmpStr := make([]string, columnsLen)
+		for i, val := range oneRow {
+			if val.Valid {
+				tmpStr[i] = val.String
+			}
+		}
+		results = append(results, tmpStr)
+	}
+	return results, errors.Trace(rows.Err())
 }
 
 // GetPdAddrs gets PD address from TiDB
