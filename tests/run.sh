@@ -17,7 +17,6 @@ mkdir -p "$DUMPLING_TEST_DIR"
 PATH="tests/_utils:$PATH"
 . "tests/_utils/run_services"
 
-
 file_should_exist bin/tidb-server
 file_should_exist bin/tidb-lightning
 file_should_exist bin/dumpling
@@ -26,7 +25,8 @@ file_should_exist bin/sync_diff_inspector
 trap stop_services EXIT
 start_services
 
-for script in tests/*/run.sh; do
+function run_case_by_fullpath() {
+    script="$1"
     echo "****************** Running test $script..."
     DUMPLING_BASE_NAME="$(dirname "$script")"
     export DUMPLING_BASE_NAME
@@ -35,11 +35,22 @@ for script in tests/*/run.sh; do
     export DUMPLING_OUTPUT_DIR
 
     PATH="tests/_utils:$PATH" \
-    sh "$script"
-
+        sh "$script"
     echo "Cleaning up test output dir: $DUMPLING_OUTPUT_DIR"
     rm -rf "$DUMPLING_OUTPUT_DIR"
+}
 
-done
+if [ "$#" -ge 1 ]; then
+    test_case="$@"
+else
+    test_case="*"
+fi
 
-echo "Passed integration tests."
+if [ "$test_case" == "*" ]; then
+    for script in tests/*/run.sh; do
+        run_case_by_fullpath "$script"
+    done
+else
+    script="tests/$test_case/run.sh"
+    run_case_by_fullpath "$script"
+fi
