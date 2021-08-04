@@ -197,7 +197,7 @@ func (s *testPrepareSuite) TestListAllTablesByShowFullTables(c *C) {
 		AppendTables("db2", []string{"t3", "t4", "t5"}, []uint64{3, 4, 5}).
 		AppendViews("db3", "t6", "t7", "t8")
 
-	query := "SHOW FULL TABLES FROM `%s`"
+	query := "SHOW FULL TABLES FROM `%s` WHERE TABLE_TYPE='BASE TABLE'"
 	dbNames := make([]databaseName, 0, len(data))
 	for dbName, tableInfos := range data {
 		dbNames = append(dbNames, dbName)
@@ -226,6 +226,7 @@ func (s *testPrepareSuite) TestListAllTablesByShowFullTables(c *C) {
 	}
 
 	// Test list all tables and not skipping views.
+	query = "SHOW FULL TABLES FROM `%s` WHERE TABLE_TYPE='BASE TABLE' OR TABLE_TYPE='VIEW'"
 	data = NewDatabaseTables().
 		AppendTables("db", []string{"t1"}, []uint64{1}).
 		AppendViews("db", "t2")
