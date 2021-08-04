@@ -217,7 +217,7 @@ func ListAllDatabasesTables(tctx *tcontext.Context, db *sql.Conn, databaseNames 
 		}
 		for _, schema = range databaseNames {
 			dbTables[schema] = make([]*TableInfo, 0)
-			query := fmt.Sprintf("SHOW FULL TABLES FROM %s WHERE %s",
+			query := fmt.Sprintf("SHOW FULL TABLES FROM `%s` WHERE %s",
 				escapeString(schema), strings.Join(tableTypeConditions, " OR "))
 			rows, err := db.QueryContext(tctx, query)
 			if err != nil {

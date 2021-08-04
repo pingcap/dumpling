@@ -25,7 +25,7 @@ file_should_exist bin/sync_diff_inspector
 trap stop_services EXIT
 start_services
 
-function run_case_by_fullpath() {
+function run_case_by_fullpath {
     script="$1"
     echo "****************** Running test $script..."
     DUMPLING_BASE_NAME="$(dirname "$script")"
