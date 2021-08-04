@@ -15,6 +15,7 @@ run_sql "create database \`$DB_NAME\`;"
 run_sql "create table \`$DB_NAME\`.\`$TABLE_NAME\` (a int);"
 run_sql "insert into \`$DB_NAME\`.\`$TABLE_NAME\` values (1), (2);"
 
+export DUMPLING_TEST_DATABASE=$DB_NAME
 run_dumpling -f "$DB_NAME.$TABLE_NAME" -L ${DUMPLING_OUTPUT_DIR}/dumpling.log
 
 cnt=$(grep -w "(.*)" ${DUMPLING_OUTPUT_DIR}/${DB_NAME}.${TABLE_NAME}.000000000.sql|wc -l)

@@ -174,12 +174,12 @@ func ListAllDatabasesTables(tctx *tcontext.Context, db *sql.Conn, databaseNames 
 		err                         error
 	)
 
+	tableTypeConditions := make([]string, len(tableTypes))
+	for i, tableType := range tableTypes {
+		tableTypeConditions[i] = fmt.Sprintf("TABLE_TYPE='%s'", tableType)
+	}
 	switch listType {
 	case listTableByInfoSchema:
-		tableTypeConditions := make([]string, len(tableTypes))
-		for i, tableType := range tableTypes {
-			tableTypeConditions[i] = fmt.Sprintf("TABLE_TYPE='%s'", tableType)
-		}
 		query := fmt.Sprintf("SELECT TABLE_SCHEMA,TABLE_NAME,TABLE_TYPE,AVG_ROW_LENGTH FROM INFORMATION_SCHEMA.TABLES WHERE %s", strings.Join(tableTypeConditions, " OR "))
 		for _, schema := range databaseNames {
 			dbTables[schema] = make([]*TableInfo, 0)
@@ -211,14 +211,14 @@ func ListAllDatabasesTables(tctx *tcontext.Context, db *sql.Conn, databaseNames 
 			return nil, errors.Annotatef(err, "sql: %s", query)
 		}
 	case listTableByShowFullTables:
-		queryTemplate := "SHOW FULL TABLES FROM `%s`"
 		selectedTableType := make(map[TableType]struct{})
 		for _, tableType = range tableTypes {
 			selectedTableType[tableType] = struct{}{}
 		}
 		for _, schema = range databaseNames {
 			dbTables[schema] = make([]*TableInfo, 0)
-			query := fmt.Sprintf(queryTemplate, escapeString(schema))
+			query := fmt.Sprintf("SHOW FULL TABLES FROM %s WHERE %s",
+				escapeString(schema), strings.Join(tableTypeConditions, " OR "))
 			rows, err := db.QueryContext(tctx, query)
 			if err != nil {
 				return nil, errors.Annotatef(err, "sql: %s", query)
