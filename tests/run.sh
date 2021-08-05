@@ -54,3 +54,5 @@ else
     script="tests/$test_case/run.sh"
     run_case_by_fullpath "$script"
 fi
+
+echo "Passed integration tests."
