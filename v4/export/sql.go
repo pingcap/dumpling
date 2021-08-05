@@ -203,10 +203,6 @@ func ListAllDatabasesTables(tctx *tcontext.Context, db *sql.Conn, databaseNames 
 			return nil, errors.Annotatef(err, "sql: %s", query)
 		}
 	case listTableByShowFullTables:
-		selectedTableType := make(map[TableType]struct{})
-		for _, tableType = range tableTypes {
-			selectedTableType[tableType] = struct{}{}
-		}
 		for _, schema = range databaseNames {
 			dbTables[schema] = make([]*TableInfo, 0)
 			query := fmt.Sprintf("SHOW FULL TABLES FROM `%s` WHERE %s",
@@ -226,9 +222,6 @@ func ListAllDatabasesTables(tctx *tcontext.Context, db *sql.Conn, databaseNames 
 				tableType, err2 = ParseTableType(oneRow[1])
 				if err2 != nil {
 					return nil, errors.Trace(err2)
-				}
-				if _, ok := selectedTableType[tableType]; !ok {
-					continue
 				}
 				dbTables[schema] = append(dbTables[schema], &TableInfo{table, avgRowLength, tableType})
 			}
