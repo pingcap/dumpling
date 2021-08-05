@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 #
 # Copyright 2020 PingCAP, Inc. Licensed under Apache-2.0.
 
@@ -27,7 +27,7 @@ start_services
 
 run_case_by_fullpath() {
     script="$1"
-    echo "****************** Running test $script..."
+    echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> Running test $script..."
     DUMPLING_BASE_NAME="$(dirname "$script")"
     export DUMPLING_BASE_NAME
     TEST_NAME="$(basename "$(dirname "$script")")"
@@ -35,8 +35,8 @@ run_case_by_fullpath() {
     export DUMPLING_OUTPUT_DIR
 
     PATH="tests/_utils:$PATH" \
-        sh "$script"
-    echo "Cleaning up test output dir: $DUMPLING_OUTPUT_DIR"
+        bash "$script"
+    echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST: $script Passed Cleaning up test output dir: $DUMPLING_OUTPUT_DIR"
     rm -rf "$DUMPLING_OUTPUT_DIR"
 }
 
