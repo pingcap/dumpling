@@ -857,7 +857,7 @@ func getListTableTypeByConf(conf *Config) listTableType {
 	if conf.Consistency == consistencyTypeLock {
 		// for consistency lock, we need to build the tables to dump as soon as possible
 		listType = listTableByInfoSchema
-	} else if conf.Consistency != consistencyTypeNone && matchMysqlBugversion(conf.ServerInfo) {
+	} else if conf.Consistency == consistencyTypeFlush && matchMysqlBugversion(conf.ServerInfo) {
 		// For some buggy versions of mysql, we need a workaround to get a list of table names.
 		listType = listTableByShowFullTables
 	}
