@@ -91,21 +91,22 @@ func (s *testSQLSuite) TestDumpTableMeta(c *C) {
 
 func (s *testSQLSuite) TestGetListTableTypeByConf(c *C) {
 	conf := defaultConfigForTest(c)
+	tctx := tcontext.Background().WithLogger(appLogger)
 	cases := []struct {
 		serverInfo  ServerInfo
 		consistency string
 		expected    listTableType
 	}{
-		{ParseServerInfo(tcontext.Background(), "5.7.25-TiDB-3.0.6"), consistencyTypeSnapshot, listTableByInfoSchema},
+		{ParseServerInfo(tctx, "5.7.25-TiDB-3.0.6"), consistencyTypeSnapshot, listTableByShowTableStatus},
 		// no bug version
-		{ParseServerInfo(tcontext.Background(), "8.0.2"), consistencyTypeLock, listTableByShowTableStatus},
-		{ParseServerInfo(tcontext.Background(), "8.0.2"), consistencyTypeFlush, listTableByInfoSchema},
-		{ParseServerInfo(tcontext.Background(), "8.0.23"), consistencyTypeNone, listTableByInfoSchema},
+		{ParseServerInfo(tctx, "8.0.2"), consistencyTypeLock, listTableByInfoSchema},
+		{ParseServerInfo(tctx, "8.0.2"), consistencyTypeFlush, listTableByShowTableStatus},
+		{ParseServerInfo(tctx, "8.0.23"), consistencyTypeNone, listTableByShowTableStatus},
 
 		// bug version
-		{ParseServerInfo(tcontext.Background(), "8.0.3"), consistencyTypeLock, listTableByShowTableStatus},
-		{ParseServerInfo(tcontext.Background(), "8.0.3"), consistencyTypeFlush, listTableByShowFullTables},
-		{ParseServerInfo(tcontext.Background(), "8.0.3"), consistencyTypeNone, listTableByInfoSchema},
+		{ParseServerInfo(tctx, "8.0.3"), consistencyTypeLock, listTableByInfoSchema},
+		{ParseServerInfo(tctx, "8.0.3"), consistencyTypeFlush, listTableByShowFullTables},
+		{ParseServerInfo(tctx, "8.0.3"), consistencyTypeNone, listTableByShowTableStatus},
 	}
 
 	for _, x := range cases {
