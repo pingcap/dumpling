@@ -53,3 +53,70 @@ func (s *testSQLSuite) TestDumpBlock(c *C) {
 	c.Assert(errors.ErrorEqual(d.dumpDatabases(writerCtx, conn, taskChan), context.Canceled), IsTrue)
 	c.Assert(errors.ErrorEqual(wg.Wait(), writerErr), IsTrue)
 }
+<<<<<<< HEAD
+=======
+
+func (s *testSQLSuite) TestDumpTableMeta(c *C) {
+	db, mock, err := sqlmock.New()
+	c.Assert(err, IsNil)
+	defer db.Close()
+
+	tctx, cancel := tcontext.Background().WithLogger(appLogger).WithCancel()
+	defer cancel()
+	conn, err := db.Conn(tctx)
+	c.Assert(err, IsNil)
+	conf := DefaultConfig()
+	conf.NoSchemas = true
+
+	for serverType := ServerTypeUnknown; serverType < ServerTypeAll; serverType++ {
+		conf.ServerInfo.ServerType = ServerType(serverType)
+		hasImplicitRowID := false
+		mock.ExpectQuery("SHOW COLUMNS FROM").
+			WillReturnRows(sqlmock.NewRows([]string{"Field", "Type", "Null", "Key", "Default", "Extra"}).
+				AddRow("id", "int(11)", "NO", "PRI", nil, ""))
+		if serverType == ServerTypeTiDB {
+			mock.ExpectExec("SELECT _tidb_rowid from").
+				WillReturnResult(sqlmock.NewResult(0, 0))
+			hasImplicitRowID = true
+		}
+		mock.ExpectQuery(fmt.Sprintf("SELECT \\* FROM `%s`.`%s`", database, table)).
+			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(1))
+		meta, err := dumpTableMeta(conf, conn, database, &TableInfo{Type: TableTypeBase, Name: table})
+		c.Assert(err, IsNil)
+		c.Assert(meta.DatabaseName(), Equals, database)
+		c.Assert(meta.TableName(), Equals, table)
+		c.Assert(meta.SelectedField(), Equals, "*")
+		c.Assert(meta.SelectedLen(), Equals, 1)
+		c.Assert(meta.ShowCreateTable(), Equals, "")
+		c.Assert(meta.HasImplicitRowID(), Equals, hasImplicitRowID)
+	}
+}
+
+func (s *testSQLSuite) TestGetListTableTypeByConf(c *C) {
+	conf := defaultConfigForTest(c)
+	tctx := tcontext.Background().WithLogger(appLogger)
+	cases := []struct {
+		serverInfo  ServerInfo
+		consistency string
+		expected    listTableType
+	}{
+		{ParseServerInfo(tctx, "5.7.25-TiDB-3.0.6"), consistencyTypeSnapshot, listTableByShowTableStatus},
+		// no bug version
+		{ParseServerInfo(tctx, "8.0.2"), consistencyTypeLock, listTableByInfoSchema},
+		{ParseServerInfo(tctx, "8.0.2"), consistencyTypeFlush, listTableByShowTableStatus},
+		{ParseServerInfo(tctx, "8.0.23"), consistencyTypeNone, listTableByShowTableStatus},
+
+		// bug version
+		{ParseServerInfo(tctx, "8.0.3"), consistencyTypeLock, listTableByInfoSchema},
+		{ParseServerInfo(tctx, "8.0.3"), consistencyTypeFlush, listTableByShowFullTables},
+		{ParseServerInfo(tctx, "8.0.3"), consistencyTypeNone, listTableByShowTableStatus},
+	}
+
+	for _, x := range cases {
+		conf.Consistency = x.consistency
+		conf.ServerInfo = x.serverInfo
+		cmt := Commentf("server info %s consistency %s", x.serverInfo, x.consistency)
+		c.Assert(getListTableTypeByConf(conf), Equals, x.expected, cmt)
+	}
+}
+>>>>>>> 4e012e5 (*: use `show full tables` in ListAllDatabasesTables (#325))
