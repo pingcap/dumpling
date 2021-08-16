@@ -6,8 +6,11 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"encoding/hex"
 	"fmt"
 	"math/big"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -22,6 +25,8 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	pclog "github.com/pingcap/log"
+	"github.com/pingcap/tidb/store/helper"
+	"github.com/pingcap/tidb/tablecodec"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -36,12 +41,8 @@ type Dumper struct {
 	extStore storage.ExternalStorage
 	dbHandle *sql.DB
 
-<<<<<<< HEAD
-	tidbPDClientForGC pd.Client
-=======
 	tidbPDClientForGC         pd.Client
 	selectTiDBTableRegionFunc func(tctx *tcontext.Context, conn *sql.Conn, meta TableMeta) (pkFields []string, pkVals [][]string, err error)
->>>>>>> dc97ee9 (*: reduce dumpling accessing database and information_schema usage to improve its stability (#305))
 }
 
 // NewDumper returns a new Dumper
@@ -218,15 +219,6 @@ func (d *Dumper) Dump() (dumpErr error) {
 		}
 	})
 
-<<<<<<< HEAD
-	// get estimate total count
-	err = d.getEstimateTotalRowsCount(tctx, metaConn)
-	if err != nil {
-		tctx.L().Error("fail to get estimate total count", zap.Error(err))
-	}
-
-=======
->>>>>>> dc97ee9 (*: reduce dumpling accessing database and information_schema usage to improve its stability (#305))
 	if conf.SQL == "" {
 		if err = d.dumpDatabases(writerCtx, metaConn, taskChan); err != nil && !errors.ErrorEqual(err, context.Canceled) {
 			return err
@@ -464,10 +456,6 @@ func (d *Dumper) concurrentDumpTable(tctx *tcontext.Context, conn *sql.Conn, met
 	if conf.ServerInfo.ServerType == ServerTypeTiDB &&
 		conf.ServerInfo.ServerVersion != nil &&
 		(conf.ServerInfo.ServerVersion.Compare(*tableSampleVersion) >= 0 ||
-<<<<<<< HEAD
-			(conf.ServerInfo.HasTiKV && conf.ServerInfo.ServerVersion.Compare(*gcSafePointVersion) >= 0)) {
-		return d.concurrentDumpTiDBTables(tctx, conn, meta, taskChan)
-=======
 			(conf.ServerInfo.HasTiKV && conf.ServerInfo.ServerVersion.Compare(*decodeRegionVersion) >= 0)) {
 		err := d.concurrentDumpTiDBTables(tctx, conn, meta, taskChan)
 		// don't retry on context error and successful tasks
@@ -476,7 +464,6 @@ func (d *Dumper) concurrentDumpTable(tctx *tcontext.Context, conn *sql.Conn, met
 		}
 		tctx.L().Warn("fallback to concurrent dump tables using rows due to tidb error",
 			zap.String("database", db), zap.String("table", tbl), zap.Error(err))
->>>>>>> dc97ee9 (*: reduce dumpling accessing database and information_schema usage to improve its stability (#305))
 	}
 
 	orderByClause, err := buildOrderByClause(conf, conn, db, tbl, meta.HasImplicitRowID())
@@ -617,11 +604,7 @@ func (d *Dumper) concurrentDumpTiDBTables(tctx *tcontext.Context, conn *sql.Conn
 		partitions, err = GetPartitionNames(conn, db, tbl)
 		if err == nil {
 			if len(partitions) == 0 {
-<<<<<<< HEAD
-				handleColNames, handleVals, err = selectTiDBTableRegion(tctx, conn, db, tbl)
-=======
 				handleColNames, handleVals, err = d.selectTiDBTableRegionFunc(tctx, conn, meta)
->>>>>>> dc97ee9 (*: reduce dumpling accessing database and information_schema usage to improve its stability (#305))
 			} else {
 				return d.concurrentDumpTiDBPartitionTables(tctx, conn, meta, taskChan, partitions)
 			}
@@ -1197,8 +1180,6 @@ func setSessionParam(d *Dumper) error {
 	}
 	return nil
 }
-<<<<<<< HEAD
-=======
 
 func (d *Dumper) renewSelectTableRegionFuncForLowerTiDB(tctx *tcontext.Context) error {
 	conf := d.conf
@@ -1290,4 +1271,3 @@ func (d *Dumper) renewSelectTableRegionFuncForLowerTiDB(tctx *tcontext.Context) 
 
 	return nil
 }
->>>>>>> dc97ee9 (*: reduce dumpling accessing database and information_schema usage to improve its stability (#305))

@@ -86,9 +86,6 @@ func (m *mockTableIR) ShowCreateView() string {
 	return ""
 }
 
-<<<<<<< HEAD
-func (m *mockTableIR) Start(tctx *tcontext.Context, conn *sql.Conn) error {
-=======
 func (m *mockTableIR) AvgRowLength() uint64 {
 	return 0
 }
@@ -98,7 +95,6 @@ func (m *mockTableIR) HasImplicitRowID() bool {
 }
 
 func (m *mockTableIR) Start(_ *tcontext.Context, conn *sql.Conn) error {
->>>>>>> dc97ee9 (*: reduce dumpling accessing database and information_schema usage to improve its stability (#305))
 	return nil
 }
 

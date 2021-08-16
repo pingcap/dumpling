@@ -6,12 +6,13 @@ import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
-<<<<<<< HEAD
-	"errors"
-=======
 	"encoding/csv"
->>>>>>> dc97ee9 (*: reduce dumpling accessing database and information_schema usage to improve its stability (#305))
 	"fmt"
+	"io"
+	"os"
+	"path"
+	"runtime"
+	"strconv"
 	"strings"
 
 	tcontext "github.com/pingcap/dumpling/v4/context"
@@ -857,18 +858,6 @@ func (s *testSQLSuite) TestBuildRegionQueriesWithoutPartition(c *C) {
 
 		// Test build tasks through table region
 		taskChan := make(chan Task, 128)
-<<<<<<< HEAD
-		quotaCols := make([]string, 0, len(handleColNames))
-		for _, col := range quotaCols {
-			quotaCols = append(quotaCols, wrapBackTicks(col))
-		}
-		selectFields := strings.Join(quotaCols, ",")
-		meta := &tableMeta{
-			database:      database,
-			table:         table,
-			selectedField: selectFields,
-			specCmts: []string{
-=======
 		meta := &mockTableIR{
 			dbName:           database,
 			tblName:          table,
@@ -878,7 +867,6 @@ func (s *testSQLSuite) TestBuildRegionQueriesWithoutPartition(c *C) {
 			colTypes:         handleColTypes,
 			colNames:         handleColNames,
 			specCmt: []string{
->>>>>>> dc97ee9 (*: reduce dumpling accessing database and information_schema usage to improve its stability (#305))
 				"/*!40101 SET NAMES binary*/;",
 			},
 		}
@@ -1066,18 +1054,6 @@ func (s *testSQLSuite) TestBuildRegionQueriesWithPartitions(c *C) {
 
 		// Test build tasks through table region
 		taskChan := make(chan Task, 128)
-<<<<<<< HEAD
-		quotaCols := make([]string, 0, len(handleColNames))
-		for _, col := range quotaCols {
-			quotaCols = append(quotaCols, wrapBackTicks(col))
-		}
-		selectFields := strings.Join(quotaCols, ",")
-		meta := &tableMeta{
-			database:      database,
-			table:         table,
-			selectedField: selectFields,
-			specCmts: []string{
-=======
 		meta := &mockTableIR{
 			dbName:           database,
 			tblName:          table,
@@ -1087,7 +1063,6 @@ func (s *testSQLSuite) TestBuildRegionQueriesWithPartitions(c *C) {
 			colTypes:         handleColTypes,
 			colNames:         handleColNames,
 			specCmt: []string{
->>>>>>> dc97ee9 (*: reduce dumpling accessing database and information_schema usage to improve its stability (#305))
 				"/*!40101 SET NAMES binary*/;",
 			},
 		}
@@ -1137,8 +1112,6 @@ func (s *testSQLSuite) TestBuildRegionQueriesWithPartitions(c *C) {
 	}
 }
 
-<<<<<<< HEAD
-=======
 func buildMockNewRows(mock sqlmock.Sqlmock, columns []string, driverValues [][]driver.Value) *sqlmock.Rows {
 	rows := mock.NewRows(columns)
 	for _, driverValue := range driverValues {
@@ -1441,7 +1414,6 @@ func (s *testSQLSuite) TestBuildVersion3RegionQueries(c *C) {
 	}
 }
 
->>>>>>> dc97ee9 (*: reduce dumpling accessing database and information_schema usage to improve its stability (#305))
 func makeVersion(major, minor, patch int64, preRelease string) *semver.Version {
 	return &semver.Version{
 		Major:      major,
