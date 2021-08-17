@@ -1,6 +1,6 @@
 module github.com/pingcap/dumpling
 
-go 1.13
+go 1.16
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.0
@@ -32,6 +32,7 @@ require (
 	github.com/spf13/pflag v1.0.5
 	github.com/syndtr/goleveldb v1.0.1-0.20190625010220-02440ea7a285 // indirect
 	github.com/tikv/pd v1.1.0-beta.0.20210323121136-78679e5e209d
+	github.com/xitongsys/parquet-go v1.6.0 // indirect
 	go.etcd.io/bbolt v1.3.5 // indirect
 	go.etcd.io/etcd v0.5.0-alpha.5.0.20200824191128-ae9734ed278b
 	go.uber.org/zap v1.16.0
