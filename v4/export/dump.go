@@ -27,10 +27,13 @@ import (
 	pclog "github.com/pingcap/log"
 	"github.com/pingcap/tidb/store/helper"
 	"github.com/pingcap/tidb/tablecodec"
+	"github.com/pingcap/tidb/util/codec"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
+
+var openDBFunc = sql.Open
 
 // Dumper is the dump progress structure
 type Dumper struct {
@@ -49,9 +52,10 @@ type Dumper struct {
 func NewDumper(ctx context.Context, conf *Config) (*Dumper, error) {
 	tctx, cancelFn := tcontext.Background().WithContext(ctx).WithCancel()
 	d := &Dumper{
-		tctx:      tctx,
-		conf:      conf,
-		cancelCtx: cancelFn,
+		tctx:                      tctx,
+		conf:                      conf,
+		cancelCtx:                 cancelFn,
+		selectTiDBTableRegionFunc: selectTiDBTableRegion,
 	}
 	err := adjustConfig(conf,
 		registerTLSConfig,
@@ -144,6 +148,9 @@ func (d *Dumper) Dump() (dumpErr error) {
 		if err = prepareTableListToDump(tctx, conf, metaConn); err != nil {
 			return err
 		}
+	}
+	if err = d.renewSelectTableRegionFuncForLowerTiDB(tctx); err != nil {
+		tctx.L().Error("fail to update select table region info for TiDB", zap.Error(err))
 	}
 
 	rebuildConn := func(conn *sql.Conn) (*sql.Conn, error) {
@@ -593,15 +600,19 @@ func (d *Dumper) concurrentDumpTiDBTables(tctx *tcontext.Context, conn *sql.Conn
 		handleVals     [][]string
 		err            error
 	)
+	// for TiDB v5.0+, we can use table sample directly
 	if d.conf.ServerInfo.ServerVersion.Compare(*tableSampleVersion) >= 0 {
 		tctx.L().Debug("dumping TiDB tables with TABLESAMPLE",
 			zap.String("database", db), zap.String("table", tbl))
 		handleColNames, handleVals, err = selectTiDBTableSample(tctx, conn, meta)
 	} else {
+		// for TiDB v3.0+, we can use table region decode in TiDB directly
 		tctx.L().Debug("dumping TiDB tables with TABLE REGIONS",
 			zap.String("database", db), zap.String("table", tbl))
 		var partitions []string
-		partitions, err = GetPartitionNames(conn, db, tbl)
+		if d.conf.ServerInfo.ServerVersion.Compare(*gcSafePointVersion) >= 0 {
+			partitions, err = GetPartitionNames(conn, db, tbl)
+		}
 		if err == nil {
 			if len(partitions) == 0 {
 				handleColNames, handleVals, err = d.selectTiDBTableRegionFunc(tctx, conn, meta)
@@ -986,11 +997,7 @@ func initLogger(d *Dumper) error {
 // createExternalStore is an initialization step of Dumper.
 func createExternalStore(d *Dumper) error {
 	tctx, conf := d.tctx, d.conf
-	b, err := storage.ParseBackend(conf.OutputDirPath, &conf.BackendOptions)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	extStore, err := storage.Create(tctx, b, false)
+	extStore, err := conf.createExternalStorage(tctx)
 	if err != nil {
 		return errors.Trace(err)
 	}

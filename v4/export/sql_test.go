@@ -401,9 +401,10 @@ func (s *testSQLSuite) TestBuildTableSampleQueries(c *C) {
 	tctx, cancel := tcontext.Background().WithLogger(appLogger).WithCancel()
 
 	d := &Dumper{
-		tctx:      tctx,
-		conf:      DefaultConfig(),
-		cancelCtx: cancel,
+		tctx:                      tctx,
+		conf:                      DefaultConfig(),
+		cancelCtx:                 cancel,
+		selectTiDBTableRegionFunc: selectTiDBTableRegion,
 	}
 	d.conf.ServerInfo = ServerInfo{
 		HasTiKV:       true,
@@ -628,7 +629,7 @@ func (s *testSQLSuite) TestBuildTableSampleQueries(c *C) {
 		if len(handleColNames) > 0 {
 			taskChan := make(chan Task, 128)
 			quotaCols := make([]string, 0, len(handleColNames))
-			for _, col := range quotaCols {
+			for _, col := range handleColNames {
 				quotaCols = append(quotaCols, wrapBackTicks(col))
 			}
 			selectFields := strings.Join(quotaCols, ",")
@@ -770,9 +771,10 @@ func (s *testSQLSuite) TestBuildRegionQueriesWithoutPartition(c *C) {
 	tctx, cancel := tcontext.Background().WithLogger(appLogger).WithCancel()
 
 	d := &Dumper{
-		tctx:      tctx,
-		conf:      DefaultConfig(),
-		cancelCtx: cancel,
+		tctx:                      tctx,
+		conf:                      DefaultConfig(),
+		cancelCtx:                 cancel,
+		selectTiDBTableRegionFunc: selectTiDBTableRegion,
 	}
 	d.conf.ServerInfo = ServerInfo{
 		HasTiKV:       true,
@@ -924,9 +926,10 @@ func (s *testSQLSuite) TestBuildRegionQueriesWithPartitions(c *C) {
 	tctx, cancel := tcontext.Background().WithLogger(appLogger).WithCancel()
 
 	d := &Dumper{
-		tctx:      tctx,
-		conf:      DefaultConfig(),
-		cancelCtx: cancel,
+		tctx:                      tctx,
+		conf:                      DefaultConfig(),
+		cancelCtx:                 cancel,
+		selectTiDBTableRegionFunc: selectTiDBTableRegion,
 	}
 	d.conf.ServerInfo = ServerInfo{
 		HasTiKV:       true,
