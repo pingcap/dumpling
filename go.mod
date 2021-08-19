@@ -18,7 +18,8 @@ require (
 	github.com/pingcap/errors v0.11.5-0.20201126102027-b0a155152ca3
 	github.com/pingcap/failpoint v0.0.0-20200702092429-9f69995143ce
 	github.com/pingcap/log v0.0.0-20201112100606-8f1e84a3abc8
-	github.com/pingcap/tidb v1.1.0-beta.0.20210129045644-ea6ccf82e934 // indirect
+	github.com/pingcap/parser v0.0.0-20210125075924-ffe0fda947cb
+	github.com/pingcap/tidb v1.1.0-beta.0.20210129045644-ea6ccf82e934
 	github.com/pingcap/tidb-tools v4.0.9-0.20201127090955-2707c97b3853+incompatible
 	github.com/prometheus/client_golang v1.5.1
 	github.com/prometheus/client_model v0.2.0
