@@ -8,7 +8,7 @@ import (
 	tcontext "github.com/pingcap/dumpling/v4/context"
 )
 
-func filterDataBases(tctx *tcontext.Context, conf *Config, databases []string) []string {
+func filterDatabases(tctx *tcontext.Context, conf *Config, databases []string) []string {
 	tctx.L().Debug("start to filter databases")
 	newDatabases := make([]string, 0, len(databases))
 	ignoreDatabases := make([]string, 0, len(databases))
