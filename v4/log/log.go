@@ -60,6 +60,8 @@ func NewAppLogger(logger *zap.Logger) Logger {
 	return Logger{logger}
 }
 
+// ShortError contructs a field which only records the error message without the
+// verbose text (i.e. excludes the stack trace).
 func ShortError(err error) zap.Field {
 	return zap.String("error", err.Error())
 }
