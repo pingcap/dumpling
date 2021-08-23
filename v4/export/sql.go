@@ -15,6 +15,7 @@ import (
 
 	tcontext "github.com/pingcap/dumpling/v4/context"
 
+	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"go.uber.org/zap"
 )
