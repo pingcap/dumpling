@@ -12,10 +12,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/go-sql-driver/mysql"
-
 	tcontext "github.com/pingcap/dumpling/v4/context"
 
+	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb/store/helper"
