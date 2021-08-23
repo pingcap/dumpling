@@ -59,3 +59,7 @@ func InitAppLogger(cfg *Config) (Logger, *pclog.ZapProperties, error) {
 func NewAppLogger(logger *zap.Logger) Logger {
 	return Logger{logger}
 }
+
+func ShortError(err error) zap.Field {
+	return zap.String("error", err.Error())
+}
