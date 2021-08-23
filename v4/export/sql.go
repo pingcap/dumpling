@@ -591,8 +591,7 @@ func GetPdAddrs(tctx *tcontext.Context, db *sql.DB) ([]string, error) {
 		return []string{}, errors.Annotatef(err, "sql: %s", query)
 	}
 	pdAddrs, err := GetSpecifiedColumnValueAndClose(rows, "STATUS_ADDRESS")
-	err = errors.Annotatef(err, "sql: %s", query)
-	return pdAddrs, err
+	return pdAddrs, errors.Annotatef(err, "sql: %s", query)
 }
 
 // GetTiDBDDLIDs gets DDL IDs from TiDB
@@ -603,8 +602,7 @@ func GetTiDBDDLIDs(tctx *tcontext.Context, db *sql.DB) ([]string, error) {
 		return []string{}, errors.Annotatef(err, "sql: %s", query)
 	}
 	ddlIDs, err := GetSpecifiedColumnValueAndClose(rows, "DDL_ID")
-	err = errors.Annotatef(err, "sql: %s", query)
-	return ddlIDs, err
+	return ddlIDs, errors.Annotatef(err, "sql: %s", query)
 }
 
 // CheckTiDBWithTiKV use sql to check whether current TiDB has TiKV
