@@ -38,10 +38,10 @@ func (s *testBWListSuite) TestFilterTables(c *C) {
 	}
 
 	databases := []string{filter.InformationSchemaName, filter.PerformanceSchemaName, "xxx", "yyy"}
-	c.Assert(filterDataBases(tctx, conf, databases), DeepEquals, databases)
+	c.Assert(filterDatabases(tctx, conf, databases), DeepEquals, databases)
 
 	conf.TableFilter = tf.NewSchemasFilter("xxx")
-	c.Assert(filterDataBases(tctx, conf, databases), DeepEquals, []string{"xxx"})
+	c.Assert(filterDatabases(tctx, conf, databases), DeepEquals, []string{"xxx"})
 	filterTables(tcontext.Background(), conf)
 	c.Assert(conf.Tables, HasLen, 1)
 	c.Assert(conf.Tables, DeepEquals, expectedDBTables)
