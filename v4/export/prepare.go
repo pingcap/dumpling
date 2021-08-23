@@ -82,7 +82,7 @@ func prepareDumpingDatabases(tctx *tcontext.Context, conf *Config, db *sql.Conn)
 	if err != nil {
 		return nil, err
 	}
-	databases = filterDataBases(tctx, conf, databases)
+	databases = filterDatabases(tctx, conf, databases)
 	if len(conf.Databases) == 0 {
 		return databases, nil
 	}
