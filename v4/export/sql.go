@@ -12,7 +12,6 @@ import (
 	"strconv"
 	"strings"
 
-
 	tcontext "github.com/pingcap/dumpling/v4/context"
 
 	"github.com/go-sql-driver/mysql"
