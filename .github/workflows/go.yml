@@ -40,8 +40,6 @@ jobs:
         options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
     steps:
       - uses: actions/checkout@v2
-<<<<<<< HEAD
-=======
       - name: Shutdown Ubuntu MySQL (SUDO)
         run: sudo service mysql stop # Shutdown the Default MySQL, "sudo" is necessary, please not remove it
       - name: Set up Go 1.16
@@ -130,7 +128,6 @@ jobs:
             ${{ runner.os }}-go-
       - name: Get dependencies
         run: go mod download
->>>>>>> 4e012e5 (*: use `show full tables` in ListAllDatabasesTables (#325))
       - name: Download dependencies
         run: sh install.sh
       - name: Integration test
