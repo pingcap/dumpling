@@ -14,8 +14,8 @@ import (
 
 	tcontext "github.com/pingcap/dumpling/v4/context"
 
-	"github.com/pingcap/br/pkg/storage"
-	"github.com/pingcap/br/pkg/summary"
+	"github.com/pingcap/tidb/br/pkg/storage"
+	"github.com/pingcap/tidb/br/pkg/summary"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/prometheus/client_golang/prometheus"
