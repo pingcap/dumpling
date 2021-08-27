@@ -12,7 +12,7 @@ import (
 
 	tcontext "github.com/pingcap/dumpling/v4/context"
 
-	"github.com/pingcap/br/pkg/storage"
+	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/errors"
 	"go.uber.org/zap"
 )
