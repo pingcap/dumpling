@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
+	"sync"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -329,8 +330,13 @@ func TestWriteTableDataWithStatementSize(t *testing.T) {
 	}
 }
 
+var mu sync.Mutex
+
 func createTestWriter(conf *Config, t *testing.T) (w *Writer, clean func()) {
+	mu.Lock()
 	extStore, err := conf.createExternalStorage(context.Background())
+	mu.Unlock()
+
 	require.NoError(t, err)
 	db, _, err := sqlmock.New()
 	require.NoError(t, err)
