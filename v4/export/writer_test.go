@@ -22,7 +22,7 @@ func TestWriteDatabaseMeta(t *testing.T) {
 	config := defaultConfigForTest(t)
 	config.OutputDirPath = dir
 
-	writer, clean := newWriter(config, t)
+	writer, clean := createTestWriter(config, t)
 	defer clean()
 
 	err := writer.WriteDatabaseMeta("test", "CREATE DATABASE `test`")
@@ -45,7 +45,7 @@ func TestWriteTableMeta(t *testing.T) {
 	config := defaultConfigForTest(t)
 	config.OutputDirPath = dir
 
-	writer, clean := newWriter(config, t)
+	writer, clean := createTestWriter(config, t)
 	defer clean()
 
 	err := writer.WriteTableMeta("test", "t", "CREATE TABLE t (a INT)")
@@ -65,7 +65,7 @@ func TestWriteViewMeta(t *testing.T) {
 	config := defaultConfigForTest(t)
 	config.OutputDirPath = dir
 
-	writer, clean := newWriter(config, t)
+	writer, clean := createTestWriter(config, t)
 	defer clean()
 
 	specCmt := "/*!40101 SET NAMES binary*/;\n"
@@ -96,7 +96,7 @@ func TestWriteTableData(t *testing.T) {
 	config := defaultConfigForTest(t)
 	config.OutputDirPath = dir
 
-	writer, clean := newWriter(config, t)
+	writer, clean := createTestWriter(config, t)
 	defer clean()
 
 	data := [][]driver.Value{
@@ -145,7 +145,7 @@ func TestWriteTableDataWithFileSize(t *testing.T) {
 	config.FileSize += uint64(len(specCmts[1]) + 1)
 	config.FileSize += uint64(len("INSERT INTO `employees` VALUES\n"))
 
-	writer, clean := newWriter(config, t)
+	writer, clean := createTestWriter(config, t)
 	defer clean()
 
 	data := [][]driver.Value{
@@ -198,7 +198,7 @@ func TestWriteTableDataWithFileSizeAndRows(t *testing.T) {
 	config.FileSize += uint64(len(specCmts[1]) + 1)
 	config.FileSize += uint64(len("INSERT INTO `employees` VALUES\n"))
 
-	writer, clean := newWriter(config, t)
+	writer, clean := createTestWriter(config, t)
 	defer clean()
 
 	data := [][]driver.Value{
@@ -247,7 +247,7 @@ func TestWriteTableDataWithStatementSize(t *testing.T) {
 	config.OutputFileTemplate, err = ParseOutputFileTemplate("specified-name")
 	require.NoError(t, err)
 
-	writer, clean := newWriter(config, t)
+	writer, clean := createTestWriter(config, t)
 	defer clean()
 
 	data := [][]driver.Value{
@@ -299,7 +299,7 @@ func TestWriteTableDataWithStatementSize(t *testing.T) {
 	require.NoError(t, err)
 	config.OutputDirPath, err = ioutil.TempDir("", "dumpling")
 
-	writer, clean = newWriter(config, t)
+	writer, clean = createTestWriter(config, t)
 	defer clean()
 
 	cases = map[string]string{
@@ -329,7 +329,7 @@ func TestWriteTableDataWithStatementSize(t *testing.T) {
 	}
 }
 
-func newWriter(conf *Config, t *testing.T) (w *Writer, clean func()) {
+func createTestWriter(conf *Config, t *testing.T) (w *Writer, clean func()) {
 	extStore, err := conf.createExternalStorage(context.Background())
 	require.NoError(t, err)
 	db, _, err := sqlmock.New()
