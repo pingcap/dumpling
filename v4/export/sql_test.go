@@ -678,7 +678,7 @@ func TestBuildTableSampleQueries(t *testing.T) {
 	}
 
 	for caseID, testCase := range testCases {
-		t.Log(fmt.Sprintf("case #%d", caseID))
+		t.Logf("case #%d", caseID)
 		handleColNames := testCase.handleColNames
 		handleColTypes := testCase.handleColTypes
 		handleVals := testCase.handleVals
