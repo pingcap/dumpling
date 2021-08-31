@@ -94,6 +94,7 @@ static: tools
 		--disable errorlint \
 		--disable sqlclosecheck \
 		--disable scopelint \
+		--disable gofumpt \
 		$$($(PACKAGE_DIRECTORIES))
 	# pingcap/errors APIs are mixed with multiple patterns 'pkg/errors',
 	# 'juju/errors' and 'pingcap/parser'. To avoid confusion and mistake,
