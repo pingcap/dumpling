@@ -52,6 +52,7 @@ func TestRowIter(t *testing.T) {
 
 	iter.Next()
 	require.True(t, iter.HasNext())
+	require.True(t, iter.HasNext())
 	require.NoError(t, iter.Decode(res))
 	require.Equal(t, []string{"2"}, res.data)
 
