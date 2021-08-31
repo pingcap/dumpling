@@ -7,10 +7,9 @@ import (
 	"testing"
 
 	tcontext "github.com/pingcap/dumpling/v4/context"
-	"github.com/stretchr/testify/require"
-
 	"github.com/pingcap/tidb-tools/pkg/filter"
 	tf "github.com/pingcap/tidb-tools/pkg/table-filter"
+	"github.com/stretchr/testify/require"
 )
 
 func TestFilterTables(t *testing.T) {

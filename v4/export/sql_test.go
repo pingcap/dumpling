@@ -924,8 +924,8 @@ func TestBuildRegionQueriesWithoutPartition(t *testing.T) {
 		},
 	}
 
-	for caseID, testCase := range testCases {
-		t.Log(fmt.Sprintf("case #%d", caseID))
+	for i, testCase := range testCases {
+		t.Logf("case #%d", i)
 		handleColNames := testCase.handleColNames
 		handleColTypes := testCase.handleColTypes
 		regionResults := testCase.regionResults
@@ -1128,7 +1128,7 @@ func TestBuildRegionQueriesWithPartitions(t *testing.T) {
 	}
 
 	for i, testCase := range testCases {
-		t.Log(fmt.Sprintf("case #%d", i))
+		t.Logf("case #%d", i)
 		handleColNames := testCase.handleColNames
 		handleColTypes := testCase.handleColTypes
 		regionResults := testCase.regionResults
@@ -1455,7 +1455,7 @@ func TestBuildVersion3RegionQueries(t *testing.T) {
 	}
 
 	for i, testCase := range testCases {
-		t.Log(fmt.Sprintf("case #%d", i))
+		t.Logf("case #%d", i)
 		table := testCase.tableName
 		handleColNames := testCase.handleColNames
 		handleColTypes := testCase.handleColTypes
