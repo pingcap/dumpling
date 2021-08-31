@@ -445,7 +445,7 @@ func TestSelectTiDBRowID(t *testing.T) {
 	mock.ExpectExec("SELECT _tidb_rowid from `test`.`t`").
 		WillReturnError(expectedErr)
 	hasImplicitRowID, err = SelectTiDBRowID(conn, database, table)
-	require.Equal(t, expectedErr, errors.Cause(err))
+	require.ErrorIs(t, errors.Cause(err), expectedErr)
 	require.False(t, hasImplicitRowID)
 }
 

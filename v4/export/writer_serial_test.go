@@ -91,7 +91,7 @@ func TestWriteInsertReturnsError(t *testing.T) {
 
 	conf := configForWriteSQL(cfg, UnspecifiedSize, UnspecifiedSize)
 	n, err := WriteInsert(tcontext.Background(), conf, tableIR, tableIR, bf)
-	require.Equal(t, rowErr, err)
+	require.ErrorIs(t, err, rowErr)
 	require.Equal(t, uint64(3), n)
 
 	expected := "/*!40101 SET NAMES binary*/;\n" +
@@ -221,7 +221,7 @@ func TestWriteInsertInCsvReturnsError(t *testing.T) {
 	conf := configForWriteCSV(cfg, true, opt)
 	n, err := WriteInsertInCsv(tcontext.Background(), conf, tableIR, tableIR, bf)
 	require.Equal(t, uint64(3), n)
-	require.Equal(t, rowErr, err)
+	require.ErrorIs(t, err, rowErr)
 
 	expected := "1,\"male\",\"bob@mail.com\",\"020-1234\",\\N\n" +
 		"2,\"female\",\"sarah@mail.com\",\"020-1253\",\"healthy\"\n" +

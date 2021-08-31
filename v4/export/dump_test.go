@@ -54,8 +54,8 @@ func TestDumpBlock(t *testing.T) {
 	taskChan := make(chan Task, 1)
 	taskChan <- &TaskDatabaseMeta{}
 	d.conf.Tables = DatabaseTables{}.AppendTable(database, nil)
-	require.True(t, errors.ErrorEqual(d.dumpDatabases(writerCtx, conn, taskChan), context.Canceled))
-	require.True(t, errors.ErrorEqual(wg.Wait(), writerErr))
+	require.ErrorIs(t, d.dumpDatabases(writerCtx, conn, taskChan), context.Canceled)
+	require.ErrorIs(t, wg.Wait(), writerErr)
 }
 
 func TestDumpTableMeta(t *testing.T) {
