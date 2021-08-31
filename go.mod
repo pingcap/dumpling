@@ -18,9 +18,11 @@ require (
 	github.com/prometheus/client_model v0.2.0
 	github.com/soheilhy/cmux v0.1.4
 	github.com/spf13/pflag v1.0.5
+	github.com/stretchr/testify v1.7.0
 	github.com/tikv/pd v1.1.0-beta.0.20210818082359-acba1da0018d
 	github.com/xitongsys/parquet-go v1.6.0 // indirect
 	go.etcd.io/etcd v0.5.0-alpha.5.0.20200824191128-ae9734ed278b
+	go.uber.org/goleak v1.1.10
 	go.uber.org/zap v1.19.0
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 )
