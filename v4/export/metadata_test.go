@@ -44,9 +44,9 @@ func TestMysqlMetaData(t *testing.T) {
 	m := newGlobalMetadata(tcontext.Background(), createStorage(t), "")
 	require.NoError(t, m.recordGlobalMetaData(conn, ServerTypeMySQL, false))
 
-	expected := "SHOW MASTER STATUS:\n"+
-		"\tLog: ON.000001\n"+
-		"\tPos: 7502\n"+
+	expected := "SHOW MASTER STATUS:\n" +
+		"\tLog: ON.000001\n" +
+		"\tPos: 7502\n" +
 		"\tGTID:6ce40be3-e359-11e9-87e0-36933cb0ca5a:1-29\n\n"
 	require.Equal(t, expected, m.buffer.String())
 	require.NoError(t, mock.ExpectationsWereMet())
@@ -81,13 +81,13 @@ func TestMetaDataAfterConn(t *testing.T) {
 
 	m.buffer.Write(m.afterConnBuffer.Bytes())
 
-	expected := "SHOW MASTER STATUS:\n"+
-		"\tLog: ON.000001\n"+
-		"\tPos: 7502\n"+
-		"\tGTID:6ce40be3-e359-11e9-87e0-36933cb0ca5a:1-29\n\n"+
-		"SHOW MASTER STATUS: /* AFTER CONNECTION POOL ESTABLISHED */\n"+
-		"\tLog: ON.000001\n"+
-		"\tPos: 7510\n"+
+	expected := "SHOW MASTER STATUS:\n" +
+		"\tLog: ON.000001\n" +
+		"\tPos: 7502\n" +
+		"\tGTID:6ce40be3-e359-11e9-87e0-36933cb0ca5a:1-29\n\n" +
+		"SHOW MASTER STATUS: /* AFTER CONNECTION POOL ESTABLISHED */\n" +
+		"\tLog: ON.000001\n" +
+		"\tPos: 7510\n" +
 		"\tGTID:6ce40be3-e359-11e9-87e0-36933cb0ca5a:1-29\n\n"
 	require.Equal(t, expected, m.buffer.String())
 	require.NoError(t, mock.ExpectationsWereMet())
@@ -116,14 +116,14 @@ func TestMysqlWithFollowersMetaData(t *testing.T) {
 	m := newGlobalMetadata(tcontext.Background(), createStorage(t), "")
 	require.NoError(t, m.recordGlobalMetaData(conn, ServerTypeMySQL, false))
 
-	expected := "SHOW MASTER STATUS:\n"+
-		"\tLog: ON.000001\n"+
-		"\tPos: 7502\n"+
-		"\tGTID:6ce40be3-e359-11e9-87e0-36933cb0ca5a:1-29\n\n"+
-		"SHOW SLAVE STATUS:\n"+
-		"\tHost: 192.168.1.100\n"+
-		"\tLog: mysql-bin.001821\n"+
-		"\tPos: 256529431\n"+
+	expected := "SHOW MASTER STATUS:\n" +
+		"\tLog: ON.000001\n" +
+		"\tPos: 7502\n" +
+		"\tGTID:6ce40be3-e359-11e9-87e0-36933cb0ca5a:1-29\n\n" +
+		"SHOW SLAVE STATUS:\n" +
+		"\tHost: 192.168.1.100\n" +
+		"\tLog: mysql-bin.001821\n" +
+		"\tPos: 256529431\n" +
 		"\tGTID:6ce40be3-e359-11e9-87e0-36933cb0ca5a:1-29\n\n"
 	require.Equal(t, expected, m.buffer.String())
 	require.NoError(t, mock.ExpectationsWereMet())
@@ -150,9 +150,9 @@ func TestMysqlWithNullFollowersMetaData(t *testing.T) {
 	m := newGlobalMetadata(tcontext.Background(), createStorage(t), "")
 	require.NoError(t, m.recordGlobalMetaData(conn, ServerTypeMySQL, false))
 
-	expected := "SHOW MASTER STATUS:\n"+
-		"\tLog: ON.000001\n"+
-		"\tPos: 7502\n"+
+	expected := "SHOW MASTER STATUS:\n" +
+		"\tLog: ON.000001\n" +
+		"\tPos: 7502\n" +
 		"\tGTID:6ce40be3-e359-11e9-87e0-36933cb0ca5a:1-29\n\n"
 	require.Equal(t, expected, m.buffer.String())
 	require.NoError(t, mock.ExpectationsWereMet())
@@ -211,21 +211,21 @@ func TestMariaDBWithFollowersMetaData(t *testing.T) {
 	m := newGlobalMetadata(tcontext.Background(), createStorage(t), "")
 	require.NoError(t, m.recordGlobalMetaData(conn, ServerTypeMySQL, false))
 
-	expected := "SHOW MASTER STATUS:\n"+
-		"\tLog: ON.000001\n"+
-		"\tPos: 7502\n"+
-		"\tGTID:6ce40be3-e359-11e9-87e0-36933cb0ca5a:1-29\n\n"+
-		"SHOW SLAVE STATUS:\n"+
-		"\tConnection name: connection_1\n"+
-		"\tHost: 192.168.1.100\n"+
-		"\tLog: mysql-bin.001821\n"+
-		"\tPos: 256529431\n"+
-		"\tGTID:6ce40be3-e359-11e9-87e0-36933cb0ca5a:1-29\n\n"+
-		"SHOW SLAVE STATUS:\n"+
-		"\tConnection name: connection_2\n"+
-		"\tHost: 192.168.1.102\n"+
-		"\tLog: mysql-bin.001820\n"+
-		"\tPos: 256529451\n"+
+	expected := "SHOW MASTER STATUS:\n" +
+		"\tLog: ON.000001\n" +
+		"\tPos: 7502\n" +
+		"\tGTID:6ce40be3-e359-11e9-87e0-36933cb0ca5a:1-29\n\n" +
+		"SHOW SLAVE STATUS:\n" +
+		"\tConnection name: connection_1\n" +
+		"\tHost: 192.168.1.100\n" +
+		"\tLog: mysql-bin.001821\n" +
+		"\tPos: 256529431\n" +
+		"\tGTID:6ce40be3-e359-11e9-87e0-36933cb0ca5a:1-29\n\n" +
+		"SHOW SLAVE STATUS:\n" +
+		"\tConnection name: connection_2\n" +
+		"\tHost: 192.168.1.102\n" +
+		"\tLog: mysql-bin.001820\n" +
+		"\tPos: 256529451\n" +
 		"\tGTID:6ce40be3-e359-11e9-87e0-36933cb0ca5a:1-29\n\n"
 	require.Equal(t, expected, m.buffer.String())
 	require.NoError(t, mock.ExpectationsWereMet())
@@ -255,9 +255,9 @@ func TestEarlierMysqlMetaData(t *testing.T) {
 	m := newGlobalMetadata(tcontext.Background(), createStorage(t), "")
 	require.NoError(t, m.recordGlobalMetaData(conn, ServerTypeMySQL, false))
 
-	expected := "SHOW MASTER STATUS:\n"+
-		"\tLog: mysql-bin.000001\n"+
-		"\tPos: 4879\n"+
+	expected := "SHOW MASTER STATUS:\n" +
+		"\tLog: mysql-bin.000001\n" +
+		"\tPos: 4879\n" +
 		"\tGTID:\n\n"
 	require.Equal(t, expected, m.buffer.String())
 	require.NoError(t, mock.ExpectationsWereMet())
@@ -284,9 +284,9 @@ func TestTiDBSnapshotMetaData(t *testing.T) {
 	m := newGlobalMetadata(tcontext.Background(), createStorage(t), "")
 	require.NoError(t, m.recordGlobalMetaData(conn, ServerTypeTiDB, false))
 
-	expected := "SHOW MASTER STATUS:\n"+
-		"\tLog: tidb-binlog\n"+
-		"\tPos: 420633329401856001\n"+
+	expected := "SHOW MASTER STATUS:\n" +
+		"\tLog: tidb-binlog\n" +
+		"\tPos: 420633329401856001\n" +
 		"\tGTID:\n\n"
 	require.Equal(t, expected, m.buffer.String())
 
@@ -297,9 +297,9 @@ func TestTiDBSnapshotMetaData(t *testing.T) {
 	m = newGlobalMetadata(tcontext.Background(), createStorage(t), snapshot)
 	require.NoError(t, m.recordGlobalMetaData(conn, ServerTypeTiDB, false))
 
-	expected = "SHOW MASTER STATUS:\n"+
-		"\tLog: tidb-binlog\n"+
-		"\tPos: 420633273211289601\n"+
+	expected = "SHOW MASTER STATUS:\n" +
+		"\tLog: tidb-binlog\n" +
+		"\tPos: 420633273211289601\n" +
 		"\tGTID:\n\n"
 	require.Equal(t, expected, m.buffer.String())
 	require.NoError(t, mock.ExpectationsWereMet())
