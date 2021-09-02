@@ -691,6 +691,30 @@ func (d *Dumper) L() log.Logger {
 	return d.tctx.L()
 }
 
+// func for sort pkVals
+type tds [][]string
+
+func (d tds) Len() int {
+	return len(d)
+}
+
+func (d tds) Swap(i, j int) {
+	d[i], d[j] = d[j], d[i]
+}
+
+func (d tds) Less(i, j int) bool {
+	n := len(d[i])
+	for k := 0; k < n; k++ {
+		if d[i][k] < d[j][k] {
+			return true
+		} else if d[i][k] == d[j][k] {
+			continue
+		} else {
+			return false
+		}
+	}
+	return false
+}
 func selectTiDBTableSample(tctx *tcontext.Context, conn *sql.Conn, meta TableMeta) (pkFields []string, pkVals [][]string, err error) {
 	pkFields, pkColTypes, err := selectTiDBRowKeyFields(conn, meta, nil)
 	if err != nil {
@@ -723,6 +747,7 @@ func selectTiDBTableSample(tctx *tcontext.Context, conn *sql.Conn, meta TableMet
 		iter.Next()
 	}
 	iter.Close()
+	sort.Sort(tds(pkVals))
 	return pkFields, pkVals, iter.Error()
 }
 
