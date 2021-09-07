@@ -20,7 +20,6 @@ require (
 	github.com/kr/text v0.2.0 // indirect
 	github.com/mattn/go-runewidth v0.0.10 // indirect
 	github.com/pingcap/br v4.0.14-0.20210715051733-8afeee8f2859+incompatible
-	github.com/pingcap/check v0.0.0-20200212061837-5e12011dc712
 	github.com/pingcap/errors v0.11.5-0.20201126102027-b0a155152ca3
 	github.com/pingcap/failpoint v0.0.0-20210316064728-7acb0f0a3dfd
 	github.com/pingcap/log v0.0.0-20210317133921-96f4fcab92a4
@@ -31,10 +30,12 @@ require (
 	github.com/prometheus/client_model v0.2.0
 	github.com/soheilhy/cmux v0.1.4
 	github.com/spf13/pflag v1.0.5
+	github.com/stretchr/testify v1.7.0
 	github.com/tikv/pd v0.0.0-20210105112549-e5be7fd38659
 	github.com/uber/jaeger-lib v2.4.0+incompatible // indirect
 	github.com/xitongsys/parquet-go v1.6.0 // indirect
 	go.etcd.io/etcd v0.5.0-alpha.5.0.20200824191128-ae9734ed278b
+	go.uber.org/goleak v0.10.0
 	go.uber.org/zap v1.16.0
 	golang.org/x/crypto v0.0.0-20200820211705-5c72a883971a // indirect
 	golang.org/x/mod v0.4.2 // indirect
