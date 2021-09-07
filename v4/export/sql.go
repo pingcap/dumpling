@@ -12,14 +12,8 @@ import (
 	"strconv"
 	"strings"
 
-<<<<<<< HEAD
-=======
-	"github.com/pingcap/dumpling/v4/log"
-
-	"github.com/go-sql-driver/mysql"
-
->>>>>>> 379258a (*: update dumpling log and pd usage (#335))
 	tcontext "github.com/pingcap/dumpling/v4/context"
+	"github.com/pingcap/dumpling/v4/log"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/model"
