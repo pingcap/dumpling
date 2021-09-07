@@ -5,11 +5,7 @@ package export
 import (
 	"context"
 	"fmt"
-<<<<<<< HEAD
-=======
-	"strings"
 	"testing"
->>>>>>> 85c4dee (*: migrate test-infra to testify (#344))
 
 	tcontext "github.com/pingcap/dumpling/v4/context"
 	"github.com/stretchr/testify/require"
@@ -101,13 +97,8 @@ func TestListAllTables(t *testing.T) {
 	query := "SELECT TABLE_SCHEMA,TABLE_NAME,TABLE_TYPE,AVG_ROW_LENGTH FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE='BASE TABLE'"
 	mock.ExpectQuery(query).WillReturnRows(rows)
 
-<<<<<<< HEAD
 	tables, err := ListAllDatabasesTables(tctx, conn, dbNames, true, TableTypeBase)
-	c.Assert(err, IsNil)
-=======
-	tables, err := ListAllDatabasesTables(tctx, conn, dbNames, listTableByInfoSchema, TableTypeBase)
 	require.NoError(t, err)
->>>>>>> 85c4dee (*: migrate test-infra to testify (#344))
 
 	for d, table := range tables {
 		expectedTbs, ok := data[d]
@@ -124,18 +115,11 @@ func TestListAllTables(t *testing.T) {
 	query = "SELECT TABLE_SCHEMA,TABLE_NAME,TABLE_TYPE,AVG_ROW_LENGTH FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE='BASE TABLE' OR TABLE_TYPE='VIEW'"
 	mock.ExpectQuery(query).WillReturnRows(sqlmock.NewRows([]string{"TABLE_SCHEMA", "TABLE_NAME", "TABLE_TYPE", "AVG_ROW_LENGTH"}).
 		AddRow("db", "t1", TableTypeBaseStr, 1).AddRow("db", "t2", TableTypeViewStr, nil))
-<<<<<<< HEAD
 	tables, err = ListAllDatabasesTables(tctx, conn, []string{"db"}, true, TableTypeBase, TableTypeView)
-	c.Assert(err, IsNil)
-	c.Assert(len(tables), Equals, 1)
-	c.Assert(len(tables["db"]), Equals, 2)
-=======
-	tables, err = ListAllDatabasesTables(tctx, conn, []string{"db"}, listTableByInfoSchema, TableTypeBase, TableTypeView)
 	require.NoError(t, err)
 	require.Len(t, tables, 1)
 	require.Len(t, tables["db"], 2)
 
->>>>>>> 85c4dee (*: migrate test-infra to testify (#344))
 	for i := 0; i < len(tables["db"]); i++ {
 		require.Truef(t, tables["db"][i].Equals(data["db"][i]), "%v mismatches expected: %v", tables["db"][i], data["db"][i])
 	}
@@ -180,13 +164,8 @@ func TestListAllTablesByTableStatus(t *testing.T) {
 		mock.ExpectQuery(fmt.Sprintf(query, dbName)).WillReturnRows(rows)
 	}
 
-<<<<<<< HEAD
 	tables, err := ListAllDatabasesTables(tctx, conn, dbNames, false, TableTypeBase)
-	c.Assert(err, IsNil)
-=======
-	tables, err := ListAllDatabasesTables(tctx, conn, dbNames, listTableByShowTableStatus, TableTypeBase)
 	require.NoError(t, err)
->>>>>>> 85c4dee (*: migrate test-infra to testify (#344))
 
 	for d, table := range tables {
 		expectedTbs, ok := data[d]
@@ -203,97 +182,12 @@ func TestListAllTablesByTableStatus(t *testing.T) {
 		AppendViews("db", "t2")
 	mock.ExpectQuery(fmt.Sprintf(query, "db")).WillReturnRows(sqlmock.NewRows(showTableStatusColumnNames).
 		AddRow("t1", "InnoDB", 10, "Dynamic", 0, 1, 16384, 0, 0, 0, nil, "2021-07-08 03:04:07", nil, nil, "latin1_swedish_ci", nil, "", "").
-<<<<<<< HEAD
 		AddRow("t2", nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, "VIEW"))
 	tables, err = ListAllDatabasesTables(tctx, conn, []string{"db"}, false, TableTypeBase, TableTypeView)
-	c.Assert(err, IsNil)
-	c.Assert(len(tables), Equals, 1)
-	c.Assert(len(tables["db"]), Equals, 2)
-=======
-		AddRow("t2", nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, TableTypeView.String()))
-	tables, err = ListAllDatabasesTables(tctx, conn, []string{"db"}, listTableByShowTableStatus, TableTypeBase, TableTypeView)
 	require.NoError(t, err)
 	require.Len(t, tables, 1)
 	require.Len(t, tables["db"], 2)
 
-	for i := 0; i < len(tables["db"]); i++ {
-		require.Truef(t, tables["db"][i].Equals(data["db"][i]), "%v mismatches expected: %v", tables["db"][i], data["db"][i])
-	}
-
-	require.NoError(t, mock.ExpectationsWereMet())
-}
-
-func TestListAllTablesByShowFullTables(t *testing.T) {
-	t.Parallel()
-
-	db, mock, err := sqlmock.New()
-	require.NoError(t, err)
-	defer func() {
-		require.NoError(t, db.Close())
-	}()
-
-	conn, err := db.Conn(context.Background())
-	require.NoError(t, err)
-
-	tctx := tcontext.Background().WithLogger(appLogger)
-
-	// Test list all tables and skipping views.
-	data := NewDatabaseTables().
-		AppendTables("db1", []string{"t1", "t2"}, []uint64{1, 2}).
-		AppendTables("db2", []string{"t3", "t4", "t5"}, []uint64{3, 4, 5}).
-		AppendViews("db3", "t6", "t7", "t8")
-
-	query := "SHOW FULL TABLES FROM `%s` WHERE TABLE_TYPE='BASE TABLE'"
-	dbNames := make([]databaseName, 0, len(data))
-	for dbName, tableInfos := range data {
-		dbNames = append(dbNames, dbName)
-		columnNames := []string{strings.ToUpper(fmt.Sprintf("Tables_in_%s", dbName)), "TABLE_TYPE"}
-		rows := sqlmock.NewRows(columnNames)
-		for _, tbInfo := range tableInfos {
-			if tbInfo.Type == TableTypeBase {
-				rows.AddRow(tbInfo.Name, TableTypeBase.String())
-			} else {
-				rows.AddRow(tbInfo.Name, TableTypeView.String())
-			}
-		}
-		mock.ExpectQuery(fmt.Sprintf(query, dbName)).WillReturnRows(rows)
-	}
-
-	tables, err := ListAllDatabasesTables(tctx, conn, dbNames, listTableByShowFullTables, TableTypeBase)
-	require.NoError(t, err)
-
-	for d, table := range tables {
-		expectedTbs, ok := data[d]
-		require.True(t, ok)
-
-		for i := 0; i < len(table); i++ {
-			require.Truef(t, table[i].Equals(expectedTbs[i]), "%v mismatches expected: %v", table[i], expectedTbs[i])
-		}
-	}
-
-	// Test list all tables and not skipping views.
-	query = "SHOW FULL TABLES FROM `%s` WHERE TABLE_TYPE='BASE TABLE' OR TABLE_TYPE='VIEW'"
-	data = NewDatabaseTables().
-		AppendTables("db", []string{"t1"}, []uint64{1}).
-		AppendViews("db", "t2")
-	for dbName, tableInfos := range data {
-		columnNames := []string{strings.ToUpper(fmt.Sprintf("Tables_in_%s", dbName)), "TABLE_TYPE"}
-		rows := sqlmock.NewRows(columnNames)
-		for _, tbInfo := range tableInfos {
-			if tbInfo.Type == TableTypeBase {
-				rows.AddRow(tbInfo.Name, TableTypeBase.String())
-			} else {
-				rows.AddRow(tbInfo.Name, TableTypeView.String())
-			}
-		}
-		mock.ExpectQuery(fmt.Sprintf(query, dbName)).WillReturnRows(rows)
-	}
-	tables, err = ListAllDatabasesTables(tctx, conn, []string{"db"}, listTableByShowFullTables, TableTypeBase, TableTypeView)
-	require.NoError(t, err)
-	require.Len(t, tables, 1)
-	require.Len(t, tables["db"], 2)
-
->>>>>>> 85c4dee (*: migrate test-infra to testify (#344))
 	for i := 0; i < len(tables["db"]); i++ {
 		require.Truef(t, tables["db"][i].Equals(data["db"][i]), "%v mismatches expected: %v", tables["db"][i], data["db"][i])
 	}

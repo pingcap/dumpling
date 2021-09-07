@@ -98,35 +98,3 @@ func TestDumpTableMeta(t *testing.T) {
 		require.Equal(t, hasImplicitRowID, meta.HasImplicitRowID())
 	}
 }
-<<<<<<< HEAD
-=======
-
-func TestGetListTableTypeByConf(t *testing.T) {
-	t.Parallel()
-
-	conf := defaultConfigForTest(t)
-	tctx := tcontext.Background().WithLogger(appLogger)
-	cases := []struct {
-		serverInfo  ServerInfo
-		consistency string
-		expected    listTableType
-	}{
-		{ParseServerInfo(tctx, "5.7.25-TiDB-3.0.6"), consistencyTypeSnapshot, listTableByShowTableStatus},
-		// no bug version
-		{ParseServerInfo(tctx, "8.0.2"), consistencyTypeLock, listTableByInfoSchema},
-		{ParseServerInfo(tctx, "8.0.2"), consistencyTypeFlush, listTableByShowTableStatus},
-		{ParseServerInfo(tctx, "8.0.23"), consistencyTypeNone, listTableByShowTableStatus},
-
-		// bug version
-		{ParseServerInfo(tctx, "8.0.3"), consistencyTypeLock, listTableByInfoSchema},
-		{ParseServerInfo(tctx, "8.0.3"), consistencyTypeFlush, listTableByShowFullTables},
-		{ParseServerInfo(tctx, "8.0.3"), consistencyTypeNone, listTableByShowTableStatus},
-	}
-
-	for _, x := range cases {
-		conf.Consistency = x.consistency
-		conf.ServerInfo = x.serverInfo
-		require.Equalf(t, x.expected, getListTableTypeByConf(conf), "server info: %s, consistency: %s", x.serverInfo, x.consistency)
-	}
-}
->>>>>>> 85c4dee (*: migrate test-infra to testify (#344))

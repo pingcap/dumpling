@@ -13,12 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/DATA-DOG/go-sqlmock"
-<<<<<<< HEAD
 	"github.com/pingcap/br/pkg/storage"
-	. "github.com/pingcap/check"
-=======
-	"github.com/pingcap/tidb/br/pkg/storage"
->>>>>>> 85c4dee (*: migrate test-infra to testify (#344))
 )
 
 const (
