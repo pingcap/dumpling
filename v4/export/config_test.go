@@ -16,3 +16,19 @@ func TestCreateExternalStorage(t *testing.T) {
 	require.NoError(t, err)
 	require.Regexp(t, "file:.*", loc.URI())
 }
+
+func TestMatchMysqlBugVersion(t *testing.T) {
+	cases := []struct {
+		serverInfo ServerInfo
+		expected   bool
+	}{
+		{ParseServerInfo(tcontext.Background(), "5.7.25-TiDB-3.0.6"), false},
+		{ParseServerInfo(tcontext.Background(), "8.0.2"), false},
+		{ParseServerInfo(tcontext.Background(), "8.0.3"), true},
+		{ParseServerInfo(tcontext.Background(), "8.0.22"), true},
+		{ParseServerInfo(tcontext.Background(), "8.0.23"), false},
+	}
+	for _, x := range cases {
+		require.Equalf(t, matchMysqlBugversion(x.serverInfo), x.expected, "server info: %s", x.serverInfo)
+	}
+}

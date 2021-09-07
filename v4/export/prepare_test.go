@@ -5,6 +5,7 @@ package export
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	tcontext "github.com/pingcap/dumpling/v4/context"
@@ -97,7 +98,7 @@ func TestListAllTables(t *testing.T) {
 	query := "SELECT TABLE_SCHEMA,TABLE_NAME,TABLE_TYPE,AVG_ROW_LENGTH FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE='BASE TABLE'"
 	mock.ExpectQuery(query).WillReturnRows(rows)
 
-	tables, err := ListAllDatabasesTables(tctx, conn, dbNames, true, TableTypeBase)
+	tables, err := ListAllDatabasesTables(tctx, conn, dbNames, listTableByInfoSchema, TableTypeBase)
 	require.NoError(t, err)
 
 	for d, table := range tables {
@@ -115,7 +116,7 @@ func TestListAllTables(t *testing.T) {
 	query = "SELECT TABLE_SCHEMA,TABLE_NAME,TABLE_TYPE,AVG_ROW_LENGTH FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE='BASE TABLE' OR TABLE_TYPE='VIEW'"
 	mock.ExpectQuery(query).WillReturnRows(sqlmock.NewRows([]string{"TABLE_SCHEMA", "TABLE_NAME", "TABLE_TYPE", "AVG_ROW_LENGTH"}).
 		AddRow("db", "t1", TableTypeBaseStr, 1).AddRow("db", "t2", TableTypeViewStr, nil))
-	tables, err = ListAllDatabasesTables(tctx, conn, []string{"db"}, true, TableTypeBase, TableTypeView)
+	tables, err = ListAllDatabasesTables(tctx, conn, []string{"db"}, listTableByInfoSchema, TableTypeBase, TableTypeView)
 	require.NoError(t, err)
 	require.Len(t, tables, 1)
 	require.Len(t, tables["db"], 2)
@@ -127,7 +128,7 @@ func TestListAllTables(t *testing.T) {
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestListAllTablesByTableStatus(t *testing.T) {
+func TestListAllTablesByShowFullTables(t *testing.T) {
 	t.Parallel()
 
 	db, mock, err := sqlmock.New()
@@ -147,24 +148,23 @@ func TestListAllTablesByTableStatus(t *testing.T) {
 		AppendTables("db2", []string{"t3", "t4", "t5"}, []uint64{3, 4, 5}).
 		AppendViews("db3", "t6", "t7", "t8")
 
-	query := "SHOW TABLE STATUS FROM `%s`"
-	showTableStatusColumnNames := []string{"Name", "Engine", "Version", "Row_format", "Rows", "Avg_row_length", "Data_length", "Max_data_length", "Index_length", "Data_free", "Auto_increment", "Create_time", "Update_time", "Check_time", "Collation", "Checksum", "Create_options", "Comment"}
+	query := "SHOW FULL TABLES FROM `%s` WHERE TABLE_TYPE='BASE TABLE'"
 	dbNames := make([]databaseName, 0, len(data))
 	for dbName, tableInfos := range data {
 		dbNames = append(dbNames, dbName)
-		rows := sqlmock.NewRows(showTableStatusColumnNames)
-
+		columnNames := []string{strings.ToUpper(fmt.Sprintf("Tables_in_%s", dbName)), "TABLE_TYPE"}
+		rows := sqlmock.NewRows(columnNames)
 		for _, tbInfo := range tableInfos {
 			if tbInfo.Type == TableTypeBase {
-				rows.AddRow(tbInfo.Name, "InnoDB", 10, "Dynamic", 0, 0, 16384, 0, 0, 0, nil, "2021-07-08 03:04:07", nil, nil, "latin1_swedish_ci", nil, "", "")
+				rows.AddRow(tbInfo.Name, TableTypeBase.String())
 			} else {
-				rows.AddRow(tbInfo.Name, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, "VIEW")
+				rows.AddRow(tbInfo.Name, TableTypeView.String())
 			}
 		}
 		mock.ExpectQuery(fmt.Sprintf(query, dbName)).WillReturnRows(rows)
 	}
 
-	tables, err := ListAllDatabasesTables(tctx, conn, dbNames, false, TableTypeBase)
+	tables, err := ListAllDatabasesTables(tctx, conn, dbNames, listTableByShowFullTables, TableTypeBase)
 	require.NoError(t, err)
 
 	for d, table := range tables {
@@ -177,13 +177,23 @@ func TestListAllTablesByTableStatus(t *testing.T) {
 	}
 
 	// Test list all tables and not skipping views.
+	query = "SHOW FULL TABLES FROM `%s` WHERE TABLE_TYPE='BASE TABLE' OR TABLE_TYPE='VIEW'"
 	data = NewDatabaseTables().
 		AppendTables("db", []string{"t1"}, []uint64{1}).
 		AppendViews("db", "t2")
-	mock.ExpectQuery(fmt.Sprintf(query, "db")).WillReturnRows(sqlmock.NewRows(showTableStatusColumnNames).
-		AddRow("t1", "InnoDB", 10, "Dynamic", 0, 1, 16384, 0, 0, 0, nil, "2021-07-08 03:04:07", nil, nil, "latin1_swedish_ci", nil, "", "").
-		AddRow("t2", nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, "VIEW"))
-	tables, err = ListAllDatabasesTables(tctx, conn, []string{"db"}, false, TableTypeBase, TableTypeView)
+	for dbName, tableInfos := range data {
+		columnNames := []string{strings.ToUpper(fmt.Sprintf("Tables_in_%s", dbName)), "TABLE_TYPE"}
+		rows := sqlmock.NewRows(columnNames)
+		for _, tbInfo := range tableInfos {
+			if tbInfo.Type == TableTypeBase {
+				rows.AddRow(tbInfo.Name, TableTypeBase.String())
+			} else {
+				rows.AddRow(tbInfo.Name, TableTypeView.String())
+			}
+		}
+		mock.ExpectQuery(fmt.Sprintf(query, dbName)).WillReturnRows(rows)
+	}
+	tables, err = ListAllDatabasesTables(tctx, conn, []string{"db"}, listTableByShowFullTables, TableTypeBase, TableTypeView)
 	require.NoError(t, err)
 	require.Len(t, tables, 1)
 	require.Len(t, tables["db"], 2)
