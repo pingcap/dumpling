@@ -11,6 +11,7 @@ import (
 
 	tcontext "github.com/pingcap/dumpling/v4/context"
 
+	"github.com/coreos/go-semver/semver"
 	"github.com/pingcap/errors"
 	"go.etcd.io/etcd/clientv3"
 )
@@ -73,4 +74,10 @@ func string2Map(a, b []string) map[string]string {
 		a2b[str] = b[i]
 	}
 	return a2b
+}
+
+func withConsistency(info ServerInfo, consistency string) bool {
+	return !(consistency == consistencyTypeSnapshot && info.ServerType == ServerTypeTiDB &&
+		((info.ServerVersion.Compare(*semver.New("5.1.0")) >= 0 && info.ServerVersion.Compare(*semver.New("5.1.2")) <= 0) ||
+			(info.ServerVersion.Compare(*semver.New("5.2.0")) >= 0 && info.ServerVersion.Compare(*semver.New("5.2.1")) <= 0)))
 }

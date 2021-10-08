@@ -100,7 +100,7 @@ func (d *Dumper) Dump() (dumpErr error) {
 
 	// for consistency lock, we should get table list at first to generate the lock tables SQL
 	if conf.Consistency == consistencyTypeLock {
-		conn, err = createConnWithConsistency(tctx, pool)
+		conn, err = createConn(tctx, pool, withConsistency(conf.ServerInfo, conf.Consistency))
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -126,7 +126,7 @@ func (d *Dumper) Dump() (dumpErr error) {
 		}
 	}()
 
-	metaConn, err := createConnWithConsistency(tctx, pool)
+	metaConn, err := createConn(tctx, pool, withConsistency(conf.ServerInfo, conf.Consistency))
 	if err != nil {
 		return err
 	}
@@ -161,7 +161,7 @@ func (d *Dumper) Dump() (dumpErr error) {
 		}
 		// give up the last broken connection
 		conn.Close()
-		newConn, err1 := createConnWithConsistency(tctx, pool)
+		newConn, err1 := createConn(tctx, pool, withConsistency(conf.ServerInfo, conf.Consistency))
 		if err1 != nil {
 			return conn, errors.Trace(err1)
 		}
@@ -251,7 +251,7 @@ func (d *Dumper) startWriters(tctx *tcontext.Context, wg *errgroup.Group, taskCh
 	conf, pool := d.conf, d.dbHandle
 	writers := make([]*Writer, conf.Threads)
 	for i := 0; i < conf.Threads; i++ {
-		conn, err := createConnWithConsistency(tctx, pool)
+		conn, err := createConn(tctx, pool, withConsistency(conf.ServerInfo, conf.Consistency))
 		if err != nil {
 			return nil, func() {}, err
 		}
