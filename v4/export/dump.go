@@ -966,7 +966,10 @@ func canRebuildConn(consistency string, trxConsistencyOnly bool) bool {
 // Close closes a Dumper and stop dumping immediately
 func (d *Dumper) Close() error {
 	d.cancelCtx()
-	return d.dbHandle.Close()
+	if d.dbHandle != nil {
+		return d.dbHandle.Close()
+	}
+	return nil
 }
 
 func runSteps(d *Dumper, steps ...func(*Dumper) error) error {
@@ -1193,9 +1196,6 @@ func setSessionParam(d *Dumper) error {
 				sessionParam["tidb_snapshot"] = snapshot
 			}
 		}
-	}
-	if d.dbHandle != nil {
-		d.dbHandle.Close()
 	}
 	if d.dbHandle, err = resetDBWithSessionParams(d.tctx, pool, conf.GetDSN(""), conf.SessionParams); err != nil {
 		return errors.Trace(err)
