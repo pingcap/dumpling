@@ -1194,6 +1194,9 @@ func setSessionParam(d *Dumper) error {
 			}
 		}
 	}
+	if d.dbHandle != nil {
+		d.dbHandle.Close()
+	}
 	if d.dbHandle, err = resetDBWithSessionParams(d.tctx, pool, conf.GetDSN(""), conf.SessionParams); err != nil {
 		return errors.Trace(err)
 	}
