@@ -11,15 +11,8 @@ import (
 	tcontext "github.com/pingcap/dumpling/v4/context"
 	"github.com/stretchr/testify/require"
 
-<<<<<<< HEAD:v4/export/writer_util_test.go
-	"github.com/pingcap/br/pkg/storage"
-	. "github.com/pingcap/check"
-	"github.com/pingcap/errors"
-	"github.com/prometheus/client_golang/prometheus"
-=======
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/br/pkg/storage"
->>>>>>> 85c4dee (*: migrate test-infra to testify (#344)):v4/export/writer_serial_test.go
 )
 
 func TestWriteMeta(t *testing.T) {

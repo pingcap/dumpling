@@ -18,12 +18,6 @@ func TestPrepareDumpingDatabases(t *testing.T) {
 	t.Parallel()
 
 	db, mock, err := sqlmock.New()
-<<<<<<< HEAD
-	c.Assert(err, IsNil)
-	defer db.Close()
-	conn, err := db.Conn(context.Background())
-	c.Assert(err, IsNil)
-=======
 	require.NoError(t, err)
 	defer func() {
 		require.NoError(t, db.Close())
@@ -32,7 +26,6 @@ func TestPrepareDumpingDatabases(t *testing.T) {
 	tctx := tcontext.Background().WithLogger(appLogger)
 	conn, err := db.Conn(tctx)
 	require.NoError(t, err)
->>>>>>> 85c4dee (*: migrate test-infra to testify (#344))
 
 	rows := sqlmock.NewRows([]string{"Database"}).
 		AddRow("db1").
@@ -42,30 +35,15 @@ func TestPrepareDumpingDatabases(t *testing.T) {
 	mock.ExpectQuery("SHOW DATABASES").WillReturnRows(rows)
 	conf := defaultConfigForTest(t)
 	conf.Databases = []string{"db1", "db2", "db3"}
-<<<<<<< HEAD
-	result, err := prepareDumpingDatabases(conf, conn)
-	c.Assert(err, IsNil)
-	c.Assert(result, DeepEquals, []string{"db1", "db2", "db3"})
-=======
 	result, err := prepareDumpingDatabases(tctx, conf, conn)
 	require.NoError(t, err)
 	require.Equal(t, []string{"db1", "db2", "db3"}, result)
->>>>>>> 85c4dee (*: migrate test-infra to testify (#344))
 
 	conf.Databases = nil
 	rows = sqlmock.NewRows([]string{"Database"}).
 		AddRow("db1").
 		AddRow("db2")
 	mock.ExpectQuery("SHOW DATABASES").WillReturnRows(rows)
-<<<<<<< HEAD
-	result, err = prepareDumpingDatabases(conf, conn)
-	c.Assert(err, IsNil)
-	c.Assert(result, DeepEquals, []string{"db1", "db2"})
-
-	mock.ExpectQuery("SHOW DATABASES").WillReturnError(fmt.Errorf("err"))
-	_, err = prepareDumpingDatabases(conf, conn)
-	c.Assert(err, NotNil)
-=======
 	result, err = prepareDumpingDatabases(tctx, conf, conn)
 	require.NoError(t, err)
 	require.Equal(t, []string{"db1", "db2"}, result)
@@ -73,7 +51,6 @@ func TestPrepareDumpingDatabases(t *testing.T) {
 	mock.ExpectQuery("SHOW DATABASES").WillReturnError(fmt.Errorf("err"))
 	_, err = prepareDumpingDatabases(tctx, conf, conn)
 	require.Error(t, err)
->>>>>>> 85c4dee (*: migrate test-infra to testify (#344))
 
 	rows = sqlmock.NewRows([]string{"Database"}).
 		AddRow("db1").
@@ -82,15 +59,9 @@ func TestPrepareDumpingDatabases(t *testing.T) {
 		AddRow("db5")
 	mock.ExpectQuery("SHOW DATABASES").WillReturnRows(rows)
 	conf.Databases = []string{"db1", "db2", "db4", "db6"}
-<<<<<<< HEAD
-	_, err = prepareDumpingDatabases(conf, conn)
-	c.Assert(err, ErrorMatches, `Unknown databases \[db4,db6\]`)
-	c.Assert(mock.ExpectationsWereMet(), IsNil)
-=======
 	_, err = prepareDumpingDatabases(tctx, conf, conn)
 	require.EqualError(t, err, `Unknown databases [db4,db6]`)
 	require.NoError(t, mock.ExpectationsWereMet())
->>>>>>> 85c4dee (*: migrate test-infra to testify (#344))
 }
 
 func TestListAllTables(t *testing.T) {

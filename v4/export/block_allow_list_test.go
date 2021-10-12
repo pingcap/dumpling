@@ -15,11 +15,7 @@ import (
 func TestFilterTables(t *testing.T) {
 	t.Parallel()
 
-<<<<<<< HEAD
-func (s *testBWListSuite) TestFilterTables(c *C) {
-=======
 	tctx := tcontext.Background().WithLogger(appLogger)
->>>>>>> 85c4dee (*: migrate test-infra to testify (#344))
 	dbTables := DatabaseTables{}
 	expectedDBTables := DatabaseTables{}
 
@@ -39,17 +35,12 @@ func (s *testBWListSuite) TestFilterTables(c *C) {
 		Tables:      dbTables,
 		TableFilter: tableFilter,
 	}
-<<<<<<< HEAD
-
-	conf.TableFilter = tf.NewSchemasFilter("xxx")
-=======
 	databases := []string{filter.InformationSchemaName, filter.PerformanceSchemaName, "xxx", "yyy"}
 	require.Equal(t, databases, filterDatabases(tctx, conf, databases))
 
 	conf.TableFilter = tf.NewSchemasFilter("xxx")
 	require.Equal(t, []string{"xxx"}, filterDatabases(tctx, conf, databases))
 
->>>>>>> 85c4dee (*: migrate test-infra to testify (#344))
 	filterTables(tcontext.Background(), conf)
 	require.Len(t, conf.Tables, 1)
 	require.Equal(t, expectedDBTables, conf.Tables)
