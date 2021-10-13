@@ -50,12 +50,10 @@ check:
 static: export GO111MODULE=on
 static: tools
 	@ # Not running vet and fmt through metalinter becauase it ends up looking at vendor
-	tools/bin/gofumports -w -d -format-only -local $(DUMPLING_PKG) $$($(PACKAGE_DIRECTORIES)) 2>&1 | $(CHECKER)
 	tools/bin/govet --shadow $$($(PACKAGE_DIRECTORIES)) 2>&1 | $(CHECKER)
 
 	@# why some lints are disabled?
 	@#   gochecknoglobals - disabled because we do use quite a lot of globals
-	@#          goimports - executed above already, gofumports
 	@#              gofmt - ditto
 	@#                gci - ditto
 	@#                wsl - too pedantic about the formatting
@@ -74,9 +72,8 @@ static: tools
 	@#              gosec - too many false positive
 	@#          errorlint - can't detect errors.Cause
 	@#      sqlclosecheck - the rows in dumpling is created in one function but closed in other functions
-	CGO_ENABLED=0 tools/bin/golangci-lint run --enable-all --deadline 120s \
+	CGO_ENABLED=0 tools/bin/golangci-lint run --enable-all --deadline 180s \
 		--disable gochecknoglobals \
-		--disable goimports \
 		--disable gofmt \
 		--disable gci \
 		--disable wsl \
@@ -97,6 +94,8 @@ static: tools
 		--disable errorlint \
 		--disable sqlclosecheck \
 		--disable scopelint \
+		--disable gofumpt \
+		--disable interfacer \
 		$$($(PACKAGE_DIRECTORIES))
 	# pingcap/errors APIs are mixed with multiple patterns 'pkg/errors',
 	# 'juju/errors' and 'pingcap/parser'. To avoid confusion and mistake,

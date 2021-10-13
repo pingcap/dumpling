@@ -14,10 +14,10 @@ import (
 
 	tcontext "github.com/pingcap/dumpling/v4/context"
 
-	"github.com/pingcap/br/pkg/storage"
-	"github.com/pingcap/br/pkg/summary"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
+	"github.com/pingcap/tidb/br/pkg/storage"
+	"github.com/pingcap/tidb/br/pkg/summary"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -421,6 +421,9 @@ func writeBytes(tctx *tcontext.Context, writer storage.ExternalFileWriter, p []b
 			zap.ByteString("string", p[:outputLength]),
 			zap.String("writer", fmt.Sprintf("%#v", writer)),
 			zap.Error(err))
+		if strings.Contains(err.Error(), "Part number must be an integer between 1 and 10000") {
+			err = errors.Annotate(err, "work around: dump file exceeding 50GB, please specify -F=256MB -r=200000 to avoid this problem")
+		}
 	}
 	return errors.Trace(err)
 }
