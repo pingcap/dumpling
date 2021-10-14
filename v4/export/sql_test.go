@@ -855,7 +855,7 @@ func TestBuildWhereCondition(t *testing.T) {
 		{
 			"a >= 1000000 and a <= 2000000",
 			"(`a`>1 and `a`<3)or(`a`=1 and(`b`>=2))or(`a`=3 and(`b`<4))",
-			"WHERE(a >= 1000000 and a <= 2000000)AND((`a`>1 and `a`<3)or(`a`=1 and(`b`>=2))or(`a`=3 and(`b`<4)))",
+			"WHERE (a >= 1000000 and a <= 2000000) AND ((`a`>1 and `a`<3)or(`a`=1 and(`b`>=2))or(`a`=3 and(`b`<4))) ",
 		},
 	}
 	for _, testCase := range testCases {
