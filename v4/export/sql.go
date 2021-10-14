@@ -1072,8 +1072,8 @@ func buildWhereCondition(conf *Config, where string) string {
 	leftBracket := " "
 	rightBracket := " "
 	if conf.Where != "" && where != "" {
-		leftBracket = "("
-		rightBracket = ")"
+		leftBracket = " ("
+		rightBracket = ") "
 	}
 	if conf.Where != "" {
 		query.WriteString(separator)
