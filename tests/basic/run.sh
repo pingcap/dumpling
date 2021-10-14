@@ -40,7 +40,7 @@ expected=$(seq 3 9)
 echo "expected ${expected}, actual ${actual}"
 [ "$actual" = "$expected" ]
 
-# Test for OR WHERE case. **Must dump MySQL here!!**
+# Test for OR WHERE case. Better dump MySQL here because Dumpling has some special handle for concurrently dump TiDB tables.
 export DUMPLING_TEST_PORT=3306
 run_sql "drop database if exists \`$DB_NAME\`;"
 run_sql "create database \`$DB_NAME\`;"
