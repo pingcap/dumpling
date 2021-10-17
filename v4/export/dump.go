@@ -60,6 +60,7 @@ func NewDumper(ctx context.Context, conf *Config) (*Dumper, error) {
 	err := adjustConfig(conf,
 		registerTLSConfig,
 		validateSpecifiedSQL,
+		validateResolveAutoConsistency,
 		adjustFileFormat)
 	if err != nil {
 		return nil, err
@@ -1070,6 +1071,13 @@ func resolveAutoConsistency(d *Dumper) error {
 		conf.Consistency = consistencyTypeFlush
 	default:
 		conf.Consistency = consistencyTypeNone
+	}
+	return nil
+}
+
+func validateResolveAutoConsistency(conf *Config) error {
+	if conf.Consistency == consistencyTypeSnapshot || conf.Snapshot != "" {
+		return errors.New("can't specify both --consistency and --snapshot at the same time. snapshot consistency is not supported for this server")
 	}
 	return nil
 }

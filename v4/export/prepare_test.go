@@ -307,3 +307,32 @@ func TestConfigValidation(t *testing.T) {
 	conf.FileType = "rand_str"
 	require.EqualError(t, adjustFileFormat(conf), "unknown config.FileType 'rand_str'")
 }
+
+func TestValidateResolveAutoConsistency(t *testing.T) {
+	t.Parallel()
+
+	conf := defaultConfigForTest(t)
+	conf.Consistency = consistencyTypeSnapshot
+	conf.Snapshot = "snapshot"
+	require.EqualError(t, validateResolveAutoConsistency(conf), "can't specify both --consistency and --snapshot at the same time. snapshot consistency is not supported for this server")
+
+	conf.Consistency = consistencyTypeSnapshot
+	conf.Snapshot = ""
+	require.EqualError(t, validateResolveAutoConsistency(conf), "can't specify both --consistency and --snapshot at the same time. snapshot consistency is not supported for this server")
+
+	conf.Consistency = consistencyTypeFlush
+	conf.Snapshot = ""
+	require.NoError(t, validateResolveAutoConsistency(conf))
+
+	conf.Consistency = consistencyTypeFlush
+	conf.Snapshot = "snapshot"
+	require.EqualError(t, validateResolveAutoConsistency(conf), "can't specify both --consistency and --snapshot at the same time. snapshot consistency is not supported for this server")
+
+	conf.Consistency = consistencyTypeNone
+	conf.Snapshot = ""
+	require.NoError(t, validateResolveAutoConsistency(conf))
+
+	conf.Consistency = consistencyTypeNone
+	conf.Snapshot = "snapshot"
+	require.EqualError(t, validateResolveAutoConsistency(conf), "can't specify both --consistency and --snapshot at the same time. snapshot consistency is not supported for this server")
+}
