@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	tcontext "github.com/pingcap/dumpling/v4/context"
-	"github.com/pingcap/errors"
 	"github.com/stretchr/testify/require"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -319,26 +318,26 @@ func TestValidateResolveAutoConsistency(t *testing.T) {
 	testCases := []struct {
 		confConsistency string
 		confSnapshot    string
-		err             error
+		err             bool
 	}{
-		{consistencyTypeAuto, "", nil},
-		{consistencyTypeAuto, "123", errors.New("can't specify --snapshot when --consistency isn't snapshot, resolved consistency: auto")},
-		{consistencyTypeFlush, "", nil},
-		{consistencyTypeFlush, "456", errors.New("can't specify --snapshot when --consistency isn't snapshot, resolved consistency: flush")},
-		{consistencyTypeLock, "", nil},
-		{consistencyTypeLock, "789", errors.New("can't specify --snapshot when --consistency isn't snapshot, resolved consistency: lock")},
-		{consistencyTypeSnapshot, "", nil},
-		{consistencyTypeSnapshot, "456", nil},
-		{consistencyTypeNone, "", nil},
-		{consistencyTypeNone, "123", errors.New("can't specify --snapshot when --consistency isn't snapshot, resolved consistency: none")},
+		{consistencyTypeAuto, "", true},
+		{consistencyTypeAuto, "123", false},
+		{consistencyTypeFlush, "", true},
+		{consistencyTypeFlush, "456", false},
+		{consistencyTypeLock, "", true},
+		{consistencyTypeLock, "789", false},
+		{consistencyTypeSnapshot, "", true},
+		{consistencyTypeSnapshot, "456", true},
+		{consistencyTypeNone, "", true},
+		{consistencyTypeNone, "123", false},
 	}
 	for _, testCase := range testCases {
 		conf.Consistency = testCase.confConsistency
 		conf.Snapshot = testCase.confSnapshot
-		if testCase.err == nil {
+		if testCase.err == true {
 			require.NoError(t, validateResolveAutoConsistency(d))
 		} else {
-			require.EqualError(t, validateResolveAutoConsistency(d), testCase.err.Error())
+			require.EqualError(t, validateResolveAutoConsistency(d), fmt.Sprintf("can't specify --snapshot when --consistency isn't snapshot, resolved consistency: %s", conf.Consistency))
 		}
 	}
 }
