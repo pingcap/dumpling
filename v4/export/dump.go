@@ -1077,7 +1077,7 @@ func resolveAutoConsistency(d *Dumper) error {
 
 func validateResolveAutoConsistency(conf *Config) error {
 	if conf.Consistency != consistencyTypeSnapshot && conf.Snapshot != "" {
-		return errors.New("can't specify both --consistency and --snapshot at the same time. snapshot consistency is not supported for this server")
+		return errors.Errorf("can't specify --snapshot when --consistency isn't snapshot, resolved consistency: %s", conf.Consistency)
 	}
 	return nil
 }

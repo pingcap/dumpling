@@ -326,7 +326,7 @@ func TestValidateResolveAutoConsistency(t *testing.T) {
 
 	conf.Consistency = consistencyTypeFlush
 	conf.Snapshot = "456"
-	require.EqualError(t, validateResolveAutoConsistency(conf), "can't specify both --consistency and --snapshot at the same time. snapshot consistency is not supported for this server")
+	require.EqualError(t, validateResolveAutoConsistency(conf), "can't specify --snapshot when --consistency isn't snapshot, resolved consistency: flush")
 
 	conf.Consistency = consistencyTypeNone
 	conf.Snapshot = ""
@@ -334,7 +334,7 @@ func TestValidateResolveAutoConsistency(t *testing.T) {
 
 	conf.Consistency = consistencyTypeNone
 	conf.Snapshot = "123"
-	require.EqualError(t, validateResolveAutoConsistency(conf), "can't specify both --consistency and --snapshot at the same time. snapshot consistency is not supported for this server")
+	require.EqualError(t, validateResolveAutoConsistency(conf), "can't specify --snapshot when --consistency isn't snapshot, resolved consistency: none")
 
 	conf.Consistency = consistencyTypeAuto
 	conf.Snapshot = ""
@@ -342,7 +342,7 @@ func TestValidateResolveAutoConsistency(t *testing.T) {
 
 	conf.Consistency = consistencyTypeAuto
 	conf.Snapshot = "133"
-	require.EqualError(t, validateResolveAutoConsistency(conf), "can't specify both --consistency and --snapshot at the same time. snapshot consistency is not supported for this server")
+	require.EqualError(t, validateResolveAutoConsistency(conf), "can't specify --snapshot when --consistency isn't snapshot, resolved consistency: auto")
 
 	conf.Consistency = consistencyTypeLock
 	conf.Snapshot = ""
@@ -350,6 +350,6 @@ func TestValidateResolveAutoConsistency(t *testing.T) {
 
 	conf.Consistency = consistencyTypeLock
 	conf.Snapshot = "122"
-	require.EqualError(t, validateResolveAutoConsistency(conf), "can't specify both --consistency and --snapshot at the same time. snapshot consistency is not supported for this server")
+	require.EqualError(t, validateResolveAutoConsistency(conf), "can't specify --snapshot when --consistency isn't snapshot, resolved consistency: lock")
 
 }
