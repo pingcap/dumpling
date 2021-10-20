@@ -313,19 +313,19 @@ func TestValidateResolveAutoConsistency(t *testing.T) {
 
 	conf := defaultConfigForTest(t)
 	conf.Consistency = consistencyTypeSnapshot
-	conf.Snapshot = "snapshot"
-	require.EqualError(t, validateResolveAutoConsistency(conf), "can't specify both --consistency and --snapshot at the same time. snapshot consistency is not supported for this server")
+	conf.Snapshot = "123"
+	require.NoError(t, validateResolveAutoConsistency(conf))
 
 	conf.Consistency = consistencyTypeSnapshot
 	conf.Snapshot = ""
-	require.EqualError(t, validateResolveAutoConsistency(conf), "can't specify both --consistency and --snapshot at the same time. snapshot consistency is not supported for this server")
+	require.NoError(t, validateResolveAutoConsistency(conf))
 
 	conf.Consistency = consistencyTypeFlush
 	conf.Snapshot = ""
 	require.NoError(t, validateResolveAutoConsistency(conf))
 
 	conf.Consistency = consistencyTypeFlush
-	conf.Snapshot = "snapshot"
+	conf.Snapshot = "456"
 	require.EqualError(t, validateResolveAutoConsistency(conf), "can't specify both --consistency and --snapshot at the same time. snapshot consistency is not supported for this server")
 
 	conf.Consistency = consistencyTypeNone
@@ -333,6 +333,23 @@ func TestValidateResolveAutoConsistency(t *testing.T) {
 	require.NoError(t, validateResolveAutoConsistency(conf))
 
 	conf.Consistency = consistencyTypeNone
-	conf.Snapshot = "snapshot"
+	conf.Snapshot = "123"
 	require.EqualError(t, validateResolveAutoConsistency(conf), "can't specify both --consistency and --snapshot at the same time. snapshot consistency is not supported for this server")
+
+	conf.Consistency = consistencyTypeAuto
+	conf.Snapshot = ""
+	require.NoError(t, validateResolveAutoConsistency(conf))
+
+	conf.Consistency = consistencyTypeAuto
+	conf.Snapshot = "133"
+	require.EqualError(t, validateResolveAutoConsistency(conf), "can't specify both --consistency and --snapshot at the same time. snapshot consistency is not supported for this server")
+
+	conf.Consistency = consistencyTypeLock
+	conf.Snapshot = ""
+	require.NoError(t, validateResolveAutoConsistency(conf))
+
+	conf.Consistency = consistencyTypeLock
+	conf.Snapshot = "122"
+	require.EqualError(t, validateResolveAutoConsistency(conf), "can't specify both --consistency and --snapshot at the same time. snapshot consistency is not supported for this server")
+
 }
