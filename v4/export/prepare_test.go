@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	tcontext "github.com/pingcap/dumpling/v4/context"
+	"github.com/pingcap/errors"
 	"github.com/stretchr/testify/require"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -311,45 +312,74 @@ func TestConfigValidation(t *testing.T) {
 func TestValidateResolveAutoConsistency(t *testing.T) {
 	t.Parallel()
 
-	conf := defaultConfigForTest(t)
-	conf.Consistency = consistencyTypeSnapshot
+	conf1 := defaultConfigForTest(t)
+	d := &Dumper{conf: conf1}
+	conf := d.conf
+
+	testCases := []struct {
+		confConsistency string
+		confSnapshot    string
+		err             error
+	}{
+		{consistencyTypeAuto, "", nil},
+		{consistencyTypeAuto, "123", errors.New("can't specify --snapshot when --consistency isn't snapshot, resolved consistency: auto")},
+		{consistencyTypeFlush, "", nil},
+		{consistencyTypeFlush, "456", errors.New("can't specify --snapshot when --consistency isn't snapshot, resolved consistency: flush")},
+		{consistencyTypeLock, "", nil},
+		{consistencyTypeLock, "789", errors.New("can't specify --snapshot when --consistency isn't snapshot, resolved consistency: lock")},
+		{consistencyTypeSnapshot, "", nil},
+		{consistencyTypeSnapshot, "456", nil},
+		{consistencyTypeNone, "", nil},
+		{consistencyTypeNone, "123", errors.New("can't specify --snapshot when --consistency isn't snapshot, resolved consistency: none")},
+	}
+	for _, testCase := range testCases {
+		conf.Consistency = testCase.confConsistency
+		conf.Snapshot = testCase.confSnapshot
+		if testCase.err == nil {
+			require.NoError(t, validateResolveAutoConsistency(d))
+		} else {
+			require.EqualError(t, validateResolveAutoConsistency(d), testCase.err.Error())
+		}
+	}
+
+	/*conf.Consistency = consistencyTypeSnapshot
 	conf.Snapshot = "123"
-	require.NoError(t, validateResolveAutoConsistency(conf))
+	require.NoError(t, validateResolveAutoConsistency(d))
 
 	conf.Consistency = consistencyTypeSnapshot
 	conf.Snapshot = ""
-	require.NoError(t, validateResolveAutoConsistency(conf))
+	require.NoError(t, validateResolveAutoConsistency(d))
 
 	conf.Consistency = consistencyTypeFlush
 	conf.Snapshot = ""
-	require.NoError(t, validateResolveAutoConsistency(conf))
+	require.NoError(t, validateResolveAutoConsistency(d))
 
 	conf.Consistency = consistencyTypeFlush
 	conf.Snapshot = "456"
-	require.EqualError(t, validateResolveAutoConsistency(conf), "can't specify --snapshot when --consistency isn't snapshot, resolved consistency: flush")
+	require.EqualError(t, validateResolveAutoConsistency(d), "can't specify --snapshot when --consistency isn't snapshot, resolved consistency: flush")
 
 	conf.Consistency = consistencyTypeNone
 	conf.Snapshot = ""
-	require.NoError(t, validateResolveAutoConsistency(conf))
+	require.NoError(t, validateResolveAutoConsistency(d))
 
 	conf.Consistency = consistencyTypeNone
 	conf.Snapshot = "123"
-	require.EqualError(t, validateResolveAutoConsistency(conf), "can't specify --snapshot when --consistency isn't snapshot, resolved consistency: none")
+	require.EqualError(t, validateResolveAutoConsistency(d), "can't specify --snapshot when --consistency isn't snapshot, resolved consistency: none")
 
 	conf.Consistency = consistencyTypeAuto
 	conf.Snapshot = ""
-	require.NoError(t, validateResolveAutoConsistency(conf))
+	require.NoError(t, validateResolveAutoConsistency(d))
 
 	conf.Consistency = consistencyTypeAuto
 	conf.Snapshot = "133"
-	require.EqualError(t, validateResolveAutoConsistency(conf), "can't specify --snapshot when --consistency isn't snapshot, resolved consistency: auto")
+	require.EqualError(t, validateResolveAutoConsistency(d), "can't specify --snapshot when --consistency isn't snapshot, resolved consistency: auto")
 
 	conf.Consistency = consistencyTypeLock
 	conf.Snapshot = ""
-	require.NoError(t, validateResolveAutoConsistency(conf))
+	require.NoError(t, validateResolveAutoConsistency(d))
 
 	conf.Consistency = consistencyTypeLock
 	conf.Snapshot = "122"
-	require.EqualError(t, validateResolveAutoConsistency(conf), "can't specify --snapshot when --consistency isn't snapshot, resolved consistency: lock")
-
+	require.EqualError(t, validateResolveAutoConsistency(d), "can't specify --snapshot when --consistency isn't snapshot, resolved consistency: lock")
+	*/
 }

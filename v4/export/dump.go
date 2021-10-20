@@ -60,7 +60,6 @@ func NewDumper(ctx context.Context, conf *Config) (*Dumper, error) {
 	err := adjustConfig(conf,
 		registerTLSConfig,
 		validateSpecifiedSQL,
-		validateResolveAutoConsistency,
 		adjustFileFormat)
 	if err != nil {
 		return nil, err
@@ -72,7 +71,7 @@ func NewDumper(ctx context.Context, conf *Config) (*Dumper, error) {
 		openSQLDB,
 		detectServerInfo,
 		resolveAutoConsistency,
-
+		validateResolveAutoConsistency,
 		tidbSetPDClientForGC,
 		tidbGetSnapshot,
 		tidbStartGCSavepointUpdateService,
@@ -1075,7 +1074,8 @@ func resolveAutoConsistency(d *Dumper) error {
 	return nil
 }
 
-func validateResolveAutoConsistency(conf *Config) error {
+func validateResolveAutoConsistency(d *Dumper) error {
+	conf := d.conf
 	if conf.Consistency != consistencyTypeSnapshot && conf.Snapshot != "" {
 		return errors.Errorf("can't specify --snapshot when --consistency isn't snapshot, resolved consistency: %s", conf.Consistency)
 	}
