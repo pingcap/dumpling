@@ -19,7 +19,7 @@ import (
 	tcontext "github.com/pingcap/dumpling/v4/context"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/parser/model"
+	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/store/helper"
 	"go.uber.org/zap"
 )
