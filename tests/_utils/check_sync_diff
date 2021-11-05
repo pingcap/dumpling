@@ -9,10 +9,14 @@ conf=$1
 check_time=${2-10}
 
 LOG=$DUMPLING_OUTPUT_DIR/sync_diff_inspector.log
+OUTPUT_DIR=/tmp/dumpling_test_result/output
+
+mkdir -p OUTPUT_DIR=/tmp/dumpling_test_result
 
 i=0
 while [ $i -lt $check_time ]
 do
+    rm -rf $OUTPUT_DIR
     bin/sync_diff_inspector --config=$conf >> $LOG 2>&1
     ret=$?
     if [ "$ret" == 0 ]; then
