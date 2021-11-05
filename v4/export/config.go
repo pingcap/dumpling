@@ -7,6 +7,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"github.com/pingcap/log"
 	"io/ioutil"
 	"net/http"
 	"regexp"
@@ -631,9 +632,13 @@ func ParseServerInfo(tctx *tcontext.Context, src string) ServerInfo {
 		tctx.L().Warn("fail to parse version",
 			zap.String("version", versionStr))
 	}
+	var version string
+	if serverInfo.ServerVersion != nil {
+		version = serverInfo.ServerVersion.String()
+	}
 	tctx.L().Info("detect server version",
 		zap.String("type", serverInfo.ServerType.String()),
-		zap.String("version", serverInfo.ServerVersion.String()))
+		zap.String("version", version))
 
 	return serverInfo
 }
