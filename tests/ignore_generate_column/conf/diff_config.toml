@@ -10,7 +10,12 @@ sample-percent = 100
 
 use-checksum = true
 
+<<<<<<< HEAD
 fix-sql-file = "fix.sql"
+=======
+[task]
+    output-dir = "/tmp/dumpling_test_result/output"
+>>>>>>> 5a0bc4f (tests: fix check diff (#386))
 
 # tables need to check.
 [[check-tables]]

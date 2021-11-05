@@ -17,9 +17,14 @@ fix-sql-file = "fix.sql"
 schema = "e2e_csv"
 tables = ["escape", "t"]
 
+<<<<<<< HEAD
 [[table-config]]
 schema = "e2e_csv"
 table = "t"
+=======
+[task]
+    output-dir = "/tmp/dumpling_test_result/output"
+>>>>>>> 5a0bc4f (tests: fix check diff (#386))
 
 [[table-config.source-tables]]
 instance-id = "source-1"
