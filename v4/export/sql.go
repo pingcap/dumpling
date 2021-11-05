@@ -279,11 +279,18 @@ func ListAllDatabasesTables(tctx *tcontext.Context, db *sql.Conn, databaseNames 
 }
 
 // SelectVersion gets the version information from the database server
-func SelectVersion(db *sql.DB) (string, error) {
+func SelectVersion(ctx tcontext.Context, db *sql.DB) (string, error) {
 	var versionInfo string
-	const query = "SELECT version()"
+	const queryTiDB = "SELECT tidb_version();"
+	tidbRow := db.QueryRowContext(ctx, queryTiDB)
+	err := tidbRow.Scan(&versionInfo)
+	if err == nil {
+		return versionInfo, nil
+	}
+	ctx.L().Warn("select tidb_version() failed, will fallback to 'select version();'", zap.Error(err))
+	const query = "SELECT version();"
 	row := db.QueryRow(query)
-	err := row.Scan(&versionInfo)
+	err = row.Scan(&versionInfo)
 	if err != nil {
 		return "", errors.Annotatef(err, "sql: %s", query)
 	}

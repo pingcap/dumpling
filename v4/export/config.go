@@ -7,6 +7,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"github.com/pingcap/log"
 	"io/ioutil"
 	"net/http"
 	"regexp"
@@ -587,15 +588,22 @@ var ServerInfoUnknown = ServerInfo{
 
 var (
 	versionRegex     = regexp.MustCompile(`^\d+\.\d+\.\d+([0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?`)
+	// `select version()` result
 	tidbVersionRegex = regexp.MustCompile(`-[v]?\d+\.\d+\.\d+([0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?`)
+	// `select tidb_version()` result
+	tidbReleaseVersionRegex = regexp.MustCompile(`v\d+\.\d+\.\d+([0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?`)
 )
 
 // ParseServerInfo parses exported server type and version info from version string
 func ParseServerInfo(tctx *tcontext.Context, src string) ServerInfo {
-	tctx.L().Debug("parse server info", zap.String("server info string", src))
 	lowerCase := strings.ToLower(src)
 	serverInfo := ServerInfo{}
+	isReleaseVersion := false
 	switch {
+	case strings.Contains(lowerCase, "release version:"):
+		// this version string is tidb release version
+		serverInfo.ServerType = ServerTypeTiDB
+		isReleaseVersion = true
 	case strings.Contains(lowerCase, "tidb"):
 		serverInfo.ServerType = ServerTypeTiDB
 	case strings.Contains(lowerCase, "mariadb"):
@@ -606,12 +614,13 @@ func ParseServerInfo(tctx *tcontext.Context, src string) ServerInfo {
 		serverInfo.ServerType = ServerTypeUnknown
 	}
 
-	tctx.L().Info("detect server type",
-		zap.String("type", serverInfo.ServerType.String()))
-
 	var versionStr string
 	if serverInfo.ServerType == ServerTypeTiDB {
-		versionStr = tidbVersionRegex.FindString(src)[1:]
+		if isReleaseVersion {
+			versionStr = tidbReleaseVersionRegex.FindString(src)
+		} else {
+			versionStr = tidbVersionRegex.FindString(src)[1:]
+		}
 		versionStr = strings.TrimPrefix(versionStr, "v")
 	} else {
 		versionStr = versionRegex.FindString(src)
@@ -622,11 +631,11 @@ func ParseServerInfo(tctx *tcontext.Context, src string) ServerInfo {
 	if err != nil {
 		tctx.L().Warn("fail to parse version",
 			zap.String("version", versionStr))
-		return serverInfo
 	}
-
 	tctx.L().Info("detect server version",
+		zap.String("type", serverInfo.ServerType.String()),
 		zap.String("version", serverInfo.ServerVersion.String()))
+
 	return serverInfo
 }
 
