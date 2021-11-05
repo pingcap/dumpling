@@ -7,7 +7,7 @@ export-fix-sql = true
 check-struct-only = false
 
 [task]
-    output-dir = "./output"
+    output-dir = "/tmp/dumpling_test_result/output"
 
     source-instances = ["mysql1"]
 
