@@ -6,7 +6,12 @@ chunk-size = 1000
 
 check-thread-count = 4
 
+<<<<<<< HEAD
 sample-percent = 100
+=======
+[task]
+    output-dir = "/tmp/dumpling_test_result/output"
+>>>>>>> 5a0bc4f (tests: fix check diff (#386))
 
 use-checksum = true
 
