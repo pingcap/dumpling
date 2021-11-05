@@ -7,7 +7,6 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"github.com/pingcap/log"
 	"io/ioutil"
 	"net/http"
 	"regexp"
