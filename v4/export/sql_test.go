@@ -62,6 +62,8 @@ func TestDetectServerInfo(t *testing.T) {
 		{4, "5.7.25-TiDB-v3.0.7-58-g6adce2367", ServerTypeTiDB, mkVer(3, 0, 7, "58-g6adce2367")},
 		{5, "5.7.25-TiDB-3.0.6", ServerTypeTiDB, mkVer(3, 0, 6, "")},
 		{6, "invalid version", ServerTypeUnknown, (*semver.Version)(nil)},
+		{7, "Release Version: v5.2.1\nEdition: Community\nGit Commit Hash: cd8fb24c5f7ebd9d479ed228bb41848bd5e97445", ServerTypeTiDB, mkVer(5, 2, 1, "")},
+		{8, "Release Version: v5.4.0-alpha-21-g86caab907\nEdition: Community\nGit Commit Hash: 86caab907c481bbc4243b5a3346ec13907cc8721\nGit Branch: master", ServerTypeTiDB, mkVer(5, 4, 0, "alpha-21-g86caab907")},
 	}
 	dec := func(d []interface{}) (tag int, verStr string, tp ServerType, v *semver.Version) {
 		return d[0].(int), d[1].(string), ServerType(d[2].(int)), d[3].(*semver.Version)
@@ -70,10 +72,16 @@ func TestDetectServerInfo(t *testing.T) {
 	for _, datum := range data {
 		tag, r, serverTp, expectVer := dec(datum)
 		comment := fmt.Sprintf("test case number: %d", tag)
-		rows := sqlmock.NewRows([]string{"version"}).AddRow(r)
-		mock.ExpectQuery("SELECT version()").WillReturnRows(rows)
+		tidbVersionQuery := mock.ExpectQuery("SELECT tidb_version\\(\\);")
+		if strings.HasPrefix(r, "Release Version:") {
+			tidbVersionQuery.WillReturnRows(sqlmock.NewRows([]string{"tidb_version"}).AddRow(r))
+		} else {
+			tidbVersionQuery.WillReturnError(errors.New("mock error"))
+			rows := sqlmock.NewRows([]string{"version"}).AddRow(r)
+			mock.ExpectQuery("SELECT version\\(\\);").WillReturnRows(rows)
+		}
 
-		verStr, err := SelectVersion(db)
+		verStr, err := SelectVersion(tcontext.Background(), db)
 		require.NoError(t, err, comment)
 
 		info := ParseServerInfo(tcontext.Background(), verStr)
