@@ -81,7 +81,7 @@ func TestDetectServerInfo(t *testing.T) {
 			mock.ExpectQuery("SELECT version\\(\\);").WillReturnRows(rows)
 		}
 
-		verStr, err := SelectVersion(*tcontext.Background(), db)
+		verStr, err := SelectVersion(tcontext.Background(), db)
 		require.NoError(t, err, comment)
 
 		info := ParseServerInfo(tcontext.Background(), verStr)
