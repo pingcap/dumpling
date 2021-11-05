@@ -1041,6 +1041,7 @@ func openSQLDB(d *Dumper) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+	pool.SetConnMaxIdleTime(conf.MaxIdleTime)
 	d.dbHandle = pool
 	return nil
 }
@@ -1201,6 +1202,7 @@ func setSessionParam(d *Dumper) error {
 	if d.dbHandle, err = resetDBWithSessionParams(d.tctx, pool, conf.GetDSN(""), conf.SessionParams); err != nil {
 		return errors.Trace(err)
 	}
+	d.dbHandle.SetConnMaxIdleTime(conf.MaxIdleTime)
 	return nil
 }
 

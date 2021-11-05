@@ -70,6 +70,7 @@ const (
 	flagCompleteInsert           = "complete-insert"
 	flagParams                   = "params"
 	flagReadTimeout              = "read-timeout"
+	flagMaxIdleTime              = "max-idle-time"
 	flagTransactionalConsistency = "transactional-consistency"
 	flagCompress                 = "compress"
 
@@ -129,6 +130,7 @@ type Config struct {
 	OutputFileTemplate *template.Template `json:"-"`
 	Rows               uint64
 	ReadTimeout        time.Duration
+	MaxIdleTime        time.Duration
 	TiDBMemQuotaQuery  uint64
 	FileSize           uint64
 	StatementSize      uint64
@@ -248,7 +250,7 @@ func (conf *Config) DefineFlags(flags *pflag.FlagSet) {
 	flags.StringToString(flagParams, nil, `Extra session variables used while dumping, accepted format: --params "character_set_client=latin1,character_set_connection=latin1"`)
 	flags.Bool(FlagHelp, false, "Print help message and quit")
 	flags.Duration(flagReadTimeout, 15*time.Minute, "I/O read timeout for db connection.")
-	_ = flags.MarkHidden(flagReadTimeout)
+	flags.Duration(flagMaxIdleTime, 600*time.Second, "max idle time for db connection.")
 	flags.Bool(flagTransactionalConsistency, true, "Only support transactional consistency")
 	_ = flags.MarkHidden(flagTransactionalConsistency)
 	flags.StringP(flagCompress, "c", "", "Compress output file type, support 'gzip', 'no-compression' now")
@@ -387,6 +389,10 @@ func (conf *Config) ParseFromFlags(flags *pflag.FlagSet) error {
 		return errors.Trace(err)
 	}
 	conf.ReadTimeout, err = flags.GetDuration(flagReadTimeout)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	conf.MaxIdleTime, err = flags.GetDuration(flagMaxIdleTime)
 	if err != nil {
 		return errors.Trace(err)
 	}
