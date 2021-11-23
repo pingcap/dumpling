@@ -7,11 +7,8 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
-<<<<<<< HEAD
 	"io/ioutil"
 	"net/http"
-=======
->>>>>>> 1fd9ecb (dumpling/gcs: fix http client credential problem (#395))
 	"regexp"
 	"strconv"
 	"strings"
