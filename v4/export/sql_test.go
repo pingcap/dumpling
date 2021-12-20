@@ -1673,9 +1673,10 @@ func TestPickupPossibleField(t *testing.T) {
 			mock.ExpectQuery(query).WillReturnRows(rows)
 		}
 
-		field, err := pickupPossibleField(meta, conn)
+		var field string
+		field, err = pickupPossibleField(meta, conn)
 		if expectedErr != nil {
-			require.ErrorIs(t, err, expectedErr)
+			require.ErrorIs(t, errors.Cause(err), expectedErr)
 		} else {
 			require.NoError(t, err)
 			require.Equal(t, testCase.expectedField, field)
