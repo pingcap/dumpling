@@ -13,7 +13,7 @@ require (
 	github.com/pingcap/tidb v1.1.0-beta.0.20211025024448-36e694bfc536
 	github.com/pingcap/tidb-tools v5.2.2-0.20211019062242-37a8bef2fa17+incompatible
 	github.com/pingcap/tidb/parser v0.0.0-20211025024448-36e694bfc536
-	github.com/prometheus/client_golang v1.5.1
+	github.com/prometheus/client_golang v1.11.1
 	github.com/prometheus/client_model v0.2.0
 	github.com/soheilhy/cmux v0.1.4
 	github.com/spf13/pflag v1.0.5
